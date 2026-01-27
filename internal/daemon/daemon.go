@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"codeberg.org/xchangeee/rsystemd/internal/config"
+	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
 	"codeberg.org/xchangeee/rsystemd/internal/spec"
 	"codeberg.org/xchangeee/rsystemd/internal/store"
 	"codeberg.org/xchangeee/rsystemd/internal/systemd"
@@ -33,7 +33,7 @@ type Config struct {
 }
 
 // New creates a new daemon.
-func New(sd *systemd.Client, cfg *config.Manager, st *store.Store, logger *slog.Logger, dcfg Config) *Daemon {
+func New(sd *systemd.Client, cfg *containerconfig.Manager, st *store.Store, logger *slog.Logger, dcfg Config) *Daemon {
 	if dcfg.ConfigBase == "" {
 		dcfg.ConfigBase = DefaultConfigBase
 	}
@@ -97,6 +97,7 @@ func (d *Daemon) reconcileOnce(ctx context.Context) []UnitResult {
 	// Phase 2: Execute
 	results := d.reconciler.Execute(ctx, plan)
 
+	now := time.Now()
 	for _, r := range results {
 		if r.Error {
 			d.logger.Error("reconciliation error", "unit", r.Name, "message", r.Message)
@@ -104,6 +105,14 @@ func (d *Daemon) reconcileOnce(ctx context.Context) []UnitResult {
 			d.logger.Info("reconciled", "unit", r.Name, "message", r.Message)
 		} else {
 			d.logger.Debug("no changes", "unit", r.Name)
+		}
+
+		errMsg := ""
+		if r.Error {
+			errMsg = r.Message
+		}
+		if err := d.store.UpdateReconcileStatus(r.Name, r.Type.String(), errMsg, now); err != nil {
+			d.logger.Error("failed to update reconcile status", "unit", r.Name, "error", err)
 		}
 	}
 

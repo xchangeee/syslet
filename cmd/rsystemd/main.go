@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"codeberg.org/xchangeee/rsystemd/internal/api"
-	"codeberg.org/xchangeee/rsystemd/internal/config"
+	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
 	"codeberg.org/xchangeee/rsystemd/internal/daemon"
 	"codeberg.org/xchangeee/rsystemd/internal/store"
 	"codeberg.org/xchangeee/rsystemd/internal/systemd"
@@ -44,7 +44,7 @@ func main() {
 	}
 	defer st.Close()
 
-	cfg := config.NewManager()
+	cfg := containerconfig.NewManager()
 
 	d := daemon.New(sd, cfg, st, logger, daemon.Config{})
 

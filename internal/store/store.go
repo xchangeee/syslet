@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -17,6 +18,8 @@ CREATE TABLE IF NOT EXISTS specs (
     name TEXT NOT NULL,
     type TEXT NOT NULL,
     spec_json TEXT NOT NULL,
+    reconcile_error TEXT NOT NULL DEFAULT '',
+    last_reconciled DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (name, type)
@@ -91,6 +94,39 @@ func (s *Store) List() ([]string, error) {
 func (s *Store) Delete(name, unitType string) error {
 	_, err := s.db.Exec("DELETE FROM specs WHERE name=? AND type=?", name, unitType)
 	return err
+}
+
+// UpdateReconcileStatus updates the reconciliation status for a unit.
+func (s *Store) UpdateReconcileStatus(name, unitType, errMsg string, lastReconciled time.Time) error {
+	_, err := s.db.Exec(
+		`UPDATE specs SET reconcile_error=?, last_reconciled=? WHERE name=? AND type=?`,
+		errMsg, lastReconciled.UTC().Format(time.RFC3339), name, unitType,
+	)
+	return err
+}
+
+// ReconcileStatus holds the reconciliation status for a unit.
+type ReconcileStatus struct {
+	Error          string
+	LastReconciled time.Time
+}
+
+// GetReconcileStatus returns the reconciliation status for a unit.
+func (s *Store) GetReconcileStatus(name, unitType string) (*ReconcileStatus, error) {
+	var errMsg string
+	var lastRec sql.NullString
+	err := s.db.QueryRow(
+		`SELECT reconcile_error, last_reconciled FROM specs WHERE name=? AND type=?`,
+		name, unitType,
+	).Scan(&errMsg, &lastRec)
+	if err != nil {
+		return nil, err
+	}
+	rs := &ReconcileStatus{Error: errMsg}
+	if lastRec.Valid {
+		rs.LastReconciled, _ = time.Parse(time.RFC3339, lastRec.String)
+	}
+	return rs, nil
 }
 
 // Close closes the database.

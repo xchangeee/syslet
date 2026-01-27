@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"codeberg.org/xchangeee/rsystemd/internal/config"
+	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
 	"codeberg.org/xchangeee/rsystemd/internal/parser"
 	"codeberg.org/xchangeee/rsystemd/internal/systemd"
 )
@@ -29,8 +29,7 @@ const (
 
 // UnitChange captures the diff for a single unit.
 type UnitChange struct {
-	Unit          *parser.ParsedUnit
-	ConfigFiles   []config.ConfigFile // configs to write
+	UnitWithConfigs
 	UnitChanged   bool
 	ConfigChanged bool
 	NeedsStop     bool // stop before update (unit or config changed)
@@ -49,12 +48,12 @@ type ChangePlan struct {
 // Reconciler performs two-phase reconciliation.
 type Reconciler struct {
 	systemd *systemd.Client
-	config  *config.Manager
+	config  *containerconfig.Manager
 	logger  *slog.Logger
 }
 
 // NewReconciler creates a new reconciler.
-func NewReconciler(sd *systemd.Client, cfg *config.Manager, logger *slog.Logger) *Reconciler {
+func NewReconciler(sd *systemd.Client, cfg *containerconfig.Manager, logger *slog.Logger) *Reconciler {
 	return &Reconciler{
 		systemd: sd,
 		config:  cfg,
@@ -65,7 +64,7 @@ func NewReconciler(sd *systemd.Client, cfg *config.Manager, logger *slog.Logger)
 // UnitWithConfigs pairs a parsed unit with its config files.
 type UnitWithConfigs struct {
 	Unit    *parser.ParsedUnit
-	Configs []config.ConfigFile
+	Configs []containerconfig.ConfigFile
 }
 
 // Diff computes a ChangePlan for all provided units.
@@ -73,7 +72,7 @@ func (r *Reconciler) Diff(ctx context.Context, units []UnitWithConfigs) (*Change
 	plan := &ChangePlan{}
 
 	for _, uc := range units {
-		change, err := r.diffUnit(ctx, uc.Unit, uc.Configs)
+		change, err := r.diffUnit(ctx, uc)
 		if err != nil {
 			return nil, fmt.Errorf("diffing %s: %w", uc.Unit.Name, err)
 		}
@@ -86,10 +85,10 @@ func (r *Reconciler) Diff(ctx context.Context, units []UnitWithConfigs) (*Change
 	return plan, nil
 }
 
-func (r *Reconciler) diffUnit(ctx context.Context, u *parser.ParsedUnit, cfgFiles []config.ConfigFile) (*UnitChange, error) {
+func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitChange, error) {
+	u, cfgFiles := uc.Unit, uc.Configs
 	change := &UnitChange{
-		Unit:        u,
-		ConfigFiles: cfgFiles,
+		UnitWithConfigs: uc,
 	}
 
 	// Check if unit file exists
@@ -135,7 +134,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, u *parser.ParsedUnit, cfgFile
 
 	// Check config file changes
 	for _, cf := range cfgFiles {
-		changed, err := r.config.Changed(u.Name, u.Type, cf.Filename, cf.Content)
+		changed, err := r.config.IsChanged(u.Name, cf.Filename, cf.Content)
 		if err != nil {
 			return nil, err
 		}
@@ -207,6 +206,7 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 			r.logger.Error("rejected change", "unit", c.Unit.Name, "reason", c.RejectReason)
 			results = append(results, UnitResult{
 				Name:    c.Unit.Name,
+				Type:    c.Unit.Type,
 				Changed: false,
 				Message: c.RejectReason,
 				Error:   true,
@@ -219,6 +219,7 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 				r.logger.Error("failed to stop unit", "unit", c.Unit.Name, "error", err)
 				results = append(results, UnitResult{
 					Name:    c.Unit.Name,
+					Type:    c.Unit.Type,
 					Changed: false,
 					Message: fmt.Sprintf("failed to stop: %v", err),
 					Error:   true,
@@ -233,9 +234,9 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 		if c.Rejected || !c.ConfigChanged {
 			continue
 		}
-		for _, cf := range c.ConfigFiles {
+		for _, cf := range c.Configs {
 			r.logger.Info("writing config", "unit", c.Unit.Name, "file", cf.Filename)
-			if err := r.config.Write(c.Unit.Name, c.Unit.Type, cf.Filename, cf.Content); err != nil {
+			if err := r.config.Write(c.Unit.Name, cf.Filename, cf.Content); err != nil {
 				r.logger.Error("failed to write config", "unit", c.Unit.Name, "file", cf.Filename, "error", err)
 			}
 		}
@@ -271,6 +272,7 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 				r.logger.Error("failed to start unit", "unit", c.Unit.Name, "error", err)
 				results = append(results, UnitResult{
 					Name:    c.Unit.Name,
+					Type:    c.Unit.Type,
 					Changed: true,
 					Message: fmt.Sprintf("failed to start: %v", err),
 					Error:   true,
@@ -284,6 +286,7 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 			msg := r.buildResultMessage(c)
 			results = append(results, UnitResult{
 				Name:    c.Unit.Name,
+				Type:    c.Unit.Type,
 				Changed: c.UnitChanged || c.ConfigChanged || c.NeedsStart || c.NeedsStop,
 				Message: msg,
 			})
@@ -320,6 +323,7 @@ func (r *Reconciler) buildResultMessage(c *UnitChange) string {
 // UnitResult is the outcome of reconciling one unit.
 type UnitResult struct {
 	Name    string
+	Type    parser.UnitType
 	Changed bool
 	Message string
 	Error   bool

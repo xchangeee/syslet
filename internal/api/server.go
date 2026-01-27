@@ -10,7 +10,7 @@ import (
 
 	pb "codeberg.org/xchangeee/rsystemd/proto"
 
-	"codeberg.org/xchangeee/rsystemd/internal/config"
+	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
 	"codeberg.org/xchangeee/rsystemd/internal/daemon"
 	"codeberg.org/xchangeee/rsystemd/internal/journal"
 	"codeberg.org/xchangeee/rsystemd/internal/parser"
@@ -27,12 +27,12 @@ type Server struct {
 
 	daemon  *daemon.Daemon
 	systemd *systemd.Client
-	config  *config.Manager
+	config  *containerconfig.Manager
 	logger  *slog.Logger
 }
 
 // NewServer creates a new gRPC server.
-func NewServer(d *daemon.Daemon, sd *systemd.Client, cfg *config.Manager, logger *slog.Logger) *Server {
+func NewServer(d *daemon.Daemon, sd *systemd.Client, cfg *containerconfig.Manager, logger *slog.Logger) *Server {
 	return &Server{
 		daemon:  d,
 		systemd: sd,
@@ -192,7 +192,7 @@ func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteR
 	}
 
 	// Remove config files
-	s.config.RemoveAll(unitName, unitType)
+	s.config.RemoveAll(unitName)
 
 	// Daemon reload
 	if err := s.systemd.DaemonReload(ctx); err != nil {
@@ -247,17 +247,25 @@ func (s *Server) getUnitStatus(ctx context.Context, unitName string) (*pb.UnitSt
 		}
 	}
 
-	cfgFiles, _ := s.config.ListFiles(unitName, unitType)
+	cfgFiles, _ := s.config.ListFiles(unitName)
 
-	return &pb.UnitStatus{
-		Name:           unitName,
-		Type:           pbUnitType(unitType),
-		DesiredState:   desiredState,
-		ActiveState:    pbActiveState(state.ActiveState),
-		Enabled:        state.Enabled,
-		ConfigFiles:    cfgFiles,
-		LastReconciled: time.Now().Format(time.RFC3339),
-	}, nil
+	us := &pb.UnitStatus{
+		Name:         unitName,
+		Type:         pbUnitType(unitType),
+		DesiredState: desiredState,
+		ActiveState:  pbActiveState(state.ActiveState),
+		Enabled:      state.Enabled,
+		ConfigFiles:  cfgFiles,
+	}
+
+	if rs, err := s.daemon.Store().GetReconcileStatus(baseName, unitType.String()); err == nil {
+		if !rs.LastReconciled.IsZero() {
+			us.LastReconciled = rs.LastReconciled.Format(time.RFC3339)
+		}
+		us.Error = rs.Error
+	}
+
+	return us, nil
 }
 
 func pbUnitType(t parser.UnitType) pb.UnitType {

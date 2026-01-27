@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"codeberg.org/xchangeee/rsystemd/internal/config"
+	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
 	"codeberg.org/xchangeee/rsystemd/internal/parser"
 
 	"github.com/coreos/go-systemd/v22/unit"
@@ -15,7 +15,7 @@ import (
 
 // Convert transforms a ContainerSpec into a ParsedUnit and a list of ConfigFiles.
 // configBase is the host directory where config files are stored (e.g. /etc/containers/config).
-func Convert(s *ContainerSpec, configBase string) (*parser.ParsedUnit, []config.ConfigFile, error) {
+func Convert(s *ContainerSpec, configBase string) (*parser.ParsedUnit, []containerconfig.ConfigFile, error) {
 	unitType, err := parseType(s.Type)
 	if err != nil {
 		return nil, nil, err
@@ -46,7 +46,7 @@ func Convert(s *ContainerSpec, configBase string) (*parser.ParsedUnit, []config.
 	}
 
 	// Process configs: generate Volume= entries and ConfigFile list.
-	var cfgFiles []config.ConfigFile
+	var cfgFiles []containerconfig.ConfigFile
 	seen := make(map[string]bool)
 
 	for _, ce := range s.Configs {
@@ -65,7 +65,7 @@ func Convert(s *ContainerSpec, configBase string) (*parser.ParsedUnit, []config.
 			Value:   volumeEntry,
 		})
 
-		cfgFiles = append(cfgFiles, config.ConfigFile{
+		cfgFiles = append(cfgFiles, containerconfig.ConfigFile{
 			UnitName: s.Name,
 			Filename: basename,
 			Content:  ce.Content,
