@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"codeberg.org/xchangeee/rsystemd/internal/daemon"
 	"codeberg.org/xchangeee/rsystemd/internal/journal"
 	"codeberg.org/xchangeee/rsystemd/internal/parser"
+	"codeberg.org/xchangeee/rsystemd/internal/spec"
 	"codeberg.org/xchangeee/rsystemd/internal/systemd"
 
 	"google.golang.org/grpc/codes"
@@ -40,34 +42,11 @@ func NewServer(d *daemon.Daemon, sd *systemd.Client, cfg *config.Manager, logger
 }
 
 func (s *Server) Apply(ctx context.Context, req *pb.ApplyRequest) (*pb.ApplyResponse, error) {
-	// Convert proto units to raw content map
-	rawUnits := make(map[string]string)
-	for _, u := range req.Units {
-		rawUnits[u.Name] = u.Content
+	if err := s.daemon.ApplySpecs(ctx, req.Specs); err != nil {
+		return nil, status.Errorf(codes.Internal, "apply specs: %v", err)
 	}
 
-	// Convert proto configs
-	var cfgFiles []config.ConfigFile
-	for _, c := range req.Configs {
-		cfgFiles = append(cfgFiles, config.ConfigFile{
-			UnitName: c.UnitName,
-			Filename: c.Filename,
-			Content:  c.Content,
-		})
-	}
-
-	results := s.daemon.ApplyUnitsAndConfigs(ctx, rawUnits, cfgFiles)
-
-	resp := &pb.ApplyResponse{}
-	for _, r := range results {
-		resp.Results = append(resp.Results, &pb.UnitResult{
-			Name:    r.Name,
-			Changed: r.Changed,
-			Message: r.Message,
-		})
-	}
-
-	return resp, nil
+	return &pb.ApplyResponse{}, nil
 }
 
 func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusResponse, error) {
@@ -83,14 +62,15 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	}
 
 	// All units
-	units, err := daemon.LoadUnitsFromDir(daemon.DefaultUnitsDir)
+	specs, err := s.loadAllSpecs()
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "loading units: %v", err)
+		return nil, status.Errorf(codes.Internal, "loading specs: %v", err)
 	}
-	for _, u := range units {
-		us, err := s.getUnitStatus(ctx, u.Name)
+	for _, cs := range specs {
+		unitName := cs.Name + "." + cs.Type
+		us, err := s.getUnitStatus(ctx, unitName)
 		if err != nil {
-			s.logger.Error("status error", "unit", u.Name, "error", err)
+			s.logger.Error("status error", "unit", unitName, "error", err)
 			continue
 		}
 		resp.Units = append(resp.Units, us)
@@ -100,19 +80,21 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 }
 
 func (s *Server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListResponse, error) {
-	units, err := daemon.LoadUnitsFromDir(daemon.DefaultUnitsDir)
+	specs, err := s.loadAllSpecs()
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "loading units: %v", err)
+		return nil, status.Errorf(codes.Internal, "loading specs: %v", err)
 	}
 
 	resp := &pb.ListResponse{}
-	for _, u := range units {
-		if req.TypeFilter != pb.UnitType_UNIT_TYPE_UNSPECIFIED && pbUnitType(u.Type) != req.TypeFilter {
+	for _, cs := range specs {
+		unitName := cs.Name + "." + cs.Type
+		unitType := parser.UnitTypeFromExtension(unitName)
+		if req.TypeFilter != pb.UnitType_UNIT_TYPE_UNSPECIFIED && pbUnitType(unitType) != req.TypeFilter {
 			continue
 		}
-		us, err := s.getUnitStatus(ctx, u.Name)
+		us, err := s.getUnitStatus(ctx, unitName)
 		if err != nil {
-			s.logger.Error("status error", "unit", u.Name, "error", err)
+			s.logger.Error("status error", "unit", unitName, "error", err)
 			continue
 		}
 		resp.Units = append(resp.Units, us)
@@ -168,25 +150,49 @@ func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteR
 		return nil, status.Error(codes.InvalidArgument, "unit_name is required")
 	}
 
-	unitType := parser.UnitTypeFromExtension(req.UnitName)
+	// unit_name can be "webapp.container" or just "webapp" — try to resolve
+	unitName := req.UnitName
+	unitType := parser.UnitTypeFromExtension(unitName)
+
 	if unitType == parser.UnitTypeUnknown {
-		return nil, status.Errorf(codes.InvalidArgument, "unknown unit type: %s", req.UnitName)
+		// Try to find it in the store by searching all types
+		for _, t := range []string{"container", "volume", "network"} {
+			_, err := s.daemon.Store().Get(unitName, t)
+			if err == nil {
+				unitType = parser.UnitTypeFromExtension(unitName + "." + t)
+				unitName = unitName + "." + t
+				// Delete from store
+				if err := s.daemon.Store().Delete(req.UnitName, t); err != nil {
+					s.logger.Warn("store delete failed", "name", req.UnitName, "error", err)
+				}
+				break
+			}
+		}
+		if unitType == parser.UnitTypeUnknown {
+			return nil, status.Errorf(codes.NotFound, "unit %q not found", req.UnitName)
+		}
+	} else {
+		baseName := parser.UnitBaseName(unitName)
+		typeName := unitType.String()
+		if err := s.daemon.Store().Delete(baseName, typeName); err != nil {
+			s.logger.Warn("store delete failed", "name", baseName, "error", err)
+		}
 	}
 
 	// Stop the unit first
 	if unitType.IsStartable() {
-		if err := s.systemd.StopUnit(ctx, req.UnitName, unitType); err != nil {
-			s.logger.Warn("stop failed during delete", "unit", req.UnitName, "error", err)
+		if err := s.systemd.StopUnit(ctx, unitName, unitType); err != nil {
+			s.logger.Warn("stop failed during delete", "unit", unitName, "error", err)
 		}
 	}
 
 	// Remove unit file from systemd
-	if err := s.systemd.RemoveUnitFile(req.UnitName, unitType); err != nil {
+	if err := s.systemd.RemoveUnitFile(unitName, unitType); err != nil {
 		return nil, status.Errorf(codes.Internal, "removing unit file: %v", err)
 	}
 
 	// Remove config files
-	s.config.RemoveAll(req.UnitName, unitType)
+	s.config.RemoveAll(unitName, unitType)
 
 	// Daemon reload
 	if err := s.systemd.DaemonReload(ctx); err != nil {
@@ -196,6 +202,22 @@ func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteR
 	return &pb.DeleteResponse{
 		Message: fmt.Sprintf("deleted %s", req.UnitName),
 	}, nil
+}
+
+func (s *Server) loadAllSpecs() ([]spec.ContainerSpec, error) {
+	jsons, err := s.daemon.Store().List()
+	if err != nil {
+		return nil, err
+	}
+	var specs []spec.ContainerSpec
+	for _, j := range jsons {
+		var cs spec.ContainerSpec
+		if err := json.Unmarshal([]byte(j), &cs); err != nil {
+			return nil, err
+		}
+		specs = append(specs, cs)
+	}
+	return specs, nil
 }
 
 func (s *Server) getUnitStatus(ctx context.Context, unitName string) (*pb.UnitStatus, error) {
@@ -209,16 +231,19 @@ func (s *Server) getUnitStatus(ctx context.Context, unitName string) (*pb.UnitSt
 		return nil, err
 	}
 
-	// Parse the managed unit file for desired state
-	units, err := daemon.LoadUnitsFromDir(daemon.DefaultUnitsDir)
-	if err != nil {
-		return nil, err
-	}
+	// Look up desired state from store
+	baseName := parser.UnitBaseName(unitName)
 	var desiredState pb.DesiredState
-	for _, u := range units {
-		if u.Name == unitName {
-			desiredState = pbDesiredState(u.DesiredState)
-			break
+	specJSON, err := s.daemon.Store().Get(baseName, unitType.String())
+	if err == nil {
+		var cs spec.ContainerSpec
+		if err := json.Unmarshal([]byte(specJSON), &cs); err == nil {
+			switch cs.DesiredState {
+			case "running":
+				desiredState = pb.DesiredState_DESIRED_STATE_RUNNING
+			case "stopped":
+				desiredState = pb.DesiredState_DESIRED_STATE_STOPPED
+			}
 		}
 	}
 
@@ -245,17 +270,6 @@ func pbUnitType(t parser.UnitType) pb.UnitType {
 		return pb.UnitType_UNIT_TYPE_NETWORK
 	default:
 		return pb.UnitType_UNIT_TYPE_UNSPECIFIED
-	}
-}
-
-func pbDesiredState(s parser.DesiredState) pb.DesiredState {
-	switch s {
-	case parser.DesiredStateRunning:
-		return pb.DesiredState_DESIRED_STATE_RUNNING
-	case parser.DesiredStateStopped:
-		return pb.DesiredState_DESIRED_STATE_STOPPED
-	default:
-		return pb.DesiredState_DESIRED_STATE_UNSPECIFIED
 	}
 }
 

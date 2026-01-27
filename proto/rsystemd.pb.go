@@ -180,137 +180,16 @@ func (ActiveState) EnumDescriptor() ([]byte, []int) {
 	return file_proto_rsystemd_proto_rawDescGZIP(), []int{2}
 }
 
-type UnitFile struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type          UnitType               `protobuf:"varint,2,opt,name=type,proto3,enum=rsystemd.v1.UnitType" json:"type,omitempty"`
-	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UnitFile) Reset() {
-	*x = UnitFile{}
-	mi := &file_proto_rsystemd_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UnitFile) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UnitFile) ProtoMessage() {}
-
-func (x *UnitFile) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UnitFile.ProtoReflect.Descriptor instead.
-func (*UnitFile) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *UnitFile) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *UnitFile) GetType() UnitType {
-	if x != nil {
-		return x.Type
-	}
-	return UnitType_UNIT_TYPE_UNSPECIFIED
-}
-
-func (x *UnitFile) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-type ConfigFile struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UnitName      string                 `protobuf:"bytes,1,opt,name=unit_name,json=unitName,proto3" json:"unit_name,omitempty"`
-	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
-	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ConfigFile) Reset() {
-	*x = ConfigFile{}
-	mi := &file_proto_rsystemd_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ConfigFile) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ConfigFile) ProtoMessage() {}
-
-func (x *ConfigFile) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ConfigFile.ProtoReflect.Descriptor instead.
-func (*ConfigFile) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *ConfigFile) GetUnitName() string {
-	if x != nil {
-		return x.UnitName
-	}
-	return ""
-}
-
-func (x *ConfigFile) GetFilename() string {
-	if x != nil {
-		return x.Filename
-	}
-	return ""
-}
-
-func (x *ConfigFile) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
 type ApplyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Units         []*UnitFile            `protobuf:"bytes,1,rep,name=units,proto3" json:"units,omitempty"`
-	Configs       []*ConfigFile          `protobuf:"bytes,2,rep,name=configs,proto3" json:"configs,omitempty"`
+	Specs         []string               `protobuf:"bytes,1,rep,name=specs,proto3" json:"specs,omitempty"` // JSON-encoded ContainerSpec documents
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ApplyRequest) Reset() {
 	*x = ApplyRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[2]
+	mi := &file_proto_rsystemd_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -322,7 +201,7 @@ func (x *ApplyRequest) String() string {
 func (*ApplyRequest) ProtoMessage() {}
 
 func (x *ApplyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[2]
+	mi := &file_proto_rsystemd_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -335,19 +214,12 @@ func (x *ApplyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyRequest.ProtoReflect.Descriptor instead.
 func (*ApplyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{2}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ApplyRequest) GetUnits() []*UnitFile {
+func (x *ApplyRequest) GetSpecs() []string {
 	if x != nil {
-		return x.Units
-	}
-	return nil
-}
-
-func (x *ApplyRequest) GetConfigs() []*ConfigFile {
-	if x != nil {
-		return x.Configs
+		return x.Specs
 	}
 	return nil
 }
@@ -364,7 +236,7 @@ type UnitResult struct {
 
 func (x *UnitResult) Reset() {
 	*x = UnitResult{}
-	mi := &file_proto_rsystemd_proto_msgTypes[3]
+	mi := &file_proto_rsystemd_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -376,7 +248,7 @@ func (x *UnitResult) String() string {
 func (*UnitResult) ProtoMessage() {}
 
 func (x *UnitResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[3]
+	mi := &file_proto_rsystemd_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -389,7 +261,7 @@ func (x *UnitResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnitResult.ProtoReflect.Descriptor instead.
 func (*UnitResult) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{3}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *UnitResult) GetName() string {
@@ -429,7 +301,7 @@ type ApplyResponse struct {
 
 func (x *ApplyResponse) Reset() {
 	*x = ApplyResponse{}
-	mi := &file_proto_rsystemd_proto_msgTypes[4]
+	mi := &file_proto_rsystemd_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -441,7 +313,7 @@ func (x *ApplyResponse) String() string {
 func (*ApplyResponse) ProtoMessage() {}
 
 func (x *ApplyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[4]
+	mi := &file_proto_rsystemd_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -454,7 +326,7 @@ func (x *ApplyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyResponse.ProtoReflect.Descriptor instead.
 func (*ApplyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{4}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ApplyResponse) GetResults() []*UnitResult {
@@ -473,7 +345,7 @@ type StatusRequest struct {
 
 func (x *StatusRequest) Reset() {
 	*x = StatusRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[5]
+	mi := &file_proto_rsystemd_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +357,7 @@ func (x *StatusRequest) String() string {
 func (*StatusRequest) ProtoMessage() {}
 
 func (x *StatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[5]
+	mi := &file_proto_rsystemd_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,7 +370,7 @@ func (x *StatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusRequest.ProtoReflect.Descriptor instead.
 func (*StatusRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{5}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StatusRequest) GetUnitName() string {
@@ -524,7 +396,7 @@ type UnitStatus struct {
 
 func (x *UnitStatus) Reset() {
 	*x = UnitStatus{}
-	mi := &file_proto_rsystemd_proto_msgTypes[6]
+	mi := &file_proto_rsystemd_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -536,7 +408,7 @@ func (x *UnitStatus) String() string {
 func (*UnitStatus) ProtoMessage() {}
 
 func (x *UnitStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[6]
+	mi := &file_proto_rsystemd_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -549,7 +421,7 @@ func (x *UnitStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnitStatus.ProtoReflect.Descriptor instead.
 func (*UnitStatus) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{6}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *UnitStatus) GetName() string {
@@ -617,7 +489,7 @@ type StatusResponse struct {
 
 func (x *StatusResponse) Reset() {
 	*x = StatusResponse{}
-	mi := &file_proto_rsystemd_proto_msgTypes[7]
+	mi := &file_proto_rsystemd_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -629,7 +501,7 @@ func (x *StatusResponse) String() string {
 func (*StatusResponse) ProtoMessage() {}
 
 func (x *StatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[7]
+	mi := &file_proto_rsystemd_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -642,7 +514,7 @@ func (x *StatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusResponse.ProtoReflect.Descriptor instead.
 func (*StatusResponse) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{7}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StatusResponse) GetUnits() []*UnitStatus {
@@ -661,7 +533,7 @@ type ListRequest struct {
 
 func (x *ListRequest) Reset() {
 	*x = ListRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[8]
+	mi := &file_proto_rsystemd_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -673,7 +545,7 @@ func (x *ListRequest) String() string {
 func (*ListRequest) ProtoMessage() {}
 
 func (x *ListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[8]
+	mi := &file_proto_rsystemd_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -686,7 +558,7 @@ func (x *ListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRequest.ProtoReflect.Descriptor instead.
 func (*ListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{8}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListRequest) GetTypeFilter() UnitType {
@@ -705,7 +577,7 @@ type ListResponse struct {
 
 func (x *ListResponse) Reset() {
 	*x = ListResponse{}
-	mi := &file_proto_rsystemd_proto_msgTypes[9]
+	mi := &file_proto_rsystemd_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -717,7 +589,7 @@ func (x *ListResponse) String() string {
 func (*ListResponse) ProtoMessage() {}
 
 func (x *ListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[9]
+	mi := &file_proto_rsystemd_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -730,7 +602,7 @@ func (x *ListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListResponse.ProtoReflect.Descriptor instead.
 func (*ListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{9}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListResponse) GetUnits() []*UnitStatus {
@@ -751,7 +623,7 @@ type LogsRequest struct {
 
 func (x *LogsRequest) Reset() {
 	*x = LogsRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[10]
+	mi := &file_proto_rsystemd_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -763,7 +635,7 @@ func (x *LogsRequest) String() string {
 func (*LogsRequest) ProtoMessage() {}
 
 func (x *LogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[10]
+	mi := &file_proto_rsystemd_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -776,7 +648,7 @@ func (x *LogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogsRequest.ProtoReflect.Descriptor instead.
 func (*LogsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{10}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LogsRequest) GetUnitName() string {
@@ -811,7 +683,7 @@ type LogEntry struct {
 
 func (x *LogEntry) Reset() {
 	*x = LogEntry{}
-	mi := &file_proto_rsystemd_proto_msgTypes[11]
+	mi := &file_proto_rsystemd_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +695,7 @@ func (x *LogEntry) String() string {
 func (*LogEntry) ProtoMessage() {}
 
 func (x *LogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[11]
+	mi := &file_proto_rsystemd_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +708,7 @@ func (x *LogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{11}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LogEntry) GetTimestamp() string {
@@ -869,7 +741,7 @@ type DeleteRequest struct {
 
 func (x *DeleteRequest) Reset() {
 	*x = DeleteRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[12]
+	mi := &file_proto_rsystemd_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -881,7 +753,7 @@ func (x *DeleteRequest) String() string {
 func (*DeleteRequest) ProtoMessage() {}
 
 func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[12]
+	mi := &file_proto_rsystemd_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -894,7 +766,7 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{12}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DeleteRequest) GetUnitName() string {
@@ -913,7 +785,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_proto_rsystemd_proto_msgTypes[13]
+	mi := &file_proto_rsystemd_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -925,7 +797,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[13]
+	mi := &file_proto_rsystemd_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -938,7 +810,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{13}
+	return file_proto_rsystemd_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DeleteResponse) GetMessage() string {
@@ -952,19 +824,9 @@ var File_proto_rsystemd_proto protoreflect.FileDescriptor
 
 const file_proto_rsystemd_proto_rawDesc = "" +
 	"\n" +
-	"\x14proto/rsystemd.proto\x12\vrsystemd.v1\"c\n" +
-	"\bUnitFile\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12)\n" +
-	"\x04type\x18\x02 \x01(\x0e2\x15.rsystemd.v1.UnitTypeR\x04type\x12\x18\n" +
-	"\acontent\x18\x03 \x01(\tR\acontent\"_\n" +
-	"\n" +
-	"ConfigFile\x12\x1b\n" +
-	"\tunit_name\x18\x01 \x01(\tR\bunitName\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x18\n" +
-	"\acontent\x18\x03 \x01(\tR\acontent\"n\n" +
-	"\fApplyRequest\x12+\n" +
-	"\x05units\x18\x01 \x03(\v2\x15.rsystemd.v1.UnitFileR\x05units\x121\n" +
-	"\aconfigs\x18\x02 \x03(\v2\x17.rsystemd.v1.ConfigFileR\aconfigs\"\x7f\n" +
+	"\x14proto/rsystemd.proto\x12\vrsystemd.v1\"$\n" +
+	"\fApplyRequest\x12\x14\n" +
+	"\x05specs\x18\x01 \x03(\tR\x05specs\"\x7f\n" +
 	"\n" +
 	"UnitResult\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12)\n" +
@@ -1040,53 +902,48 @@ func file_proto_rsystemd_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_rsystemd_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_proto_rsystemd_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_proto_rsystemd_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_proto_rsystemd_proto_goTypes = []any{
 	(UnitType)(0),          // 0: rsystemd.v1.UnitType
 	(DesiredState)(0),      // 1: rsystemd.v1.DesiredState
 	(ActiveState)(0),       // 2: rsystemd.v1.ActiveState
-	(*UnitFile)(nil),       // 3: rsystemd.v1.UnitFile
-	(*ConfigFile)(nil),     // 4: rsystemd.v1.ConfigFile
-	(*ApplyRequest)(nil),   // 5: rsystemd.v1.ApplyRequest
-	(*UnitResult)(nil),     // 6: rsystemd.v1.UnitResult
-	(*ApplyResponse)(nil),  // 7: rsystemd.v1.ApplyResponse
-	(*StatusRequest)(nil),  // 8: rsystemd.v1.StatusRequest
-	(*UnitStatus)(nil),     // 9: rsystemd.v1.UnitStatus
-	(*StatusResponse)(nil), // 10: rsystemd.v1.StatusResponse
-	(*ListRequest)(nil),    // 11: rsystemd.v1.ListRequest
-	(*ListResponse)(nil),   // 12: rsystemd.v1.ListResponse
-	(*LogsRequest)(nil),    // 13: rsystemd.v1.LogsRequest
-	(*LogEntry)(nil),       // 14: rsystemd.v1.LogEntry
-	(*DeleteRequest)(nil),  // 15: rsystemd.v1.DeleteRequest
-	(*DeleteResponse)(nil), // 16: rsystemd.v1.DeleteResponse
+	(*ApplyRequest)(nil),   // 3: rsystemd.v1.ApplyRequest
+	(*UnitResult)(nil),     // 4: rsystemd.v1.UnitResult
+	(*ApplyResponse)(nil),  // 5: rsystemd.v1.ApplyResponse
+	(*StatusRequest)(nil),  // 6: rsystemd.v1.StatusRequest
+	(*UnitStatus)(nil),     // 7: rsystemd.v1.UnitStatus
+	(*StatusResponse)(nil), // 8: rsystemd.v1.StatusResponse
+	(*ListRequest)(nil),    // 9: rsystemd.v1.ListRequest
+	(*ListResponse)(nil),   // 10: rsystemd.v1.ListResponse
+	(*LogsRequest)(nil),    // 11: rsystemd.v1.LogsRequest
+	(*LogEntry)(nil),       // 12: rsystemd.v1.LogEntry
+	(*DeleteRequest)(nil),  // 13: rsystemd.v1.DeleteRequest
+	(*DeleteResponse)(nil), // 14: rsystemd.v1.DeleteResponse
 }
 var file_proto_rsystemd_proto_depIdxs = []int32{
-	0,  // 0: rsystemd.v1.UnitFile.type:type_name -> rsystemd.v1.UnitType
-	3,  // 1: rsystemd.v1.ApplyRequest.units:type_name -> rsystemd.v1.UnitFile
-	4,  // 2: rsystemd.v1.ApplyRequest.configs:type_name -> rsystemd.v1.ConfigFile
-	0,  // 3: rsystemd.v1.UnitResult.type:type_name -> rsystemd.v1.UnitType
-	6,  // 4: rsystemd.v1.ApplyResponse.results:type_name -> rsystemd.v1.UnitResult
-	0,  // 5: rsystemd.v1.UnitStatus.type:type_name -> rsystemd.v1.UnitType
-	1,  // 6: rsystemd.v1.UnitStatus.desired_state:type_name -> rsystemd.v1.DesiredState
-	2,  // 7: rsystemd.v1.UnitStatus.active_state:type_name -> rsystemd.v1.ActiveState
-	9,  // 8: rsystemd.v1.StatusResponse.units:type_name -> rsystemd.v1.UnitStatus
-	0,  // 9: rsystemd.v1.ListRequest.type_filter:type_name -> rsystemd.v1.UnitType
-	9,  // 10: rsystemd.v1.ListResponse.units:type_name -> rsystemd.v1.UnitStatus
-	5,  // 11: rsystemd.v1.RsystemdService.Apply:input_type -> rsystemd.v1.ApplyRequest
-	8,  // 12: rsystemd.v1.RsystemdService.Status:input_type -> rsystemd.v1.StatusRequest
-	11, // 13: rsystemd.v1.RsystemdService.List:input_type -> rsystemd.v1.ListRequest
-	13, // 14: rsystemd.v1.RsystemdService.Logs:input_type -> rsystemd.v1.LogsRequest
-	15, // 15: rsystemd.v1.RsystemdService.Delete:input_type -> rsystemd.v1.DeleteRequest
-	7,  // 16: rsystemd.v1.RsystemdService.Apply:output_type -> rsystemd.v1.ApplyResponse
-	10, // 17: rsystemd.v1.RsystemdService.Status:output_type -> rsystemd.v1.StatusResponse
-	12, // 18: rsystemd.v1.RsystemdService.List:output_type -> rsystemd.v1.ListResponse
-	14, // 19: rsystemd.v1.RsystemdService.Logs:output_type -> rsystemd.v1.LogEntry
-	16, // 20: rsystemd.v1.RsystemdService.Delete:output_type -> rsystemd.v1.DeleteResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	0,  // 0: rsystemd.v1.UnitResult.type:type_name -> rsystemd.v1.UnitType
+	4,  // 1: rsystemd.v1.ApplyResponse.results:type_name -> rsystemd.v1.UnitResult
+	0,  // 2: rsystemd.v1.UnitStatus.type:type_name -> rsystemd.v1.UnitType
+	1,  // 3: rsystemd.v1.UnitStatus.desired_state:type_name -> rsystemd.v1.DesiredState
+	2,  // 4: rsystemd.v1.UnitStatus.active_state:type_name -> rsystemd.v1.ActiveState
+	7,  // 5: rsystemd.v1.StatusResponse.units:type_name -> rsystemd.v1.UnitStatus
+	0,  // 6: rsystemd.v1.ListRequest.type_filter:type_name -> rsystemd.v1.UnitType
+	7,  // 7: rsystemd.v1.ListResponse.units:type_name -> rsystemd.v1.UnitStatus
+	3,  // 8: rsystemd.v1.RsystemdService.Apply:input_type -> rsystemd.v1.ApplyRequest
+	6,  // 9: rsystemd.v1.RsystemdService.Status:input_type -> rsystemd.v1.StatusRequest
+	9,  // 10: rsystemd.v1.RsystemdService.List:input_type -> rsystemd.v1.ListRequest
+	11, // 11: rsystemd.v1.RsystemdService.Logs:input_type -> rsystemd.v1.LogsRequest
+	13, // 12: rsystemd.v1.RsystemdService.Delete:input_type -> rsystemd.v1.DeleteRequest
+	5,  // 13: rsystemd.v1.RsystemdService.Apply:output_type -> rsystemd.v1.ApplyResponse
+	8,  // 14: rsystemd.v1.RsystemdService.Status:output_type -> rsystemd.v1.StatusResponse
+	10, // 15: rsystemd.v1.RsystemdService.List:output_type -> rsystemd.v1.ListResponse
+	12, // 16: rsystemd.v1.RsystemdService.Logs:output_type -> rsystemd.v1.LogEntry
+	14, // 17: rsystemd.v1.RsystemdService.Delete:output_type -> rsystemd.v1.DeleteResponse
+	13, // [13:18] is the sub-list for method output_type
+	8,  // [8:13] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_proto_rsystemd_proto_init() }
@@ -1100,7 +957,7 @@ func file_proto_rsystemd_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_rsystemd_proto_rawDesc), len(file_proto_rsystemd_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   14,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"codeberg.org/xchangeee/rsystemd/internal/config"
@@ -63,14 +62,20 @@ func NewReconciler(sd *systemd.Client, cfg *config.Manager, logger *slog.Logger)
 	}
 }
 
-// Diff computes a ChangePlan for all provided units and their configs.
-func (r *Reconciler) Diff(ctx context.Context, units []*parser.ParsedUnit, configs map[string][]config.ConfigFile) (*ChangePlan, error) {
+// UnitWithConfigs pairs a parsed unit with its config files.
+type UnitWithConfigs struct {
+	Unit    *parser.ParsedUnit
+	Configs []config.ConfigFile
+}
+
+// Diff computes a ChangePlan for all provided units.
+func (r *Reconciler) Diff(ctx context.Context, units []UnitWithConfigs) (*ChangePlan, error) {
 	plan := &ChangePlan{}
 
-	for _, u := range units {
-		change, err := r.diffUnit(ctx, u, configs[parser.UnitBaseName(u.Name)])
+	for _, uc := range units {
+		change, err := r.diffUnit(ctx, uc.Unit, uc.Configs)
 		if err != nil {
-			return nil, fmt.Errorf("diffing %s: %w", u.Name, err)
+			return nil, fmt.Errorf("diffing %s: %w", uc.Unit.Name, err)
 		}
 		if change.UnitChanged {
 			plan.NeedReload = true
@@ -318,79 +323,6 @@ type UnitResult struct {
 	Changed bool
 	Message string
 	Error   bool
-}
-
-// LoadUnitsFromDir reads and parses all unit files from a directory.
-func LoadUnitsFromDir(dir string) ([]*parser.ParsedUnit, error) {
-	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	var units []*parser.ParsedUnit
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if parser.UnitTypeFromExtension(e.Name()) == parser.UnitTypeUnknown {
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", e.Name(), err)
-		}
-		u, err := parser.Parse(e.Name(), string(content))
-		if err != nil {
-			return nil, err
-		}
-		units = append(units, u)
-	}
-	return units, nil
-}
-
-// LoadConfigsFromDir reads config files from a configs directory.
-// The directory structure is: <dir>/<unit-basename>/<filename>
-func LoadConfigsFromDir(dir string) (map[string][]config.ConfigFile, error) {
-	configs := make(map[string][]config.ConfigFile)
-
-	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return configs, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		unitName := e.Name()
-		unitDir := filepath.Join(dir, unitName)
-		files, err := os.ReadDir(unitDir)
-		if err != nil {
-			return nil, err
-		}
-		for _, f := range files {
-			if f.IsDir() {
-				continue
-			}
-			content, err := os.ReadFile(filepath.Join(unitDir, f.Name()))
-			if err != nil {
-				return nil, err
-			}
-			configs[unitName] = append(configs[unitName], config.ConfigFile{
-				UnitName: unitName,
-				Filename: f.Name(),
-				Content:  string(content),
-			})
-		}
-	}
-
-	return configs, nil
 }
 
 func sha256sum(data []byte) string {

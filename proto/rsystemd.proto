@@ -38,21 +38,8 @@ enum ActiveState {
 
 // --- Apply ---
 
-message UnitFile {
-  string name = 1;
-  UnitType type = 2;
-  string content = 3;
-}
-
-message ConfigFile {
-  string unit_name = 1;
-  string filename = 2;
-  string content = 3;
-}
-
 message ApplyRequest {
-  repeated UnitFile units = 1;
-  repeated ConfigFile configs = 2;
+  repeated string specs = 1; // JSON-encoded ContainerSpec documents
 }
 
 message UnitResult {

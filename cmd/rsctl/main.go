@@ -11,7 +11,6 @@ import (
 	pb "codeberg.org/xchangeee/rsystemd/proto"
 
 	"codeberg.org/xchangeee/rsystemd/internal/ctlconfig"
-	"codeberg.org/xchangeee/rsystemd/internal/parser"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -22,6 +21,7 @@ var (
 	serverAddr  string
 	contextName string
 )
+
 
 func main() {
 	root := &cobra.Command{
@@ -36,7 +36,6 @@ func main() {
 		},
 	}
 
-	root.PersistentFlags().StringVarP(&serverAddr, "server", "s", "", "rsystemd server address (overrides context)")
 	root.PersistentFlags().StringVar(&contextName, "context", "", "named context to use")
 
 	root.AddCommand(applyCmd())
@@ -52,11 +51,6 @@ func main() {
 }
 
 func resolveServerAddr(cmd *cobra.Command) error {
-	// -s flag takes priority
-	if cmd.Flags().Changed("server") {
-		return nil
-	}
-
 	cfg, err := ctlconfig.Load()
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
@@ -215,13 +209,13 @@ func applyCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "apply",
-		Short: "Apply unit files and configs",
+		Short: "Apply JSON spec files",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if filePath == "" {
 				return fmt.Errorf("--file/-f is required")
 			}
 
-			units, configs, err := loadApplyPath(filePath)
+			specs, err := loadSpecs(filePath)
 			if err != nil {
 				return err
 			}
@@ -233,8 +227,7 @@ func applyCmd() *cobra.Command {
 			defer conn.Close()
 
 			resp, err := client.Apply(context.Background(), &pb.ApplyRequest{
-				Units:   units,
-				Configs: configs,
+				Specs: specs,
 			})
 			if err != nil {
 				return fmt.Errorf("apply: %w", err)
@@ -251,111 +244,41 @@ func applyCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&filePath, "file", "f", "", "file or directory to apply")
+	cmd.Flags().StringVarP(&filePath, "file", "f", "", "JSON spec file or directory")
 	return cmd
 }
 
-func loadApplyPath(path string) ([]*pb.UnitFile, []*pb.ConfigFile, error) {
+func loadSpecs(path string) ([]string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return nil, nil, err
-	}
-
-	if !info.IsDir() {
-		// Single file
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return nil, nil, err
-		}
-		name := filepath.Base(path)
-		unitType := parser.UnitTypeFromExtension(name)
-		if unitType == parser.UnitTypeUnknown {
-			return nil, nil, fmt.Errorf("unsupported file type: %s", name)
-		}
-		return []*pb.UnitFile{{
-			Name:    name,
-			Type:    pbUnitType(unitType),
-			Content: string(content),
-		}}, nil, nil
-	}
-
-	// Directory: scan for unit files at top level, configs in configs/ subdir
-	var units []*pb.UnitFile
-	var configs []*pb.ConfigFile
-
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	for _, e := range entries {
-		if e.IsDir() {
-			if e.Name() == "configs" {
-				// Load config files
-				cfgs, err := loadConfigsDir(filepath.Join(path, "configs"))
-				if err != nil {
-					return nil, nil, err
-				}
-				configs = append(configs, cfgs...)
-			}
-			continue
-		}
-
-		unitType := parser.UnitTypeFromExtension(e.Name())
-		if unitType == parser.UnitTypeUnknown {
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(path, e.Name()))
-		if err != nil {
-			return nil, nil, err
-		}
-		units = append(units, &pb.UnitFile{
-			Name:    e.Name(),
-			Type:    pbUnitType(unitType),
-			Content: string(content),
-		})
-	}
-
-	return units, configs, nil
-}
-
-func loadConfigsDir(dir string) ([]*pb.ConfigFile, error) {
-	var configs []*pb.ConfigFile
-
-	unitDirs, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
 
-	for _, ud := range unitDirs {
-		if !ud.IsDir() {
-			continue
-		}
-		unitName := ud.Name()
-		files, err := os.ReadDir(filepath.Join(dir, unitName))
+	if !info.IsDir() {
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
-		for _, f := range files {
-			if f.IsDir() {
-				continue
-			}
-			content, err := os.ReadFile(filepath.Join(dir, unitName, f.Name()))
-			if err != nil {
-				return nil, err
-			}
-			configs = append(configs, &pb.ConfigFile{
-				UnitName: unitName,
-				Filename: f.Name(),
-				Content:  string(content),
-			})
-		}
+		return []string{string(data)}, nil
 	}
 
-	return configs, nil
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var specs []string
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(path, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		specs = append(specs, string(data))
+	}
+	return specs, nil
 }
 
 func statusCmd() *cobra.Command {
@@ -476,7 +399,7 @@ func logsCmd() *cobra.Command {
 
 func deleteCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "delete <unit>",
+		Use:   "delete <name>",
 		Short: "Delete a managed unit",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -509,19 +432,6 @@ func printUnitStatus(u *pb.UnitStatus) {
 		fmt.Printf("  Error:    %s\n", u.Error)
 	}
 	fmt.Println()
-}
-
-func pbUnitType(t parser.UnitType) pb.UnitType {
-	switch t {
-	case parser.UnitTypeContainer:
-		return pb.UnitType_UNIT_TYPE_CONTAINER
-	case parser.UnitTypeVolume:
-		return pb.UnitType_UNIT_TYPE_VOLUME
-	case parser.UnitTypeNetwork:
-		return pb.UnitType_UNIT_TYPE_NETWORK
-	default:
-		return pb.UnitType_UNIT_TYPE_UNSPECIFIED
-	}
 }
 
 func parseTypeFilter(s string) pb.UnitType {

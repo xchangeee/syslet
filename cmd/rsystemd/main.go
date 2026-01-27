@@ -12,6 +12,7 @@ import (
 	"codeberg.org/xchangeee/rsystemd/internal/api"
 	"codeberg.org/xchangeee/rsystemd/internal/config"
 	"codeberg.org/xchangeee/rsystemd/internal/daemon"
+	"codeberg.org/xchangeee/rsystemd/internal/store"
 	"codeberg.org/xchangeee/rsystemd/internal/systemd"
 	pb "codeberg.org/xchangeee/rsystemd/proto"
 
@@ -31,9 +32,21 @@ func main() {
 	}
 	defer sd.Close()
 
+	dbPath := store.DefaultDBPath
+	if p := os.Getenv("RSYSTEMD_DB"); p != "" {
+		dbPath = p
+	}
+
+	st, err := store.New(dbPath)
+	if err != nil {
+		logger.Error("failed to open store", "path", dbPath, "error", err)
+		os.Exit(1)
+	}
+	defer st.Close()
+
 	cfg := config.NewManager()
 
-	d := daemon.New(sd, cfg, logger, daemon.Config{})
+	d := daemon.New(sd, cfg, st, logger, daemon.Config{})
 
 	// Start gRPC server
 	listenAddr := ":7233"
