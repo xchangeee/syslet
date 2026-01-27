@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package rsystemd.v1;
+
+option go_package = "codeberg.org/xchangeee/rsystemd/proto;rsystemdv1";
+
+service RsystemdService {
+  rpc Apply(ApplyRequest) returns (ApplyResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
+  rpc List(ListRequest) returns (ListResponse);
+  rpc Logs(LogsRequest) returns (stream LogEntry);
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+}
+
+// --- Enums ---
+
+enum UnitType {
+  UNIT_TYPE_UNSPECIFIED = 0;
+  UNIT_TYPE_CONTAINER = 3;
+  UNIT_TYPE_VOLUME = 4;
+  UNIT_TYPE_NETWORK = 5;
+}
+
+enum DesiredState {
+  DESIRED_STATE_UNSPECIFIED = 0;
+  DESIRED_STATE_RUNNING = 1;
+  DESIRED_STATE_STOPPED = 2;
+}
+
+enum ActiveState {
+  ACTIVE_STATE_UNSPECIFIED = 0;
+  ACTIVE_STATE_ACTIVE = 1;
+  ACTIVE_STATE_INACTIVE = 2;
+  ACTIVE_STATE_FAILED = 3;
+  ACTIVE_STATE_ACTIVATING = 4;
+  ACTIVE_STATE_DEACTIVATING = 5;
+}
+
+// --- Apply ---
+
+message UnitFile {
+  string name = 1;
+  UnitType type = 2;
+  string content = 3;
+}
+
+message ConfigFile {
+  string unit_name = 1;
+  string filename = 2;
+  string content = 3;
+}
+
+message ApplyRequest {
+  repeated UnitFile units = 1;
+  repeated ConfigFile configs = 2;
+}
+
+message UnitResult {
+  string name = 1;
+  UnitType type = 2;
+  bool changed = 3;
+  string message = 4;
+}
+
+message ApplyResponse {
+  repeated UnitResult results = 1;
+}
+
+// --- Status ---
+
+message StatusRequest {
+  string unit_name = 1;
+}
+
+message UnitStatus {
+  string name = 1;
+  UnitType type = 2;
+  DesiredState desired_state = 3;
+  ActiveState active_state = 4;
+  bool enabled = 5;
+  repeated string config_files = 6;
+  string last_reconciled = 7;
+  string error = 8;
+}
+
+message StatusResponse {
+  repeated UnitStatus units = 1;
+}
+
+// --- List ---
+
+message ListRequest {
+  UnitType type_filter = 1;
+}
+
+message ListResponse {
+  repeated UnitStatus units = 1;
+}
+
+// --- Logs ---
+
+message LogsRequest {
+  string unit_name = 1;
+  bool follow = 2;
+  int32 lines = 3;
+}
+
+message LogEntry {
+  string timestamp = 1;
+  string message = 2;
+  string priority = 3;
+}
+
+// --- Delete ---
+
+message DeleteRequest {
+  string unit_name = 1;
+}
+
+message DeleteResponse {
+  string message = 1;
+}
