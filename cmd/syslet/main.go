@@ -9,11 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"codeberg.org/xchangeee/syslet/internal/api"
-	"codeberg.org/xchangeee/syslet/internal/containerconfig"
-	"codeberg.org/xchangeee/syslet/internal/daemon"
-	"codeberg.org/xchangeee/syslet/internal/store"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/server/api"
+	"codeberg.org/xchangeee/syslet/internal/server/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/server/daemon"
+	"codeberg.org/xchangeee/syslet/internal/server/store"
+	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 	pb "codeberg.org/xchangeee/syslet/proto"
 
 	"google.golang.org/grpc"

@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"time"
 
-	"codeberg.org/xchangeee/syslet/internal/containerconfig"
-	"codeberg.org/xchangeee/syslet/internal/spec"
-	"codeberg.org/xchangeee/syslet/internal/store"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/server/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/server/spec"
+	"codeberg.org/xchangeee/syslet/internal/server/store"
+	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 )
 
 const (

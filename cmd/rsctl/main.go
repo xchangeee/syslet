@@ -10,7 +10,7 @@ import (
 
 	pb "codeberg.org/xchangeee/syslet/proto"
 
-	"codeberg.org/xchangeee/syslet/internal/ctlconfig"
+	"codeberg.org/xchangeee/syslet/internal/client/ctlconfig"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"

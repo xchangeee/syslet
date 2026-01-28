@@ -10,7 +10,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/dbus"
 
-	"codeberg.org/xchangeee/syslet/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/server/parser"
 )
 
 const (
@@ -21,6 +21,12 @@ const (
 type Client struct {
 	conn           *dbus.Conn
 	quadletUnitDir string
+}
+
+// UnitState holds the runtime state of a unit.
+type UnitState struct {
+	ActiveState string // "active", "inactive", "failed", etc.
+	Enabled     bool
 }
 
 // NewClient creates a new systemd client.
@@ -52,20 +58,32 @@ func (c *Client) Close() {
 	c.conn.Close()
 }
 
-// UnitDir returns the install directory for a unit type.
-func (c *Client) UnitDir(unitType parser.UnitType) string {
-	return c.quadletUnitDir
+// installedPath returns the full path where a unit file is installed.
+func (c *Client) installedPath(unitName string, unitType parser.UnitType) string {
+	return filepath.Join(c.quadletUnitDir, unitName)
 }
 
-// InstalledPath returns the full path where a unit file is installed.
-func (c *Client) InstalledPath(unitName string, unitType parser.UnitType) string {
-	return filepath.Join(c.UnitDir(unitType), unitName)
+// ReadInstalledUnit reads the content of an installed unit file.
+func (c *Client) ReadInstalledUnit(unitName string, unitType parser.UnitType) ([]byte, error) {
+	path := c.installedPath(unitName, unitType)
+	return os.ReadFile(path)
 }
 
-// UnitState holds the runtime state of a unit.
-type UnitState struct {
-	ActiveState string // "active", "inactive", "failed", etc.
-	Enabled     bool
+// RemoveUnitFile removes an installed unit file.
+func (c *Client) RemoveUnitFile(unitName string, unitType parser.UnitType) error {
+	path := c.installedPath(unitName, unitType)
+	err := os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// UnitFileExists checks if a unit file is installed.
+func (c *Client) UnitFileExists(unitName string, unitType parser.UnitType) bool {
+	path := c.installedPath(unitName, unitType)
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // GetUnitState queries the current state of a unit via D-Bus.
@@ -135,7 +153,7 @@ func (c *Client) StopUnit(ctx context.Context, unitName string, unitType parser.
 
 // InstallUnitFile writes a unit file to the appropriate directory.
 func (c *Client) InstallUnitFile(unitName string, unitType parser.UnitType, content io.Reader) error {
-	dir := c.UnitDir(unitType)
+	dir := c.quadletUnitDir
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("creating unit dir %s: %w", dir, err)
 	}
@@ -147,27 +165,4 @@ func (c *Client) InstallUnitFile(unitName string, unitType parser.UnitType, cont
 
 	path := filepath.Join(dir, unitName)
 	return os.WriteFile(path, data, 0644)
-}
-
-// ReadInstalledUnit reads the content of an installed unit file.
-func (c *Client) ReadInstalledUnit(unitName string, unitType parser.UnitType) ([]byte, error) {
-	path := c.InstalledPath(unitName, unitType)
-	return os.ReadFile(path)
-}
-
-// RemoveUnitFile removes an installed unit file.
-func (c *Client) RemoveUnitFile(unitName string, unitType parser.UnitType) error {
-	path := c.InstalledPath(unitName, unitType)
-	err := os.Remove(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	return err
-}
-
-// UnitFileExists checks if a unit file is installed.
-func (c *Client) UnitFileExists(unitName string, unitType parser.UnitType) bool {
-	path := c.InstalledPath(unitName, unitType)
-	_, err := os.Stat(path)
-	return err == nil
 }

@@ -10,9 +10,9 @@ import (
 	"os"
 	"strings"
 
-	"codeberg.org/xchangeee/syslet/internal/containerconfig"
-	"codeberg.org/xchangeee/syslet/internal/parser"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/server/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/server/parser"
+	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 )
 
 // UnitAction describes what needs to happen to a single unit.

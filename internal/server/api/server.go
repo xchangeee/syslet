@@ -10,12 +10,12 @@ import (
 
 	pb "codeberg.org/xchangeee/syslet/proto"
 
-	"codeberg.org/xchangeee/syslet/internal/containerconfig"
-	"codeberg.org/xchangeee/syslet/internal/daemon"
-	"codeberg.org/xchangeee/syslet/internal/journal"
-	"codeberg.org/xchangeee/syslet/internal/parser"
-	"codeberg.org/xchangeee/syslet/internal/spec"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/server/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/server/daemon"
+	"codeberg.org/xchangeee/syslet/internal/server/journal"
+	"codeberg.org/xchangeee/syslet/internal/server/parser"
+	"codeberg.org/xchangeee/syslet/internal/server/spec"
+	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

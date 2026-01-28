@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"codeberg.org/xchangeee/syslet/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/server/parser"
 )
 
 const (
-	ContainerConfigBase = "/etc/containers/config"
+	ContainerConfigBase = "/var/syslet/config"
 )
 
 // Manager handles config file operations.
