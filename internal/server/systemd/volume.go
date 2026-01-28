@@ -63,8 +63,8 @@ func (u *VolumeUnit) RemoveUnitFile(name string) error {
 	return u.client.removeUnitFile(full)
 }
 
-// GetState queries the current state of a volume unit via D-Bus.
-func (u *VolumeUnit) GetState(ctx context.Context, name string) (*UnitState, error) {
+// RuntimeState queries the current state of a volume unit via D-Bus.
+func (u *VolumeUnit) RuntimeState(ctx context.Context, name string) (*UnitState, error) {
 	full, err := u.qualifyName(name)
 	if err != nil {
 		return nil, err

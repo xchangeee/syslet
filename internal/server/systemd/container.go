@@ -74,8 +74,8 @@ func (u *ContainerUnit) RemoveUnitFile(name string) error {
 	return u.client.removeUnitFile(full)
 }
 
-// GetState queries the current state of a container unit via D-Bus.
-func (u *ContainerUnit) GetState(ctx context.Context, fullUnitName string) (*UnitState, error) {
+// RuntimeState queries the current state of a container unit via D-Bus.
+func (u *ContainerUnit) RuntimeState(ctx context.Context, fullUnitName string) (*UnitState, error) {
 	return u.client.getUnitState(ctx, u.serviceName(fullUnitName))
 }
 

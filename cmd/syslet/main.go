@@ -69,7 +69,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterSysletServiceServer(grpcServer, api.NewServer(d, sd, cfg, logger))
+	pb.RegisterSysletServiceServer(grpcServer, api.NewServer(d, logger))
 
 	go func() {
 		logger.Info("gRPC server listening", "addr", listenAddr)

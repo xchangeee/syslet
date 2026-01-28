@@ -63,8 +63,8 @@ func (u *NetworkUnit) RemoveUnitFile(name string) error {
 	return u.client.removeUnitFile(full)
 }
 
-// GetState queries the current state of a network unit via D-Bus.
-func (u *NetworkUnit) GetState(ctx context.Context, name string) (*UnitState, error) {
+// RuntimeState queries the current state of a network unit via D-Bus.
+func (u *NetworkUnit) RuntimeState(ctx context.Context, name string) (*UnitState, error) {
 	full, err := u.qualifyName(name)
 	if err != nil {
 		return nil, err

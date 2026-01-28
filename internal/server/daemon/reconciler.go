@@ -159,7 +159,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitCha
 	// If unit or config changed, need to stop first (using old config)
 	if (change.UnitChanged || change.ConfigChanged) && u.Type.IsStartable() {
 		// Check if currently running
-		state, err := r.systemd.Container().GetState(ctx, u.FullName)
+		state, err := r.systemd.Container().RuntimeState(ctx, u.FullName)
 		if err != nil {
 			return nil, err
 		}
@@ -170,7 +170,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitCha
 
 	// Determine start needs
 	if u.Type.IsStartable() {
-		state, err := r.systemd.Container().GetState(ctx, u.FullName)
+		state, err := r.systemd.Container().RuntimeState(ctx, u.FullName)
 		if err != nil {
 			return nil, err
 		}

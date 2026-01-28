@@ -444,5 +444,5 @@ func (h *Harness) ReadUnitFile(fullUnitName string) string {
 
 // APIServer returns a new API server instance for testing.
 func (h *Harness) APIServer() *api.Server {
-	return api.NewServer(h.Daemon, h.Systemd, h.Config, h.logger)
+	return api.NewServer(h.Daemon, h.logger)
 }
