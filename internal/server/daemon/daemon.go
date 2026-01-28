@@ -11,6 +11,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/server/spec"
 	"codeberg.org/xchangeee/syslet/internal/server/store"
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
+	"github.com/coder/quartz"
 )
 
 const (
@@ -24,6 +25,7 @@ type Daemon struct {
 	store      *store.Store
 	configBase string
 	interval   time.Duration
+	clock      quartz.Clock
 	logger     *slog.Logger
 }
 
@@ -31,6 +33,7 @@ type Daemon struct {
 type Config struct {
 	ConfigBase string
 	Interval   time.Duration
+	Clock      quartz.Clock
 }
 
 // New creates a new daemon.
@@ -41,12 +44,16 @@ func New(sd *systemd.Client, cfg *containerconfig.Manager, st *store.Store, logg
 	if dcfg.Interval == 0 {
 		dcfg.Interval = DefaultInterval
 	}
+	if dcfg.Clock == nil {
+		dcfg.Clock = quartz.NewReal()
+	}
 
 	return &Daemon{
 		reconciler: NewReconciler(sd, cfg, logger),
 		store:      st,
 		configBase: dcfg.ConfigBase,
 		interval:   dcfg.Interval,
+		clock:      dcfg.Clock,
 		logger:     logger,
 	}
 }
@@ -60,7 +67,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// Run immediately on start
 	d.reconcileOnce(ctx)
 
-	ticker := time.NewTicker(d.interval)
+	ticker := d.clock.NewTicker(d.interval)
 	defer ticker.Stop()
 
 	for {
@@ -98,7 +105,7 @@ func (d *Daemon) reconcileOnce(ctx context.Context) []UnitResult {
 	// Phase 2: Execute
 	results := d.reconciler.Execute(ctx, plan)
 
-	now := time.Now()
+	now := d.clock.Now()
 	for _, r := range results {
 		if r.Error {
 			d.logger.Error("reconciliation error", "unit", r.FullName, "message", r.Message)

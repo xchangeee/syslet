@@ -16,6 +16,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 	pb "codeberg.org/xchangeee/syslet/proto"
 
+	"github.com/spf13/afero"
 	"google.golang.org/grpc"
 )
 
@@ -25,26 +26,33 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	sd, err := systemd.NewClient(ctx)
+	// Create shared dependencies
+	fs := afero.NewOsFs()
+
+	// Create D-Bus connection
+	dbusConn, err := systemd.NewDBusConnection(ctx)
 	if err != nil {
 		logger.Error("failed to connect to systemd", "error", err)
 		os.Exit(1)
 	}
-	defer sd.Close()
+	defer dbusConn.Close()
+
+	// Create systemd client with injected dependencies
+	sd := systemd.NewClient(dbusConn, fs)
 
 	dbPath := store.DefaultDBPath
 	if p := os.Getenv("SYSLET_DB"); p != "" {
 		dbPath = p
 	}
 
-	st, err := store.New(dbPath)
+	st, err := store.New(fs, dbPath)
 	if err != nil {
 		logger.Error("failed to open store", "path", dbPath, "error", err)
 		os.Exit(1)
 	}
 	defer st.Close()
 
-	cfg := containerconfig.NewManager()
+	cfg := containerconfig.NewManager(fs)
 
 	d := daemon.New(sd, cfg, st, logger, daemon.Config{})
 

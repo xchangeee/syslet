@@ -4,10 +4,10 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/spf13/afero"
 	_ "modernc.org/sqlite"
 )
 
@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS specs (
 // Store wraps a SQLite database for spec persistence.
 type Store struct {
 	db *sql.DB
+	fs afero.Fs
 }
 
 // ReconcileStatus holds the reconciliation status for a unit.
@@ -38,8 +39,8 @@ type ReconcileStatus struct {
 }
 
 // New opens (or creates) the database at dbPath and runs migrations.
-func New(dbPath string) (*Store, error) {
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+func New(fs afero.Fs, dbPath string) (*Store, error) {
+	if err := fs.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
 		return nil, fmt.Errorf("creating db directory: %w", err)
 	}
 
@@ -53,7 +54,7 @@ func New(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("running migration: %w", err)
 	}
 
-	return &Store{db: db}, nil
+	return &Store{db: db, fs: fs}, nil
 }
 
 // Close closes the database.
