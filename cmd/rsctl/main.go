@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	pb "codeberg.org/xchangeee/rsystemd/proto"
+	pb "codeberg.org/xchangeee/syslet/proto"
 
-	"codeberg.org/xchangeee/rsystemd/internal/ctlconfig"
+	"codeberg.org/xchangeee/syslet/internal/ctlconfig"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -22,11 +22,10 @@ var (
 	contextName string
 )
 
-
 func main() {
 	root := &cobra.Command{
 		Use:   "rsctl",
-		Short: "rsystemd CLI - manage container units declaratively",
+		Short: "syslet CLI - manage container units declaratively",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// context subcommand manages its own config; skip resolution
 			if cmd.Name() == "context" || (cmd.Parent() != nil && cmd.Parent().Name() == "context") {
@@ -196,12 +195,12 @@ func contextRemoveCmd() *cobra.Command {
 	}
 }
 
-func connect() (pb.RsystemdServiceClient, *grpc.ClientConn, error) {
+func connect() (pb.SysletServiceClient, *grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, nil, fmt.Errorf("connecting to %s: %w", serverAddr, err)
 	}
-	return pb.NewRsystemdServiceClient(conn), conn, nil
+	return pb.NewSysletServiceClient(conn), conn, nil
 }
 
 func applyCmd() *cobra.Command {

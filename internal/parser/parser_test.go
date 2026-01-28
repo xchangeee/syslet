@@ -47,7 +47,7 @@ Image=docker.io/library/nginx:latest
 [Install]
 WantedBy=multi-user.target default.target
 
-[X-Rsystemd]
+[X-Syslet]
 DesiredState=running
 `
 	u, err := Parse("webapp.container", content)
@@ -66,7 +66,7 @@ func TestParseVolumeQuadlet(t *testing.T) {
 	content := `[Volume]
 Label=app=webapp
 
-[X-Rsystemd]
+[X-Syslet]
 `
 	u, err := Parse("data.volume", content)
 	if err != nil {
@@ -81,7 +81,7 @@ Label=app=webapp
 }
 
 func TestParseInvalidDesiredState(t *testing.T) {
-	content := `[X-Rsystemd]
+	content := `[X-Syslet]
 DesiredState=invalid
 `
 	if _, err := Parse("webapp.container", content); err == nil {
@@ -90,7 +90,7 @@ DesiredState=invalid
 }
 
 func TestParseUnknownKey(t *testing.T) {
-	content := `[X-Rsystemd]
+	content := `[X-Syslet]
 Unknown=value
 `
 	if _, err := Parse("webapp.container", content); err == nil {
@@ -111,7 +111,7 @@ func TestSystemdContent(t *testing.T) {
 	content := `[Container]
 Image=docker.io/library/nginx:latest
 
-[X-Rsystemd]
+[X-Syslet]
 DesiredState=running
 
 [Install]
@@ -125,9 +125,9 @@ WantedBy=multi-user.target
 	b, _ := io.ReadAll(u.SystemdContent())
 	got := string(b)
 
-	// Should not contain X-Rsystemd
-	if strings.Contains(got, "X-Rsystemd") {
-		t.Errorf("SystemdContent still contains X-Rsystemd:\n%s", got)
+	// Should not contain X-Syslet
+	if strings.Contains(got, "X-Syslet") {
+		t.Errorf("SystemdContent still contains X-Syslet:\n%s", got)
 	}
 	if !strings.Contains(got, "Image") {
 		t.Errorf("SystemdContent missing Image:\n%s", got)

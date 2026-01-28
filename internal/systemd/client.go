@@ -1,4 +1,4 @@
-// Package systemd wraps the go-systemd D-Bus client for rsystemd operations.
+// Package systemd wraps the go-systemd D-Bus client for syslet operations.
 package systemd
 
 import (
@@ -10,7 +10,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/dbus"
 
-	"codeberg.org/xchangeee/rsystemd/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/parser"
 )
 
 const (

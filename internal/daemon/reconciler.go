@@ -1,4 +1,4 @@
-// Package daemon implements the rsystemd reconciliation daemon.
+// Package daemon implements the syslet reconciliation daemon.
 package daemon
 
 import (
@@ -10,9 +10,9 @@ import (
 	"os"
 	"strings"
 
-	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
-	"codeberg.org/xchangeee/rsystemd/internal/parser"
-	"codeberg.org/xchangeee/rsystemd/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/systemd"
 )
 
 // UnitAction describes what needs to happen to a single unit.
@@ -187,7 +187,7 @@ func (r *Reconciler) unitFileChanged(u *parser.ParsedUnit) (bool, error) {
 		return false, err
 	}
 
-	// Compare the systemd-installable content (without [X-Rsystemd])
+	// Compare the systemd-installable content (without [X-Syslet])
 	newContent, err := io.ReadAll(u.SystemdContent())
 	if err != nil {
 		return false, err

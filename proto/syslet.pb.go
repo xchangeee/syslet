@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v6.33.3
-// source: proto/rsystemd.proto
+// source: proto/syslet.proto
 
-package rsystemdv1
+package sysletv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -57,11 +57,11 @@ func (x UnitType) String() string {
 }
 
 func (UnitType) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_rsystemd_proto_enumTypes[0].Descriptor()
+	return file_proto_syslet_proto_enumTypes[0].Descriptor()
 }
 
 func (UnitType) Type() protoreflect.EnumType {
-	return &file_proto_rsystemd_proto_enumTypes[0]
+	return &file_proto_syslet_proto_enumTypes[0]
 }
 
 func (x UnitType) Number() protoreflect.EnumNumber {
@@ -70,7 +70,7 @@ func (x UnitType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use UnitType.Descriptor instead.
 func (UnitType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{0}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{0}
 }
 
 type DesiredState int32
@@ -106,11 +106,11 @@ func (x DesiredState) String() string {
 }
 
 func (DesiredState) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_rsystemd_proto_enumTypes[1].Descriptor()
+	return file_proto_syslet_proto_enumTypes[1].Descriptor()
 }
 
 func (DesiredState) Type() protoreflect.EnumType {
-	return &file_proto_rsystemd_proto_enumTypes[1]
+	return &file_proto_syslet_proto_enumTypes[1]
 }
 
 func (x DesiredState) Number() protoreflect.EnumNumber {
@@ -119,7 +119,7 @@ func (x DesiredState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DesiredState.Descriptor instead.
 func (DesiredState) EnumDescriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{1}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{1}
 }
 
 type ActiveState int32
@@ -164,11 +164,11 @@ func (x ActiveState) String() string {
 }
 
 func (ActiveState) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_rsystemd_proto_enumTypes[2].Descriptor()
+	return file_proto_syslet_proto_enumTypes[2].Descriptor()
 }
 
 func (ActiveState) Type() protoreflect.EnumType {
-	return &file_proto_rsystemd_proto_enumTypes[2]
+	return &file_proto_syslet_proto_enumTypes[2]
 }
 
 func (x ActiveState) Number() protoreflect.EnumNumber {
@@ -177,7 +177,7 @@ func (x ActiveState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ActiveState.Descriptor instead.
 func (ActiveState) EnumDescriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{2}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{2}
 }
 
 type ApplyRequest struct {
@@ -189,7 +189,7 @@ type ApplyRequest struct {
 
 func (x *ApplyRequest) Reset() {
 	*x = ApplyRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[0]
+	mi := &file_proto_syslet_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -201,7 +201,7 @@ func (x *ApplyRequest) String() string {
 func (*ApplyRequest) ProtoMessage() {}
 
 func (x *ApplyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[0]
+	mi := &file_proto_syslet_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -214,7 +214,7 @@ func (x *ApplyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyRequest.ProtoReflect.Descriptor instead.
 func (*ApplyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{0}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ApplyRequest) GetSpecs() []string {
@@ -227,7 +227,7 @@ func (x *ApplyRequest) GetSpecs() []string {
 type UnitResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type          UnitType               `protobuf:"varint,2,opt,name=type,proto3,enum=rsystemd.v1.UnitType" json:"type,omitempty"`
+	Type          UnitType               `protobuf:"varint,2,opt,name=type,proto3,enum=syslet.v1.UnitType" json:"type,omitempty"`
 	Changed       bool                   `protobuf:"varint,3,opt,name=changed,proto3" json:"changed,omitempty"`
 	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -236,7 +236,7 @@ type UnitResult struct {
 
 func (x *UnitResult) Reset() {
 	*x = UnitResult{}
-	mi := &file_proto_rsystemd_proto_msgTypes[1]
+	mi := &file_proto_syslet_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -248,7 +248,7 @@ func (x *UnitResult) String() string {
 func (*UnitResult) ProtoMessage() {}
 
 func (x *UnitResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[1]
+	mi := &file_proto_syslet_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -261,7 +261,7 @@ func (x *UnitResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnitResult.ProtoReflect.Descriptor instead.
 func (*UnitResult) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{1}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *UnitResult) GetName() string {
@@ -301,7 +301,7 @@ type ApplyResponse struct {
 
 func (x *ApplyResponse) Reset() {
 	*x = ApplyResponse{}
-	mi := &file_proto_rsystemd_proto_msgTypes[2]
+	mi := &file_proto_syslet_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -313,7 +313,7 @@ func (x *ApplyResponse) String() string {
 func (*ApplyResponse) ProtoMessage() {}
 
 func (x *ApplyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[2]
+	mi := &file_proto_syslet_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -326,7 +326,7 @@ func (x *ApplyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyResponse.ProtoReflect.Descriptor instead.
 func (*ApplyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{2}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ApplyResponse) GetResults() []*UnitResult {
@@ -345,7 +345,7 @@ type StatusRequest struct {
 
 func (x *StatusRequest) Reset() {
 	*x = StatusRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[3]
+	mi := &file_proto_syslet_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -357,7 +357,7 @@ func (x *StatusRequest) String() string {
 func (*StatusRequest) ProtoMessage() {}
 
 func (x *StatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[3]
+	mi := &file_proto_syslet_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -370,7 +370,7 @@ func (x *StatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusRequest.ProtoReflect.Descriptor instead.
 func (*StatusRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{3}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StatusRequest) GetUnitName() string {
@@ -383,9 +383,9 @@ func (x *StatusRequest) GetUnitName() string {
 type UnitStatus struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type           UnitType               `protobuf:"varint,2,opt,name=type,proto3,enum=rsystemd.v1.UnitType" json:"type,omitempty"`
-	DesiredState   DesiredState           `protobuf:"varint,3,opt,name=desired_state,json=desiredState,proto3,enum=rsystemd.v1.DesiredState" json:"desired_state,omitempty"`
-	ActiveState    ActiveState            `protobuf:"varint,4,opt,name=active_state,json=activeState,proto3,enum=rsystemd.v1.ActiveState" json:"active_state,omitempty"`
+	Type           UnitType               `protobuf:"varint,2,opt,name=type,proto3,enum=syslet.v1.UnitType" json:"type,omitempty"`
+	DesiredState   DesiredState           `protobuf:"varint,3,opt,name=desired_state,json=desiredState,proto3,enum=syslet.v1.DesiredState" json:"desired_state,omitempty"`
+	ActiveState    ActiveState            `protobuf:"varint,4,opt,name=active_state,json=activeState,proto3,enum=syslet.v1.ActiveState" json:"active_state,omitempty"`
 	Enabled        bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	ConfigFiles    []string               `protobuf:"bytes,6,rep,name=config_files,json=configFiles,proto3" json:"config_files,omitempty"`
 	LastReconciled string                 `protobuf:"bytes,7,opt,name=last_reconciled,json=lastReconciled,proto3" json:"last_reconciled,omitempty"`
@@ -396,7 +396,7 @@ type UnitStatus struct {
 
 func (x *UnitStatus) Reset() {
 	*x = UnitStatus{}
-	mi := &file_proto_rsystemd_proto_msgTypes[4]
+	mi := &file_proto_syslet_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -408,7 +408,7 @@ func (x *UnitStatus) String() string {
 func (*UnitStatus) ProtoMessage() {}
 
 func (x *UnitStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[4]
+	mi := &file_proto_syslet_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -421,7 +421,7 @@ func (x *UnitStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnitStatus.ProtoReflect.Descriptor instead.
 func (*UnitStatus) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{4}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *UnitStatus) GetName() string {
@@ -489,7 +489,7 @@ type StatusResponse struct {
 
 func (x *StatusResponse) Reset() {
 	*x = StatusResponse{}
-	mi := &file_proto_rsystemd_proto_msgTypes[5]
+	mi := &file_proto_syslet_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +501,7 @@ func (x *StatusResponse) String() string {
 func (*StatusResponse) ProtoMessage() {}
 
 func (x *StatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[5]
+	mi := &file_proto_syslet_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +514,7 @@ func (x *StatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusResponse.ProtoReflect.Descriptor instead.
 func (*StatusResponse) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{5}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StatusResponse) GetUnits() []*UnitStatus {
@@ -526,14 +526,14 @@ func (x *StatusResponse) GetUnits() []*UnitStatus {
 
 type ListRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TypeFilter    UnitType               `protobuf:"varint,1,opt,name=type_filter,json=typeFilter,proto3,enum=rsystemd.v1.UnitType" json:"type_filter,omitempty"`
+	TypeFilter    UnitType               `protobuf:"varint,1,opt,name=type_filter,json=typeFilter,proto3,enum=syslet.v1.UnitType" json:"type_filter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListRequest) Reset() {
 	*x = ListRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[6]
+	mi := &file_proto_syslet_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -545,7 +545,7 @@ func (x *ListRequest) String() string {
 func (*ListRequest) ProtoMessage() {}
 
 func (x *ListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[6]
+	mi := &file_proto_syslet_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -558,7 +558,7 @@ func (x *ListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRequest.ProtoReflect.Descriptor instead.
 func (*ListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{6}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListRequest) GetTypeFilter() UnitType {
@@ -577,7 +577,7 @@ type ListResponse struct {
 
 func (x *ListResponse) Reset() {
 	*x = ListResponse{}
-	mi := &file_proto_rsystemd_proto_msgTypes[7]
+	mi := &file_proto_syslet_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -589,7 +589,7 @@ func (x *ListResponse) String() string {
 func (*ListResponse) ProtoMessage() {}
 
 func (x *ListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[7]
+	mi := &file_proto_syslet_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -602,7 +602,7 @@ func (x *ListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListResponse.ProtoReflect.Descriptor instead.
 func (*ListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{7}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListResponse) GetUnits() []*UnitStatus {
@@ -623,7 +623,7 @@ type LogsRequest struct {
 
 func (x *LogsRequest) Reset() {
 	*x = LogsRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[8]
+	mi := &file_proto_syslet_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -635,7 +635,7 @@ func (x *LogsRequest) String() string {
 func (*LogsRequest) ProtoMessage() {}
 
 func (x *LogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[8]
+	mi := &file_proto_syslet_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -648,7 +648,7 @@ func (x *LogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogsRequest.ProtoReflect.Descriptor instead.
 func (*LogsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{8}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LogsRequest) GetUnitName() string {
@@ -683,7 +683,7 @@ type LogEntry struct {
 
 func (x *LogEntry) Reset() {
 	*x = LogEntry{}
-	mi := &file_proto_rsystemd_proto_msgTypes[9]
+	mi := &file_proto_syslet_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -695,7 +695,7 @@ func (x *LogEntry) String() string {
 func (*LogEntry) ProtoMessage() {}
 
 func (x *LogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[9]
+	mi := &file_proto_syslet_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -708,7 +708,7 @@ func (x *LogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{9}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LogEntry) GetTimestamp() string {
@@ -741,7 +741,7 @@ type DeleteRequest struct {
 
 func (x *DeleteRequest) Reset() {
 	*x = DeleteRequest{}
-	mi := &file_proto_rsystemd_proto_msgTypes[10]
+	mi := &file_proto_syslet_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -753,7 +753,7 @@ func (x *DeleteRequest) String() string {
 func (*DeleteRequest) ProtoMessage() {}
 
 func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[10]
+	mi := &file_proto_syslet_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -766,7 +766,7 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{10}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DeleteRequest) GetUnitName() string {
@@ -785,7 +785,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_proto_rsystemd_proto_msgTypes[11]
+	mi := &file_proto_syslet_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -797,7 +797,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_rsystemd_proto_msgTypes[11]
+	mi := &file_proto_syslet_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -810,7 +810,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_rsystemd_proto_rawDescGZIP(), []int{11}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DeleteResponse) GetMessage() string {
@@ -820,40 +820,40 @@ func (x *DeleteResponse) GetMessage() string {
 	return ""
 }
 
-var File_proto_rsystemd_proto protoreflect.FileDescriptor
+var File_proto_syslet_proto protoreflect.FileDescriptor
 
-const file_proto_rsystemd_proto_rawDesc = "" +
+const file_proto_syslet_proto_rawDesc = "" +
 	"\n" +
-	"\x14proto/rsystemd.proto\x12\vrsystemd.v1\"$\n" +
+	"\x12proto/syslet.proto\x12\tsyslet.v1\"$\n" +
 	"\fApplyRequest\x12\x14\n" +
-	"\x05specs\x18\x01 \x03(\tR\x05specs\"\x7f\n" +
+	"\x05specs\x18\x01 \x03(\tR\x05specs\"}\n" +
 	"\n" +
 	"UnitResult\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12)\n" +
-	"\x04type\x18\x02 \x01(\x0e2\x15.rsystemd.v1.UnitTypeR\x04type\x12\x18\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
+	"\x04type\x18\x02 \x01(\x0e2\x13.syslet.v1.UnitTypeR\x04type\x12\x18\n" +
 	"\achanged\x18\x03 \x01(\bR\achanged\x12\x18\n" +
-	"\amessage\x18\x04 \x01(\tR\amessage\"B\n" +
-	"\rApplyResponse\x121\n" +
-	"\aresults\x18\x01 \x03(\v2\x17.rsystemd.v1.UnitResultR\aresults\",\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\"@\n" +
+	"\rApplyResponse\x12/\n" +
+	"\aresults\x18\x01 \x03(\v2\x15.syslet.v1.UnitResultR\aresults\",\n" +
 	"\rStatusRequest\x12\x1b\n" +
-	"\tunit_name\x18\x01 \x01(\tR\bunitName\"\xc4\x02\n" +
+	"\tunit_name\x18\x01 \x01(\tR\bunitName\"\xbe\x02\n" +
 	"\n" +
 	"UnitStatus\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12)\n" +
-	"\x04type\x18\x02 \x01(\x0e2\x15.rsystemd.v1.UnitTypeR\x04type\x12>\n" +
-	"\rdesired_state\x18\x03 \x01(\x0e2\x19.rsystemd.v1.DesiredStateR\fdesiredState\x12;\n" +
-	"\factive_state\x18\x04 \x01(\x0e2\x18.rsystemd.v1.ActiveStateR\vactiveState\x12\x18\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
+	"\x04type\x18\x02 \x01(\x0e2\x13.syslet.v1.UnitTypeR\x04type\x12<\n" +
+	"\rdesired_state\x18\x03 \x01(\x0e2\x17.syslet.v1.DesiredStateR\fdesiredState\x129\n" +
+	"\factive_state\x18\x04 \x01(\x0e2\x16.syslet.v1.ActiveStateR\vactiveState\x12\x18\n" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\x12!\n" +
 	"\fconfig_files\x18\x06 \x03(\tR\vconfigFiles\x12'\n" +
 	"\x0flast_reconciled\x18\a \x01(\tR\x0elastReconciled\x12\x14\n" +
-	"\x05error\x18\b \x01(\tR\x05error\"?\n" +
-	"\x0eStatusResponse\x12-\n" +
-	"\x05units\x18\x01 \x03(\v2\x17.rsystemd.v1.UnitStatusR\x05units\"E\n" +
-	"\vListRequest\x126\n" +
-	"\vtype_filter\x18\x01 \x01(\x0e2\x15.rsystemd.v1.UnitTypeR\n" +
-	"typeFilter\"=\n" +
-	"\fListResponse\x12-\n" +
-	"\x05units\x18\x01 \x03(\v2\x17.rsystemd.v1.UnitStatusR\x05units\"X\n" +
+	"\x05error\x18\b \x01(\tR\x05error\"=\n" +
+	"\x0eStatusResponse\x12+\n" +
+	"\x05units\x18\x01 \x03(\v2\x15.syslet.v1.UnitStatusR\x05units\"C\n" +
+	"\vListRequest\x124\n" +
+	"\vtype_filter\x18\x01 \x01(\x0e2\x13.syslet.v1.UnitTypeR\n" +
+	"typeFilter\";\n" +
+	"\fListResponse\x12+\n" +
+	"\x05units\x18\x01 \x03(\v2\x15.syslet.v1.UnitStatusR\x05units\"X\n" +
 	"\vLogsRequest\x12\x1b\n" +
 	"\tunit_name\x18\x01 \x01(\tR\bunitName\x12\x16\n" +
 	"\x06follow\x18\x02 \x01(\bR\x06follow\x12\x14\n" +
@@ -881,64 +881,64 @@ const file_proto_rsystemd_proto_rawDesc = "" +
 	"\x15ACTIVE_STATE_INACTIVE\x10\x02\x12\x17\n" +
 	"\x13ACTIVE_STATE_FAILED\x10\x03\x12\x1b\n" +
 	"\x17ACTIVE_STATE_ACTIVATING\x10\x04\x12\x1d\n" +
-	"\x19ACTIVE_STATE_DEACTIVATING\x10\x052\xcf\x02\n" +
-	"\x0fRsystemdService\x12>\n" +
-	"\x05Apply\x12\x19.rsystemd.v1.ApplyRequest\x1a\x1a.rsystemd.v1.ApplyResponse\x12A\n" +
-	"\x06Status\x12\x1a.rsystemd.v1.StatusRequest\x1a\x1b.rsystemd.v1.StatusResponse\x12;\n" +
-	"\x04List\x12\x18.rsystemd.v1.ListRequest\x1a\x19.rsystemd.v1.ListResponse\x129\n" +
-	"\x04Logs\x12\x18.rsystemd.v1.LogsRequest\x1a\x15.rsystemd.v1.LogEntry0\x01\x12A\n" +
-	"\x06Delete\x12\x1a.rsystemd.v1.DeleteRequest\x1a\x1b.rsystemd.v1.DeleteResponseB2Z0codeberg.org/xchangeee/rsystemd/proto;rsystemdv1b\x06proto3"
+	"\x19ACTIVE_STATE_DEACTIVATING\x10\x052\xb9\x02\n" +
+	"\rSysletService\x12:\n" +
+	"\x05Apply\x12\x17.syslet.v1.ApplyRequest\x1a\x18.syslet.v1.ApplyResponse\x12=\n" +
+	"\x06Status\x12\x18.syslet.v1.StatusRequest\x1a\x19.syslet.v1.StatusResponse\x127\n" +
+	"\x04List\x12\x16.syslet.v1.ListRequest\x1a\x17.syslet.v1.ListResponse\x125\n" +
+	"\x04Logs\x12\x16.syslet.v1.LogsRequest\x1a\x13.syslet.v1.LogEntry0\x01\x12=\n" +
+	"\x06Delete\x12\x18.syslet.v1.DeleteRequest\x1a\x19.syslet.v1.DeleteResponseB.Z,codeberg.org/xchangeee/syslet/proto;sysletv1b\x06proto3"
 
 var (
-	file_proto_rsystemd_proto_rawDescOnce sync.Once
-	file_proto_rsystemd_proto_rawDescData []byte
+	file_proto_syslet_proto_rawDescOnce sync.Once
+	file_proto_syslet_proto_rawDescData []byte
 )
 
-func file_proto_rsystemd_proto_rawDescGZIP() []byte {
-	file_proto_rsystemd_proto_rawDescOnce.Do(func() {
-		file_proto_rsystemd_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_rsystemd_proto_rawDesc), len(file_proto_rsystemd_proto_rawDesc)))
+func file_proto_syslet_proto_rawDescGZIP() []byte {
+	file_proto_syslet_proto_rawDescOnce.Do(func() {
+		file_proto_syslet_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_syslet_proto_rawDesc), len(file_proto_syslet_proto_rawDesc)))
 	})
-	return file_proto_rsystemd_proto_rawDescData
+	return file_proto_syslet_proto_rawDescData
 }
 
-var file_proto_rsystemd_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_proto_rsystemd_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
-var file_proto_rsystemd_proto_goTypes = []any{
-	(UnitType)(0),          // 0: rsystemd.v1.UnitType
-	(DesiredState)(0),      // 1: rsystemd.v1.DesiredState
-	(ActiveState)(0),       // 2: rsystemd.v1.ActiveState
-	(*ApplyRequest)(nil),   // 3: rsystemd.v1.ApplyRequest
-	(*UnitResult)(nil),     // 4: rsystemd.v1.UnitResult
-	(*ApplyResponse)(nil),  // 5: rsystemd.v1.ApplyResponse
-	(*StatusRequest)(nil),  // 6: rsystemd.v1.StatusRequest
-	(*UnitStatus)(nil),     // 7: rsystemd.v1.UnitStatus
-	(*StatusResponse)(nil), // 8: rsystemd.v1.StatusResponse
-	(*ListRequest)(nil),    // 9: rsystemd.v1.ListRequest
-	(*ListResponse)(nil),   // 10: rsystemd.v1.ListResponse
-	(*LogsRequest)(nil),    // 11: rsystemd.v1.LogsRequest
-	(*LogEntry)(nil),       // 12: rsystemd.v1.LogEntry
-	(*DeleteRequest)(nil),  // 13: rsystemd.v1.DeleteRequest
-	(*DeleteResponse)(nil), // 14: rsystemd.v1.DeleteResponse
+var file_proto_syslet_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_proto_syslet_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_proto_syslet_proto_goTypes = []any{
+	(UnitType)(0),          // 0: syslet.v1.UnitType
+	(DesiredState)(0),      // 1: syslet.v1.DesiredState
+	(ActiveState)(0),       // 2: syslet.v1.ActiveState
+	(*ApplyRequest)(nil),   // 3: syslet.v1.ApplyRequest
+	(*UnitResult)(nil),     // 4: syslet.v1.UnitResult
+	(*ApplyResponse)(nil),  // 5: syslet.v1.ApplyResponse
+	(*StatusRequest)(nil),  // 6: syslet.v1.StatusRequest
+	(*UnitStatus)(nil),     // 7: syslet.v1.UnitStatus
+	(*StatusResponse)(nil), // 8: syslet.v1.StatusResponse
+	(*ListRequest)(nil),    // 9: syslet.v1.ListRequest
+	(*ListResponse)(nil),   // 10: syslet.v1.ListResponse
+	(*LogsRequest)(nil),    // 11: syslet.v1.LogsRequest
+	(*LogEntry)(nil),       // 12: syslet.v1.LogEntry
+	(*DeleteRequest)(nil),  // 13: syslet.v1.DeleteRequest
+	(*DeleteResponse)(nil), // 14: syslet.v1.DeleteResponse
 }
-var file_proto_rsystemd_proto_depIdxs = []int32{
-	0,  // 0: rsystemd.v1.UnitResult.type:type_name -> rsystemd.v1.UnitType
-	4,  // 1: rsystemd.v1.ApplyResponse.results:type_name -> rsystemd.v1.UnitResult
-	0,  // 2: rsystemd.v1.UnitStatus.type:type_name -> rsystemd.v1.UnitType
-	1,  // 3: rsystemd.v1.UnitStatus.desired_state:type_name -> rsystemd.v1.DesiredState
-	2,  // 4: rsystemd.v1.UnitStatus.active_state:type_name -> rsystemd.v1.ActiveState
-	7,  // 5: rsystemd.v1.StatusResponse.units:type_name -> rsystemd.v1.UnitStatus
-	0,  // 6: rsystemd.v1.ListRequest.type_filter:type_name -> rsystemd.v1.UnitType
-	7,  // 7: rsystemd.v1.ListResponse.units:type_name -> rsystemd.v1.UnitStatus
-	3,  // 8: rsystemd.v1.RsystemdService.Apply:input_type -> rsystemd.v1.ApplyRequest
-	6,  // 9: rsystemd.v1.RsystemdService.Status:input_type -> rsystemd.v1.StatusRequest
-	9,  // 10: rsystemd.v1.RsystemdService.List:input_type -> rsystemd.v1.ListRequest
-	11, // 11: rsystemd.v1.RsystemdService.Logs:input_type -> rsystemd.v1.LogsRequest
-	13, // 12: rsystemd.v1.RsystemdService.Delete:input_type -> rsystemd.v1.DeleteRequest
-	5,  // 13: rsystemd.v1.RsystemdService.Apply:output_type -> rsystemd.v1.ApplyResponse
-	8,  // 14: rsystemd.v1.RsystemdService.Status:output_type -> rsystemd.v1.StatusResponse
-	10, // 15: rsystemd.v1.RsystemdService.List:output_type -> rsystemd.v1.ListResponse
-	12, // 16: rsystemd.v1.RsystemdService.Logs:output_type -> rsystemd.v1.LogEntry
-	14, // 17: rsystemd.v1.RsystemdService.Delete:output_type -> rsystemd.v1.DeleteResponse
+var file_proto_syslet_proto_depIdxs = []int32{
+	0,  // 0: syslet.v1.UnitResult.type:type_name -> syslet.v1.UnitType
+	4,  // 1: syslet.v1.ApplyResponse.results:type_name -> syslet.v1.UnitResult
+	0,  // 2: syslet.v1.UnitStatus.type:type_name -> syslet.v1.UnitType
+	1,  // 3: syslet.v1.UnitStatus.desired_state:type_name -> syslet.v1.DesiredState
+	2,  // 4: syslet.v1.UnitStatus.active_state:type_name -> syslet.v1.ActiveState
+	7,  // 5: syslet.v1.StatusResponse.units:type_name -> syslet.v1.UnitStatus
+	0,  // 6: syslet.v1.ListRequest.type_filter:type_name -> syslet.v1.UnitType
+	7,  // 7: syslet.v1.ListResponse.units:type_name -> syslet.v1.UnitStatus
+	3,  // 8: syslet.v1.SysletService.Apply:input_type -> syslet.v1.ApplyRequest
+	6,  // 9: syslet.v1.SysletService.Status:input_type -> syslet.v1.StatusRequest
+	9,  // 10: syslet.v1.SysletService.List:input_type -> syslet.v1.ListRequest
+	11, // 11: syslet.v1.SysletService.Logs:input_type -> syslet.v1.LogsRequest
+	13, // 12: syslet.v1.SysletService.Delete:input_type -> syslet.v1.DeleteRequest
+	5,  // 13: syslet.v1.SysletService.Apply:output_type -> syslet.v1.ApplyResponse
+	8,  // 14: syslet.v1.SysletService.Status:output_type -> syslet.v1.StatusResponse
+	10, // 15: syslet.v1.SysletService.List:output_type -> syslet.v1.ListResponse
+	12, // 16: syslet.v1.SysletService.Logs:output_type -> syslet.v1.LogEntry
+	14, // 17: syslet.v1.SysletService.Delete:output_type -> syslet.v1.DeleteResponse
 	13, // [13:18] is the sub-list for method output_type
 	8,  // [8:13] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
@@ -946,27 +946,27 @@ var file_proto_rsystemd_proto_depIdxs = []int32{
 	0,  // [0:8] is the sub-list for field type_name
 }
 
-func init() { file_proto_rsystemd_proto_init() }
-func file_proto_rsystemd_proto_init() {
-	if File_proto_rsystemd_proto != nil {
+func init() { file_proto_syslet_proto_init() }
+func file_proto_syslet_proto_init() {
+	if File_proto_syslet_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_rsystemd_proto_rawDesc), len(file_proto_rsystemd_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_syslet_proto_rawDesc), len(file_proto_syslet_proto_rawDesc)),
 			NumEnums:      3,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_proto_rsystemd_proto_goTypes,
-		DependencyIndexes: file_proto_rsystemd_proto_depIdxs,
-		EnumInfos:         file_proto_rsystemd_proto_enumTypes,
-		MessageInfos:      file_proto_rsystemd_proto_msgTypes,
+		GoTypes:           file_proto_syslet_proto_goTypes,
+		DependencyIndexes: file_proto_syslet_proto_depIdxs,
+		EnumInfos:         file_proto_syslet_proto_enumTypes,
+		MessageInfos:      file_proto_syslet_proto_msgTypes,
 	}.Build()
-	File_proto_rsystemd_proto = out.File
-	file_proto_rsystemd_proto_goTypes = nil
-	file_proto_rsystemd_proto_depIdxs = nil
+	File_proto_syslet_proto = out.File
+	file_proto_syslet_proto_goTypes = nil
+	file_proto_syslet_proto_depIdxs = nil
 }

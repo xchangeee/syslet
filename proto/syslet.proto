@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package rsystemd.v1;
+package syslet.v1;
 
-option go_package = "codeberg.org/xchangeee/rsystemd/proto;rsystemdv1";
+option go_package = "codeberg.org/xchangeee/syslet/proto;sysletv1";
 
-service RsystemdService {
+service SysletService {
   rpc Apply(ApplyRequest) returns (ApplyResponse);
   rpc Status(StatusRequest) returns (StatusResponse);
   rpc List(ListRequest) returns (ListResponse);

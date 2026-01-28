@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
-	"codeberg.org/xchangeee/rsystemd/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/parser"
 
 	"github.com/coreos/go-systemd/v22/unit"
 )
@@ -81,10 +81,10 @@ func Convert(s *ContainerSpec, configBase string) (*parser.ParsedUnit, []contain
 		})
 	}
 
-	// Inject [X-Rsystemd] DesiredState.
+	// Inject [X-Syslet] DesiredState.
 	if s.DesiredState != "" {
 		opts = append(opts, &unit.UnitOption{
-			Section: "X-Rsystemd",
+			Section: "X-Syslet",
 			Name:    "DesiredState",
 			Value:   s.DesiredState,
 		})

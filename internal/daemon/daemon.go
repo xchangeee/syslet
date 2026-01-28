@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"time"
 
-	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
-	"codeberg.org/xchangeee/rsystemd/internal/spec"
-	"codeberg.org/xchangeee/rsystemd/internal/store"
-	"codeberg.org/xchangeee/rsystemd/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/spec"
+	"codeberg.org/xchangeee/syslet/internal/store"
+	"codeberg.org/xchangeee/syslet/internal/systemd"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 	DefaultConfigBase = "/etc/containers/config"
 )
 
-// Daemon is the main rsystemd daemon.
+// Daemon is the main syslet daemon.
 type Daemon struct {
 	reconciler *Reconciler
 	store      *store.Store
@@ -52,7 +52,7 @@ func New(sd *systemd.Client, cfg *containerconfig.Manager, st *store.Store, logg
 
 // Run starts the reconciliation loop. It blocks until ctx is cancelled.
 func (d *Daemon) Run(ctx context.Context) error {
-	d.logger.Info("starting rsystemd daemon",
+	d.logger.Info("starting syslet daemon",
 		"interval", d.interval,
 	)
 

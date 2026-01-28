@@ -1,4 +1,4 @@
-// Package parser extracts rsystemd metadata from container unit files.
+// Package parser extracts syslet metadata from container unit files.
 // It uses github.com/coreos/go-systemd/v22/unit for actual unit file parsing.
 package parser
 
@@ -30,9 +30,9 @@ const (
 	DesiredStateStopped
 )
 
-const rsystemdSection = "X-Rsystemd"
+const sysletSection = "X-Syslet"
 
-// ParsedUnit represents a parsed unit file with its rsystemd metadata.
+// ParsedUnit represents a parsed unit file with its syslet metadata.
 type ParsedUnit struct {
 	Name         string
 	Type         UnitType
@@ -81,7 +81,7 @@ func (t UnitType) String() string {
 	}
 }
 
-// Parse parses a unit file and extracts rsystemd metadata.
+// Parse parses a unit file and extracts syslet metadata.
 func Parse(filename, content string) (*ParsedUnit, error) {
 	unitType := UnitTypeFromExtension(filename)
 	if unitType == UnitTypeUnknown {
@@ -101,7 +101,7 @@ func Parse(filename, content string) (*ParsedUnit, error) {
 	}
 
 	for _, opt := range opts {
-		if opt.Section != rsystemdSection {
+		if opt.Section != sysletSection {
 			continue
 		}
 		switch opt.Name {
@@ -115,19 +115,19 @@ func Parse(filename, content string) (*ParsedUnit, error) {
 				return nil, fmt.Errorf("invalid DesiredState %q in %q", opt.Value, filename)
 			}
 		default:
-			return nil, fmt.Errorf("unknown key %q in [X-Rsystemd] in %q", opt.Name, filename)
+			return nil, fmt.Errorf("unknown key %q in [X-Syslet] in %q", opt.Name, filename)
 		}
 	}
 
 	return u, nil
 }
 
-// SystemdContent returns the unit file content without the [X-Rsystemd] section,
+// SystemdContent returns the unit file content without the [X-Syslet] section,
 // suitable for installing to systemd.
 func (u *ParsedUnit) SystemdContent() io.Reader {
 	var filtered []*unit.UnitOption
 	for _, opt := range u.Options {
-		if opt.Section == rsystemdSection {
+		if opt.Section == sysletSection {
 			continue
 		}
 		filtered = append(filtered, opt)

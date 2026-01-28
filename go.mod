@@ -1,4 +1,4 @@
-module codeberg.org/xchangeee/rsystemd
+module codeberg.org/xchangeee/syslet
 
 go 1.25.5
 

@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"codeberg.org/xchangeee/rsystemd/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/parser"
 )
 
 const (

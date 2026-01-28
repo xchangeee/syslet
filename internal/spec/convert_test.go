@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/xchangeee/rsystemd/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/parser"
 )
 
 func TestConvert_BasicContainer(t *testing.T) {
@@ -45,9 +45,9 @@ func TestConvert_BasicContainer(t *testing.T) {
 	if !strings.Contains(out, "WantedBy=multi-user.target default.target") {
 		t.Errorf("missing auto-generated Install section in:\n%s", out)
 	}
-	// X-Rsystemd should be stripped by SystemdContent.
-	if strings.Contains(out, "X-Rsystemd") {
-		t.Errorf("SystemdContent should not contain X-Rsystemd:\n%s", out)
+	// X-Syslet should be stripped by SystemdContent.
+	if strings.Contains(out, "X-Syslet") {
+		t.Errorf("SystemdContent should not contain X-Syslet:\n%s", out)
 	}
 }
 

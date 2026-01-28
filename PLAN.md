@@ -1,15 +1,15 @@
-# rsystemd - Declarative container reconciliation daemon
+# syslet - Declarative container reconciliation daemon
 
 ## Overview
 
-A Go-based single-node daemon (`rsystemd`) + CLI (`rsctl`) that provides Kubernetes-style declarative state management for Podman quadlet containers, volumes, and networks, with a reconciliation loop and remote API. Designed for gitops pipelines.
+A Go-based single-node daemon (`syslet`) + CLI (`rsctl`) that provides Kubernetes-style declarative state management for Podman quadlet containers, volumes, and networks, with a reconciliation loop and remote API. Designed for gitops pipelines.
 
 ## Design Decisions
 
 - **Language**: Go
 - **Managed resource types**:
   - `.container`, `.volume`, `.network` - Podman quadlet units
-- **Config format**: Native unit files with `[X-Rsystemd]` custom section
+- **Config format**: Native unit files with `[X-Syslet]` custom section
 - **Config files**: Fixed unit-specific directories under `/etc/containers/config/`
 - **API**: gRPC over TCP (remote), typed data model
 - **Logging**: Integrated journal log streaming
@@ -19,7 +19,7 @@ A Go-based single-node daemon (`rsystemd`) + CLI (`rsctl`) that provides Kuberne
 ## Architecture
 
 ```text
-rsctl (CLI) ---gRPC---> rsystemd (daemon) ---D-Bus---> systemd
+rsctl (CLI) ---gRPC---> syslet (daemon) ---D-Bus---> systemd
                               |                          |
                          watches config dirs        quadlet generator
                                                    converts .container/.volume/.network
@@ -46,14 +46,14 @@ rsctl (CLI) ---gRPC---> rsystemd (daemon) ---D-Bus---> systemd
 ## Directory Layout (on daemon host)
 
 ```text
-/etc/rsystemd/
+/etc/syslet/
 └── units/                          # managed unit files
     ├── webapp.container
     ├── webapp-data.volume
     └── webapp-net.network
 
 /etc/containers/
-├── systemd/                        # quadlet unit files (installed by rsystemd)
+├── systemd/                        # quadlet unit files (installed by syslet)
 │   ├── webapp.container
 │   ├── webapp-data.volume
 │   └── webapp-net.network
@@ -78,7 +78,7 @@ Environment=APP_ENV=production
 [Install]
 WantedBy=multi-user.target default.target
 
-[X-Rsystemd]
+[X-Syslet]
 DesiredState=running
 ```
 
@@ -90,7 +90,7 @@ Note: Enablement is solely via `[Install] WantedBy=`.
 [Volume]
 Label=app=webapp
 
-[X-Rsystemd]
+[X-Syslet]
 ```
 
 ### Network quadlet (immutable after creation)
@@ -100,7 +100,7 @@ Label=app=webapp
 Subnet=10.89.0.0/24
 Gateway=10.89.0.1
 
-[X-Rsystemd]
+[X-Syslet]
 ```
 
 ## Reconciliation Loop (two-phase: plan then execute)
@@ -112,7 +112,7 @@ Since `daemon-reload` is a global operation affecting all units, the reconciler 
 For every managed unit (containers, volumes, networks):
 
 1. Read unit file from source directory
-2. Parse `[X-Rsystemd]` section
+2. Parse `[X-Syslet]` section
 3. Compute diff against installed state:
    - Unit file checksum vs installed copy
    - Config file checksums vs deployed copies
@@ -156,9 +156,9 @@ my-infra-repo/
 ## Project Structure
 
 ```text
-rsystemd/
+syslet/
 ├── cmd/
-│   ├── rsystemd/              # daemon entrypoint
+│   ├── syslet/              # daemon entrypoint
 │   │   └── main.go
 │   └── rsctl/                 # CLI entrypoint
 │       └── main.go
@@ -169,7 +169,7 @@ rsystemd/
 │   │   └── fs.go
 │   ├── systemd/               # D-Bus client for systemd
 │   │   └── client.go
-│   ├── parser/                # unit file parser (with X-Rsystemd section)
+│   ├── parser/                # unit file parser (with X-Syslet section)
 │   │   └── parser.go
 │   ├── config/                # config file management
 │   │   └── manager.go
@@ -178,7 +178,7 @@ rsystemd/
 │   └── journal/               # journalctl log streaming
 │       └── reader.go
 ├── proto/
-│   └── rsystemd.proto
+│   └── syslet.proto
 ├── go.mod
 └── go.sum
 ```
@@ -187,9 +187,9 @@ rsystemd/
 
 ```protobuf
 syntax = "proto3";
-package rsystemd.v1;
+package syslet.v1;
 
-service RsystemdService {
+service SysletService {
   rpc Apply(ApplyRequest) returns (ApplyResponse);
   rpc Status(StatusRequest) returns (StatusResponse);
   rpc List(ListRequest) returns (ListResponse);
@@ -231,7 +231,7 @@ enum ActiveState {
 ## Implementation Order
 
 1. Go module + project skeleton
-2. Unit file parser with `[X-Rsystemd]` section and unit type detection
+2. Unit file parser with `[X-Syslet]` section and unit type detection
 3. Config file manager (checksum diffing, write to fixed paths)
 4. systemd D-Bus client (query state, daemon-reload, start/stop)
 5. Reconciler (two-phase: diff all units, then single coordinated execute pass)

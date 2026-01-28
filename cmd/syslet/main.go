@@ -9,12 +9,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"codeberg.org/xchangeee/rsystemd/internal/api"
-	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
-	"codeberg.org/xchangeee/rsystemd/internal/daemon"
-	"codeberg.org/xchangeee/rsystemd/internal/store"
-	"codeberg.org/xchangeee/rsystemd/internal/systemd"
-	pb "codeberg.org/xchangeee/rsystemd/proto"
+	"codeberg.org/xchangeee/syslet/internal/api"
+	"codeberg.org/xchangeee/syslet/internal/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/daemon"
+	"codeberg.org/xchangeee/syslet/internal/store"
+	"codeberg.org/xchangeee/syslet/internal/systemd"
+	pb "codeberg.org/xchangeee/syslet/proto"
 
 	"google.golang.org/grpc"
 )
@@ -33,7 +33,7 @@ func main() {
 	defer sd.Close()
 
 	dbPath := store.DefaultDBPath
-	if p := os.Getenv("RSYSTEMD_DB"); p != "" {
+	if p := os.Getenv("SYSLET_DB"); p != "" {
 		dbPath = p
 	}
 
@@ -50,7 +50,7 @@ func main() {
 
 	// Start gRPC server
 	listenAddr := ":7233"
-	if addr := os.Getenv("RSYSTEMD_LISTEN"); addr != "" {
+	if addr := os.Getenv("SYSLET_LISTEN"); addr != "" {
 		listenAddr = addr
 	}
 
@@ -61,7 +61,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterRsystemdServiceServer(grpcServer, api.NewServer(d, sd, cfg, logger))
+	pb.RegisterSysletServiceServer(grpcServer, api.NewServer(d, sd, cfg, logger))
 
 	go func() {
 		logger.Info("gRPC server listening", "addr", listenAddr)

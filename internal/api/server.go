@@ -1,4 +1,4 @@
-// Package api implements the gRPC server for rsystemd.
+// Package api implements the gRPC server for syslet.
 package api
 
 import (
@@ -8,22 +8,22 @@ import (
 	"log/slog"
 	"time"
 
-	pb "codeberg.org/xchangeee/rsystemd/proto"
+	pb "codeberg.org/xchangeee/syslet/proto"
 
-	"codeberg.org/xchangeee/rsystemd/internal/containerconfig"
-	"codeberg.org/xchangeee/rsystemd/internal/daemon"
-	"codeberg.org/xchangeee/rsystemd/internal/journal"
-	"codeberg.org/xchangeee/rsystemd/internal/parser"
-	"codeberg.org/xchangeee/rsystemd/internal/spec"
-	"codeberg.org/xchangeee/rsystemd/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/daemon"
+	"codeberg.org/xchangeee/syslet/internal/journal"
+	"codeberg.org/xchangeee/syslet/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/spec"
+	"codeberg.org/xchangeee/syslet/internal/systemd"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// Server implements the RsystemdService gRPC service.
+// Server implements the SysletService gRPC service.
 type Server struct {
-	pb.UnimplementedRsystemdServiceServer
+	pb.UnimplementedSysletServiceServer
 
 	daemon  *daemon.Daemon
 	systemd *systemd.Client
@@ -103,7 +103,7 @@ func (s *Server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListRespons
 	return resp, nil
 }
 
-func (s *Server) Logs(req *pb.LogsRequest, stream pb.RsystemdService_LogsServer) error {
+func (s *Server) Logs(req *pb.LogsRequest, stream pb.SysletService_LogsServer) error {
 	if req.UnitName == "" {
 		return status.Error(codes.InvalidArgument, "unit_name is required")
 	}
