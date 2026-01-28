@@ -43,14 +43,14 @@ func NewManagerWithPaths(containerBase string) *Manager {
 }
 
 // configDir returns the config directory for a given unit.
-func (m *Manager) configDir(unitName string) string {
-	baseName := parser.UnitBaseName(unitName)
-	return filepath.Join(m.containerConfigBase, baseName)
+func (m *Manager) configDir(fullUnitName string) string {
+	unitName := parser.UnitName(fullUnitName)
+	return filepath.Join(m.containerConfigBase, unitName)
 }
 
 // ListFiles returns all config filenames for a unit.
-func (m *Manager) ListFiles(unitName string) ([]string, error) {
-	dir := m.configDir(unitName)
+func (m *Manager) ListFiles(fullUnitName string) ([]string, error) {
+	dir := m.configDir(fullUnitName)
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -68,8 +68,8 @@ func (m *Manager) ListFiles(unitName string) ([]string, error) {
 }
 
 // ChecksumDir computes a combined checksum of all files in a unit's config directory.
-func (m *Manager) ChecksumDir(unitName string) (string, error) {
-	dir := m.configDir(unitName)
+func (m *Manager) ChecksumDir(fullUnitName string) (string, error) {
+	dir := m.configDir(fullUnitName)
 	h := sha256.New()
 
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -99,8 +99,8 @@ func (m *Manager) ChecksumDir(unitName string) (string, error) {
 }
 
 // IsChanged checks if a config file differs from what's deployed.
-func (m *Manager) IsChanged(unitName string, filename, content string) (bool, error) {
-	path := filepath.Join(m.configDir(unitName), filename)
+func (m *Manager) IsChanged(fullUnitName string, filename, content string) (bool, error) {
+	path := filepath.Join(m.configDir(fullUnitName), filename)
 	existing, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return true, nil
@@ -112,8 +112,8 @@ func (m *Manager) IsChanged(unitName string, filename, content string) (bool, er
 }
 
 // Write writes a config file to its target directory, creating dirs as needed.
-func (m *Manager) Write(unitName string, filename, content string) error {
-	dir := m.configDir(unitName)
+func (m *Manager) Write(fullUnitName string, filename, content string) error {
+	dir := m.configDir(fullUnitName)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("creating config dir %s: %w", dir, err)
 	}
@@ -122,8 +122,8 @@ func (m *Manager) Write(unitName string, filename, content string) error {
 }
 
 // RemoveAll removes all config files for a unit.
-func (m *Manager) RemoveAll(unitName string) error {
-	dir := m.configDir(unitName)
+func (m *Manager) RemoveAll(fullUnitName string) error {
+	dir := m.configDir(fullUnitName)
 	err := os.RemoveAll(dir)
 	if os.IsNotExist(err) {
 		return nil

@@ -27,6 +27,12 @@ const (
 	ActionReject                 // immutable unit changed, reject
 )
 
+// UnitWithConfigs pairs a parsed unit with its config files.
+type UnitWithConfigs struct {
+	Unit    *parser.ParsedUnit
+	Configs []containerconfig.ConfigFile
+}
+
 // UnitChange captures the diff for a single unit.
 type UnitChange struct {
 	UnitWithConfigs
@@ -45,6 +51,15 @@ type ChangePlan struct {
 	NeedReload bool // at least one unit file changed
 }
 
+// UnitResult is the outcome of reconciling one unit.
+type UnitResult struct {
+	FullName string
+	Type     parser.UnitType
+	Changed  bool
+	Message  string
+	Error    bool
+}
+
 // Reconciler performs two-phase reconciliation.
 type Reconciler struct {
 	systemd *systemd.Client
@@ -61,12 +76,6 @@ func NewReconciler(sd *systemd.Client, cfg *containerconfig.Manager, logger *slo
 	}
 }
 
-// UnitWithConfigs pairs a parsed unit with its config files.
-type UnitWithConfigs struct {
-	Unit    *parser.ParsedUnit
-	Configs []containerconfig.ConfigFile
-}
-
 // Diff computes a ChangePlan for all provided units.
 func (r *Reconciler) Diff(ctx context.Context, units []UnitWithConfigs) (*ChangePlan, error) {
 	plan := &ChangePlan{}
@@ -74,7 +83,7 @@ func (r *Reconciler) Diff(ctx context.Context, units []UnitWithConfigs) (*Change
 	for _, uc := range units {
 		change, err := r.diffUnit(ctx, uc)
 		if err != nil {
-			return nil, fmt.Errorf("diffing %s: %w", uc.Unit.Name, err)
+			return nil, fmt.Errorf("diffing %s: %w", uc.Unit.FullName, err)
 		}
 		if change.UnitChanged {
 			plan.NeedReload = true
@@ -92,7 +101,10 @@ func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitCha
 	}
 
 	// Check if unit file exists
-	installed := r.systemd.UnitFileExists(u.Name, u.Type)
+	installed, err := r.unitFileExists(u)
+	if err != nil {
+		return nil, err
+	}
 
 	if !installed {
 		change.IsNew = true
@@ -119,7 +131,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitCha
 		}
 		if unitChanged {
 			change.Rejected = true
-			change.RejectReason = fmt.Sprintf("immutable %s unit %s cannot be modified after creation", u.Type, u.Name)
+			change.RejectReason = fmt.Sprintf("immutable %s unit %s cannot be modified after creation", u.Type, u.FullName)
 			return change, nil
 		}
 		return change, nil
@@ -134,7 +146,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitCha
 
 	// Check config file changes
 	for _, cf := range cfgFiles {
-		changed, err := r.config.IsChanged(u.Name, cf.Filename, cf.Content)
+		changed, err := r.config.IsChanged(u.FullName, cf.Filename, cf.Content)
 		if err != nil {
 			return nil, err
 		}
@@ -147,7 +159,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitCha
 	// If unit or config changed, need to stop first (using old config)
 	if (change.UnitChanged || change.ConfigChanged) && u.Type.IsStartable() {
 		// Check if currently running
-		state, err := r.systemd.GetUnitState(ctx, u.Name, u.Type)
+		state, err := r.systemd.Container().GetState(ctx, u.FullName)
 		if err != nil {
 			return nil, err
 		}
@@ -158,7 +170,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitCha
 
 	// Determine start needs
 	if u.Type.IsStartable() {
-		state, err := r.systemd.GetUnitState(ctx, u.Name, u.Type)
+		state, err := r.systemd.Container().GetState(ctx, u.FullName)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +191,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, uc UnitWithConfigs) (*UnitCha
 }
 
 func (r *Reconciler) unitFileChanged(u *parser.ParsedUnit) (bool, error) {
-	existing, err := r.systemd.ReadInstalledUnit(u.Name, u.Type)
+	existing, err := r.readInstalledUnit(u)
 	if os.IsNotExist(err) {
 		return true, nil
 	}
@@ -203,26 +215,26 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 	// Phase 1: Stop all units that need stopping (uses OLD config)
 	for _, c := range plan.Changes {
 		if c.Rejected {
-			r.logger.Error("rejected change", "unit", c.Unit.Name, "reason", c.RejectReason)
+			r.logger.Error("rejected change", "unit", c.Unit.FullName, "reason", c.RejectReason)
 			results = append(results, UnitResult{
-				Name:    c.Unit.Name,
-				Type:    c.Unit.Type,
-				Changed: false,
-				Message: c.RejectReason,
-				Error:   true,
+				FullName: c.Unit.FullName,
+				Type:     c.Unit.Type,
+				Changed:  false,
+				Message:  c.RejectReason,
+				Error:    true,
 			})
 			continue
 		}
 		if c.NeedsStop {
-			r.logger.Info("stopping unit", "unit", c.Unit.Name)
-			if err := r.systemd.StopUnit(ctx, c.Unit.Name, c.Unit.Type); err != nil {
-				r.logger.Error("failed to stop unit", "unit", c.Unit.Name, "error", err)
+			r.logger.Info("stopping unit", "unit", c.Unit.FullName)
+			if err := r.systemd.Container().Stop(ctx, c.Unit.FullName); err != nil {
+				r.logger.Error("failed to stop unit", "unit", c.Unit.FullName, "error", err)
 				results = append(results, UnitResult{
-					Name:    c.Unit.Name,
-					Type:    c.Unit.Type,
-					Changed: false,
-					Message: fmt.Sprintf("failed to stop: %v", err),
-					Error:   true,
+					FullName: c.Unit.FullName,
+					Type:     c.Unit.Type,
+					Changed:  false,
+					Message:  fmt.Sprintf("failed to stop: %v", err),
+					Error:    true,
 				})
 				continue
 			}
@@ -235,9 +247,9 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 			continue
 		}
 		for _, cf := range c.Configs {
-			r.logger.Info("writing config", "unit", c.Unit.Name, "file", cf.Filename)
-			if err := r.config.Write(c.Unit.Name, cf.Filename, cf.Content); err != nil {
-				r.logger.Error("failed to write config", "unit", c.Unit.Name, "file", cf.Filename, "error", err)
+			r.logger.Info("writing config", "unit", c.Unit.FullName, "file", cf.Filename)
+			if err := r.config.Write(c.Unit.FullName, cf.Filename, cf.Content); err != nil {
+				r.logger.Error("failed to write config", "unit", c.Unit.FullName, "file", cf.Filename, "error", err)
 			}
 		}
 	}
@@ -247,9 +259,9 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 		if c.Rejected || !c.UnitChanged {
 			continue
 		}
-		r.logger.Info("installing unit file", "unit", c.Unit.Name)
-		if err := r.systemd.InstallUnitFile(c.Unit.Name, c.Unit.Type, c.Unit.SystemdContent()); err != nil {
-			r.logger.Error("failed to install unit file", "unit", c.Unit.Name, "error", err)
+		r.logger.Info("installing unit file", "unit", c.Unit.FullName)
+		if err := r.installUnitFile(c.Unit); err != nil {
+			r.logger.Error("failed to install unit file", "unit", c.Unit.FullName, "error", err)
 		}
 	}
 
@@ -267,15 +279,15 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 			continue
 		}
 		if c.NeedsStart {
-			r.logger.Info("starting unit", "unit", c.Unit.Name)
-			if err := r.systemd.StartUnit(ctx, c.Unit.Name, c.Unit.Type); err != nil {
-				r.logger.Error("failed to start unit", "unit", c.Unit.Name, "error", err)
+			r.logger.Info("starting unit", "unit", c.Unit.FullName)
+			if err := r.systemd.Container().Start(ctx, c.Unit.FullName); err != nil {
+				r.logger.Error("failed to start unit", "unit", c.Unit.FullName, "error", err)
 				results = append(results, UnitResult{
-					Name:    c.Unit.Name,
-					Type:    c.Unit.Type,
-					Changed: true,
-					Message: fmt.Sprintf("failed to start: %v", err),
-					Error:   true,
+					FullName: c.Unit.FullName,
+					Type:     c.Unit.Type,
+					Changed:  true,
+					Message:  fmt.Sprintf("failed to start: %v", err),
+					Error:    true,
 				})
 				continue
 			}
@@ -285,10 +297,10 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 		if !c.Rejected {
 			msg := r.buildResultMessage(c)
 			results = append(results, UnitResult{
-				Name:    c.Unit.Name,
-				Type:    c.Unit.Type,
-				Changed: c.UnitChanged || c.ConfigChanged || c.NeedsStart || c.NeedsStop,
-				Message: msg,
+				FullName: c.Unit.FullName,
+				Type:     c.Unit.Type,
+				Changed:  c.UnitChanged || c.ConfigChanged || c.NeedsStart || c.NeedsStop,
+				Message:  msg,
 			})
 		}
 	}
@@ -320,13 +332,43 @@ func (r *Reconciler) buildResultMessage(c *UnitChange) string {
 	return strings.Join(parts, ", ")
 }
 
-// UnitResult is the outcome of reconciling one unit.
-type UnitResult struct {
-	Name    string
-	Type    parser.UnitType
-	Changed bool
-	Message string
-	Error   bool
+func (r *Reconciler) unitFileExists(u *parser.ParsedUnit) (bool, error) {
+	switch u.Type {
+	case parser.UnitTypeContainer:
+		return r.systemd.Container().UnitFileExists(u.FullName)
+	case parser.UnitTypeVolume:
+		return r.systemd.Volume().UnitFileExists(u.FullName)
+	case parser.UnitTypeNetwork:
+		return r.systemd.Network().UnitFileExists(u.FullName)
+	default:
+		return false, fmt.Errorf("unsupported unit type: %v", u.Type)
+	}
+}
+
+func (r *Reconciler) readInstalledUnit(u *parser.ParsedUnit) ([]byte, error) {
+	switch u.Type {
+	case parser.UnitTypeContainer:
+		return r.systemd.Container().ReadInstalledUnit(u.FullName)
+	case parser.UnitTypeVolume:
+		return r.systemd.Volume().ReadInstalledUnit(u.FullName)
+	case parser.UnitTypeNetwork:
+		return r.systemd.Network().ReadInstalledUnit(u.FullName)
+	default:
+		return nil, fmt.Errorf("unsupported unit type: %v", u.Type)
+	}
+}
+
+func (r *Reconciler) installUnitFile(u *parser.ParsedUnit) error {
+	switch u.Type {
+	case parser.UnitTypeContainer:
+		return r.systemd.Container().InstallUnitFile(u.FullName, u.SystemdContent())
+	case parser.UnitTypeVolume:
+		return r.systemd.Volume().InstallUnitFile(u.FullName, u.SystemdContent())
+	case parser.UnitTypeNetwork:
+		return r.systemd.Network().InstallUnitFile(u.FullName, u.SystemdContent())
+	default:
+		return fmt.Errorf("unsupported unit type: %v", u.Type)
+	}
 }
 
 func sha256sum(data []byte) string {

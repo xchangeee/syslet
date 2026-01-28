@@ -21,7 +21,7 @@ func Convert(s *ContainerSpec, configBase string) (*parser.ParsedUnit, []contain
 		return nil, nil, err
 	}
 
-	unitFilename := s.Name + "." + s.Type
+	fullUnitName := s.Name + "." + s.Type
 
 	// Build unit options from the spec's unit map.
 	var opts []*unit.UnitOption
@@ -105,7 +105,7 @@ func Convert(s *ContainerSpec, configBase string) (*parser.ParsedUnit, []contain
 	}
 
 	pu := &parser.ParsedUnit{
-		Name:         unitFilename,
+		FullName:     fullUnitName,
 		Type:         unitType,
 		DesiredState: desiredState,
 		RawContent:   string(rawBytes),

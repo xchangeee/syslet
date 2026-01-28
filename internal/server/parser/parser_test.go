@@ -25,7 +25,7 @@ func TestUnitTypeFromExtension(t *testing.T) {
 	}
 }
 
-func TestUnitBaseName(t *testing.T) {
+func TestUnitName(t *testing.T) {
 	tests := []struct {
 		filename, want string
 	}{
@@ -34,8 +34,8 @@ func TestUnitBaseName(t *testing.T) {
 		{"net.network", "net"},
 	}
 	for _, tt := range tests {
-		if got := UnitBaseName(tt.filename); got != tt.want {
-			t.Errorf("UnitBaseName(%q) = %q, want %q", tt.filename, got, tt.want)
+		if got := UnitName(tt.filename); got != tt.want {
+			t.Errorf("UnitName(%q) = %q, want %q", tt.filename, got, tt.want)
 		}
 	}
 }

@@ -34,7 +34,7 @@ const sysletSection = "X-Syslet"
 
 // ParsedUnit represents a parsed unit file with its syslet metadata.
 type ParsedUnit struct {
-	Name         string
+	FullName     string
 	Type         UnitType
 	DesiredState DesiredState
 	RawContent   string             // original file content
@@ -55,9 +55,10 @@ func UnitTypeFromExtension(filename string) UnitType {
 	}
 }
 
-// UnitBaseName returns the filename without extension.
-func UnitBaseName(filename string) string {
-	return strings.TrimSuffix(filename, filepath.Ext(filename))
+// UnitName returns the unit name without the type suffix.
+// e.g. "webapp.container" → "webapp"
+func UnitName(fullUnitName string) string {
+	return strings.TrimSuffix(fullUnitName, filepath.Ext(fullUnitName))
 }
 
 func (t UnitType) IsStartable() bool {
@@ -94,7 +95,7 @@ func Parse(filename, content string) (*ParsedUnit, error) {
 	}
 
 	u := &ParsedUnit{
-		Name:       filename,
+		FullName:   filename,
 		Type:       unitType,
 		RawContent: content,
 		Options:    opts,

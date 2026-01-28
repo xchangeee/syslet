@@ -31,6 +31,12 @@ type Store struct {
 	db *sql.DB
 }
 
+// ReconcileStatus holds the reconciliation status for a unit.
+type ReconcileStatus struct {
+	Error          string
+	LastReconciled time.Time
+}
+
 // New opens (or creates) the database at dbPath and runs migrations.
 func New(dbPath string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
@@ -50,25 +56,9 @@ func New(dbPath string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Put upserts a spec.
-func (s *Store) Put(name, unitType, specJSON string) error {
-	_, err := s.db.Exec(
-		`INSERT INTO specs (name, type, spec_json, updated_at)
-		 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		 ON CONFLICT(name, type) DO UPDATE SET spec_json=excluded.spec_json, updated_at=CURRENT_TIMESTAMP`,
-		name, unitType, specJSON,
-	)
-	return err
-}
-
-// Get returns the spec JSON for a given name and type.
-func (s *Store) Get(name, unitType string) (string, error) {
-	var specJSON string
-	err := s.db.QueryRow("SELECT spec_json FROM specs WHERE name=? AND type=?", name, unitType).Scan(&specJSON)
-	if err != nil {
-		return "", err
-	}
-	return specJSON, nil
+// Close closes the database.
+func (s *Store) Close() error {
+	return s.db.Close()
 }
 
 // List returns all stored spec JSONs.
@@ -90,25 +80,14 @@ func (s *Store) List() ([]string, error) {
 	return specs, rows.Err()
 }
 
-// Delete removes a spec by name and type.
-func (s *Store) Delete(name, unitType string) error {
-	_, err := s.db.Exec("DELETE FROM specs WHERE name=? AND type=?", name, unitType)
-	return err
-}
-
-// UpdateReconcileStatus updates the reconciliation status for a unit.
-func (s *Store) UpdateReconcileStatus(name, unitType, errMsg string, lastReconciled time.Time) error {
-	_, err := s.db.Exec(
-		`UPDATE specs SET reconcile_error=?, last_reconciled=? WHERE name=? AND type=?`,
-		errMsg, lastReconciled.UTC().Format(time.RFC3339), name, unitType,
-	)
-	return err
-}
-
-// ReconcileStatus holds the reconciliation status for a unit.
-type ReconcileStatus struct {
-	Error          string
-	LastReconciled time.Time
+// Get returns the spec JSON for a given name and type.
+func (s *Store) Get(name, unitType string) (string, error) {
+	var specJSON string
+	err := s.db.QueryRow("SELECT spec_json FROM specs WHERE name=? AND type=?", name, unitType).Scan(&specJSON)
+	if err != nil {
+		return "", err
+	}
+	return specJSON, nil
 }
 
 // GetReconcileStatus returns the reconciliation status for a unit.
@@ -129,7 +108,28 @@ func (s *Store) GetReconcileStatus(name, unitType string) (*ReconcileStatus, err
 	return rs, nil
 }
 
-// Close closes the database.
-func (s *Store) Close() error {
-	return s.db.Close()
+// Put upserts a spec.
+func (s *Store) Put(name, unitType, specJSON string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO specs (name, type, spec_json, updated_at)
+		 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(name, type) DO UPDATE SET spec_json=excluded.spec_json, updated_at=CURRENT_TIMESTAMP`,
+		name, unitType, specJSON,
+	)
+	return err
+}
+
+// UpdateReconcileStatus updates the reconciliation status for a unit.
+func (s *Store) UpdateReconcileStatus(name, unitType, errMsg string, lastReconciled time.Time) error {
+	_, err := s.db.Exec(
+		`UPDATE specs SET reconcile_error=?, last_reconciled=? WHERE name=? AND type=?`,
+		errMsg, lastReconciled.UTC().Format(time.RFC3339), name, unitType,
+	)
+	return err
+}
+
+// Delete removes a spec by name and type.
+func (s *Store) Delete(name, unitType string) error {
+	_, err := s.db.Exec("DELETE FROM specs WHERE name=? AND type=?", name, unitType)
+	return err
 }

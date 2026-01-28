@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"codeberg.org/xchangeee/syslet/internal/server/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/server/parser"
 	"codeberg.org/xchangeee/syslet/internal/server/spec"
 	"codeberg.org/xchangeee/syslet/internal/server/store"
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
@@ -100,19 +101,19 @@ func (d *Daemon) reconcileOnce(ctx context.Context) []UnitResult {
 	now := time.Now()
 	for _, r := range results {
 		if r.Error {
-			d.logger.Error("reconciliation error", "unit", r.Name, "message", r.Message)
+			d.logger.Error("reconciliation error", "unit", r.FullName, "message", r.Message)
 		} else if r.Changed {
-			d.logger.Info("reconciled", "unit", r.Name, "message", r.Message)
+			d.logger.Info("reconciled", "unit", r.FullName, "message", r.Message)
 		} else {
-			d.logger.Debug("no changes", "unit", r.Name)
+			d.logger.Debug("no changes", "unit", r.FullName)
 		}
 
 		errMsg := ""
 		if r.Error {
 			errMsg = r.Message
 		}
-		if err := d.store.UpdateReconcileStatus(r.Name, r.Type.String(), errMsg, now); err != nil {
-			d.logger.Error("failed to update reconcile status", "unit", r.Name, "error", err)
+		if err := d.store.UpdateReconcileStatus(parser.UnitName(r.FullName), r.Type.String(), errMsg, now); err != nil {
+			d.logger.Error("failed to update reconcile status", "unit", r.FullName, "error", err)
 		}
 	}
 

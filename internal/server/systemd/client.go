@@ -9,15 +9,13 @@ import (
 	"path/filepath"
 
 	"github.com/coreos/go-systemd/v22/dbus"
-
-	"codeberg.org/xchangeee/syslet/internal/server/parser"
 )
 
 const (
 	QuadletUnitDir = "/etc/containers/systemd"
 )
 
-// Client wraps systemd D-Bus operations.
+// Client wraps systemd D-Bus operations and unit file management.
 type Client struct {
 	conn           *dbus.Conn
 	quadletUnitDir string
@@ -58,20 +56,63 @@ func (c *Client) Close() {
 	c.conn.Close()
 }
 
-// installedPath returns the full path where a unit file is installed.
-func (c *Client) installedPath(unitName string, unitType parser.UnitType) string {
-	return filepath.Join(c.quadletUnitDir, unitName)
+// DaemonReload calls systemctl daemon-reload.
+func (c *Client) DaemonReload(ctx context.Context) error {
+	return c.conn.ReloadContext(ctx)
 }
 
-// ReadInstalledUnit reads the content of an installed unit file.
-func (c *Client) ReadInstalledUnit(unitName string, unitType parser.UnitType) ([]byte, error) {
-	path := c.installedPath(unitName, unitType)
+// Container returns a ContainerUnit resource for container-specific operations.
+func (c *Client) Container() *ContainerUnit {
+	return &ContainerUnit{client: c}
+}
+
+// Volume returns a VolumeUnit resource for volume-specific operations.
+func (c *Client) Volume() *VolumeUnit {
+	return &VolumeUnit{client: c}
+}
+
+// Network returns a NetworkUnit resource for network-specific operations.
+func (c *Client) Network() *NetworkUnit {
+	return &NetworkUnit{client: c}
+}
+
+// installedPath returns the full path where a unit file is installed.
+func (c *Client) installedPath(fullUnitName string) string {
+	return filepath.Join(c.quadletUnitDir, fullUnitName)
+}
+
+// unitFileExists checks if a unit file is installed.
+func (c *Client) unitFileExists(fullUnitName string) bool {
+	path := c.installedPath(fullUnitName)
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// readInstalledUnit reads the content of an installed unit file.
+func (c *Client) readInstalledUnit(fullUnitName string) ([]byte, error) {
+	path := c.installedPath(fullUnitName)
 	return os.ReadFile(path)
 }
 
-// RemoveUnitFile removes an installed unit file.
-func (c *Client) RemoveUnitFile(unitName string, unitType parser.UnitType) error {
-	path := c.installedPath(unitName, unitType)
+// installUnitFile writes a unit file to the appropriate directory.
+func (c *Client) installUnitFile(fullUnitName string, content io.Reader) error {
+	dir := c.quadletUnitDir
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("creating unit dir %s: %w", dir, err)
+	}
+
+	data, err := io.ReadAll(content)
+	if err != nil {
+		return fmt.Errorf("reading content: %w", err)
+	}
+
+	path := filepath.Join(dir, fullUnitName)
+	return os.WriteFile(path, data, 0644)
+}
+
+// removeUnitFile removes an installed unit file.
+func (c *Client) removeUnitFile(fullUnitName string) error {
+	path := c.installedPath(fullUnitName)
 	err := os.Remove(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -79,21 +120,8 @@ func (c *Client) RemoveUnitFile(unitName string, unitType parser.UnitType) error
 	return err
 }
 
-// UnitFileExists checks if a unit file is installed.
-func (c *Client) UnitFileExists(unitName string, unitType parser.UnitType) bool {
-	path := c.installedPath(unitName, unitType)
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-// GetUnitState queries the current state of a unit via D-Bus.
-func (c *Client) GetUnitState(ctx context.Context, unitName string, unitType parser.UnitType) (*UnitState, error) {
-	// For quadlet containers, the generated service name is the basename + ".service"
-	serviceName := unitName
-	if unitType == parser.UnitTypeContainer {
-		serviceName = parser.UnitBaseName(unitName) + ".service"
-	}
-
+// getUnitState queries the current state of a unit via D-Bus using the given service name.
+func (c *Client) getUnitState(ctx context.Context, serviceName string) (*UnitState, error) {
 	props, err := c.conn.GetUnitPropertiesContext(ctx, serviceName)
 	if err != nil {
 		return nil, fmt.Errorf("getting properties for %s: %w", serviceName, err)
@@ -106,63 +134,4 @@ func (c *Client) GetUnitState(ctx context.Context, unitName string, unitType par
 		ActiveState: activeState,
 		Enabled:     unitFileState == "enabled" || unitFileState == "static",
 	}, nil
-}
-
-// DaemonReload calls systemctl daemon-reload.
-func (c *Client) DaemonReload(ctx context.Context) error {
-	return c.conn.ReloadContext(ctx)
-}
-
-// StartUnit starts a unit.
-func (c *Client) StartUnit(ctx context.Context, unitName string, unitType parser.UnitType) error {
-	serviceName := unitName
-	if unitType == parser.UnitTypeContainer {
-		serviceName = parser.UnitBaseName(unitName) + ".service"
-	}
-
-	ch := make(chan string, 1)
-	_, err := c.conn.StartUnitContext(ctx, serviceName, "replace", ch)
-	if err != nil {
-		return fmt.Errorf("starting %s: %w", serviceName, err)
-	}
-	result := <-ch
-	if result != "done" {
-		return fmt.Errorf("starting %s: job result %s", serviceName, result)
-	}
-	return nil
-}
-
-// StopUnit stops a unit.
-func (c *Client) StopUnit(ctx context.Context, unitName string, unitType parser.UnitType) error {
-	serviceName := unitName
-	if unitType == parser.UnitTypeContainer {
-		serviceName = parser.UnitBaseName(unitName) + ".service"
-	}
-
-	ch := make(chan string, 1)
-	_, err := c.conn.StopUnitContext(ctx, serviceName, "replace", ch)
-	if err != nil {
-		return fmt.Errorf("stopping %s: %w", serviceName, err)
-	}
-	result := <-ch
-	if result != "done" {
-		return fmt.Errorf("stopping %s: job result %s", serviceName, result)
-	}
-	return nil
-}
-
-// InstallUnitFile writes a unit file to the appropriate directory.
-func (c *Client) InstallUnitFile(unitName string, unitType parser.UnitType, content io.Reader) error {
-	dir := c.quadletUnitDir
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("creating unit dir %s: %w", dir, err)
-	}
-
-	data, err := io.ReadAll(content)
-	if err != nil {
-		return fmt.Errorf("reading content: %w", err)
-	}
-
-	path := filepath.Join(dir, unitName)
-	return os.WriteFile(path, data, 0644)
 }

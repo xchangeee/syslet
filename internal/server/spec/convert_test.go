@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/parser"
+	"codeberg.org/xchangeee/syslet/internal/server/parser"
 )
 
 func TestConvert_BasicContainer(t *testing.T) {
@@ -26,8 +26,8 @@ func TestConvert_BasicContainer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if pu.Name != "webapp.container" {
-		t.Errorf("got name %q, want %q", pu.Name, "webapp.container")
+	if pu.FullName != "webapp.container" {
+		t.Errorf("got name %q, want %q", pu.FullName, "webapp.container")
 	}
 	if pu.Type != parser.UnitTypeContainer {
 		t.Errorf("got type %v, want container", pu.Type)
@@ -131,8 +131,8 @@ func TestConvert_Volume(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if pu.Name != "mydata.volume" {
-		t.Errorf("got name %q, want %q", pu.Name, "mydata.volume")
+	if pu.FullName != "mydata.volume" {
+		t.Errorf("got name %q, want %q", pu.FullName, "mydata.volume")
 	}
 	if pu.Type != parser.UnitTypeVolume {
 		t.Errorf("got type %v, want volume", pu.Type)
