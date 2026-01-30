@@ -4,7 +4,6 @@ package api
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	pb "codeberg.org/xchangeee/syslet/proto"
 
@@ -47,7 +46,7 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		if err != nil {
 			return nil, status.Errorf(codes.NotFound, "unit %s: %v", req.UnitName, err)
 		}
-		resp.Units = append(resp.Units, managedUnitStateToPb(us))
+		resp.Units = append(resp.Units, us)
 		return resp, nil
 	}
 
@@ -56,9 +55,7 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "listing units: %v", err)
 	}
-	for _, us := range units {
-		resp.Units = append(resp.Units, managedUnitStateToPb(&us))
-	}
+	resp.Units = units
 
 	return resp, nil
 }
@@ -69,12 +66,9 @@ func (s *Server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListRespons
 		return nil, status.Errorf(codes.Internal, "listing units: %v", err)
 	}
 
-	resp := &pb.ListResponse{}
-	for _, us := range units {
-		resp.Units = append(resp.Units, managedUnitStateToPb(&us))
-	}
-
-	return resp, nil
+	return &pb.ListResponse{
+		Units: units,
+	}, nil
 }
 
 func (s *Server) Logs(req *pb.LogsRequest, stream pb.SysletService_LogsServer) error {
@@ -135,21 +129,4 @@ func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteR
 	return &pb.DeleteResponse{
 		Message: "deleted " + req.UnitName,
 	}, nil
-}
-
-// managedUnitStateToPb converts a domain ManagedUnitState to protobuf UnitStatus.
-func managedUnitStateToPb(us *daemon.ManagedUnitState) *pb.UnitStatus {
-	pbus := &pb.UnitStatus{
-		Name:         us.Name,
-		Type:         us.Type,
-		DesiredState: us.DesiredState,
-		ActiveState:  us.ActiveState,
-		Enabled:      us.Enabled,
-		ConfigFiles:  us.ConfigFiles,
-		Error:        us.Error,
-	}
-	if !us.LastReconciled.IsZero() {
-		pbus.LastReconciled = us.LastReconciled.Format(time.RFC3339)
-	}
-	return pbus
 }

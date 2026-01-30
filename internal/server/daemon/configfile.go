@@ -63,37 +63,6 @@ func (m *ConfigFileManager) ListFiles(fullUnitName string) ([]string, error) {
 	return files, nil
 }
 
-// ChecksumDir computes a combined checksum of all files in a unit's config directory.
-func (m *ConfigFileManager) ChecksumDir(fullUnitName string) (string, error) {
-	dir := m.configDir(fullUnitName)
-	h := sha256.New()
-
-	err := afero.Walk(m.fs, dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		data, err := afero.ReadFile(m.fs, path)
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(dir, path)
-		h.Write([]byte(rel))
-		h.Write(data)
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
-
 // IsChanged checks if a config file differs from what's deployed.
 func (m *ConfigFileManager) IsChanged(fullUnitName string, filename, content string) (bool, error) {
 	path := filepath.Join(m.configDir(fullUnitName), filename)

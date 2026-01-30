@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"io"
-	"time"
 
 	pb "codeberg.org/xchangeee/syslet/proto"
 	"github.com/coreos/go-systemd/v22/unit"
@@ -25,18 +24,6 @@ func (u *ResolvedUnit) FullName() string {
 // suitable for installing to systemd.
 func (u *ResolvedUnit) SystemdContent() io.Reader {
 	return unit.Serialize(u.Options)
-}
-
-// ManagedUnitState represents the observed state of a managed unit.
-type ManagedUnitState struct {
-	Name           string
-	Type           pb.UnitType
-	DesiredState   pb.DesiredState
-	ActiveState    pb.ActiveState
-	Enabled        bool
-	ConfigFiles    []string
-	LastReconciled time.Time
-	Error          string
 }
 
 // UnitAction describes what needs to happen to a single unit.

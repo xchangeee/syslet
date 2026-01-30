@@ -143,31 +143,31 @@ func (d *Daemon) ApplySpecs(ctx context.Context, specs []*pb.UnitSpec) error {
 }
 
 // ListUnits returns the status of all managed units, optionally filtered by type.
-func (d *Daemon) ListUnits(ctx context.Context, typeFilter pb.UnitType) ([]ManagedUnitState, error) {
+func (d *Daemon) ListUnits(ctx context.Context, typeFilter pb.UnitType) ([]*pb.UnitStatus, error) {
 	loaded, err := d.loadUnitsFromStore()
 	if err != nil {
 		return nil, err
 	}
 
-	var units []ManagedUnitState
+	var units []*pb.UnitStatus
 	for _, ru := range loaded {
 		if typeFilter != pb.UnitType_UNIT_TYPE_UNSPECIFIED && ru.Spec.Type != typeFilter {
 			continue
 		}
 
-		us, err := d.buildManagedUnitState(ctx, &ru)
+		us, err := d.buildUnitStatus(ctx, &ru)
 		if err != nil {
 			d.logger.Error("status error", "unit", ru.FullName(), "error", err)
 			continue
 		}
-		units = append(units, *us)
+		units = append(units, us)
 	}
 
 	return units, nil
 }
 
 // GetStatus returns the status of a single unit.
-func (d *Daemon) GetStatus(ctx context.Context, fullUnitName string) (*ManagedUnitState, error) {
+func (d *Daemon) GetStatus(ctx context.Context, fullUnitName string) (*pb.UnitStatus, error) {
 	unitType := pb.UnitTypeFromExtension(fullUnitName)
 	if unitType == pb.UnitType_UNIT_TYPE_UNSPECIFIED {
 		return nil, fmt.Errorf("unknown unit type for %s", fullUnitName)
@@ -178,7 +178,7 @@ func (d *Daemon) GetStatus(ctx context.Context, fullUnitName string) (*ManagedUn
 		return nil, err
 	}
 
-	return d.buildManagedUnitState(ctx, ru)
+	return d.buildUnitStatus(ctx, ru)
 }
 
 // DeleteUnit deletes a unit by name.
@@ -309,13 +309,13 @@ func pbActiveState(s string) pb.ActiveState {
 	}
 }
 
-func (d *Daemon) buildManagedUnitState(ctx context.Context, ru *ResolvedUnit) (*ManagedUnitState, error) {
+func (d *Daemon) buildUnitStatus(ctx context.Context, ru *ResolvedUnit) (*pb.UnitStatus, error) {
 	state, err := d.unitRuntimeState(ctx, ru.FullName(), ru.Spec.Type)
 	if err != nil {
 		return nil, err
 	}
 
-	us := &ManagedUnitState{
+	us := &pb.UnitStatus{
 		Name:         ru.FullName(),
 		Type:         ru.Spec.Type,
 		DesiredState: ru.Spec.DesiredState,
@@ -326,7 +326,9 @@ func (d *Daemon) buildManagedUnitState(ctx context.Context, ru *ResolvedUnit) (*
 
 	unitName := pb.UnitName(ru.FullName())
 	if rs, err := d.store.GetReconcileStatus(unitName, ru.Spec.Type.ShortName()); err == nil {
-		us.LastReconciled = rs.LastReconciled
+		if !rs.LastReconciled.IsZero() {
+			us.LastReconciled = rs.LastReconciled.Format(time.RFC3339)
+		}
 		us.Error = rs.Error
 	}
 

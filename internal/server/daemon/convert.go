@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"io"
 	"path/filepath"
 
 	pb "codeberg.org/xchangeee/syslet/proto"
