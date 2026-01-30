@@ -3,7 +3,6 @@
 package daemon
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,7 +72,7 @@ func (m *ConfigFileManager) IsChanged(fullUnitName string, filename, content str
 	if err != nil {
 		return false, fmt.Errorf("reading %s: %w", path, err)
 	}
-	return sha256Sum([]byte(content)) != sha256Sum(existing), nil
+	return sha256sum([]byte(content)) != sha256sum(existing), nil
 }
 
 // Write writes a config file to its target directory, creating dirs as needed.
@@ -94,9 +93,4 @@ func (m *ConfigFileManager) RemoveAll(fullUnitName string) error {
 		return nil
 	}
 	return err
-}
-
-func sha256Sum(data []byte) string {
-	h := sha256.Sum256(data)
-	return fmt.Sprintf("%x", h[:])
 }

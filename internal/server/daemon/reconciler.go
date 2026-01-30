@@ -3,7 +3,6 @@ package daemon
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"log/slog"
@@ -327,9 +326,4 @@ func (r *Reconciler) installUnitFile(ru *ResolvedUnit) error {
 	default:
 		return fmt.Errorf("unsupported unit type: %v", ru.Spec.Type)
 	}
-}
-
-func sha256sum(data []byte) string {
-	h := sha256.Sum256(data)
-	return fmt.Sprintf("%x", h[:])
 }

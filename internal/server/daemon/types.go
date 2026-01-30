@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"io"
 
 	pb "codeberg.org/xchangeee/syslet/proto"
@@ -70,4 +72,9 @@ type ConfigFile struct {
 	UnitName string // e.g. "myapp" (without extension)
 	Filename string // e.g. "config.yaml"
 	Content  string
+}
+
+func sha256sum(data []byte) string {
+	h := sha256.Sum256(data)
+	return fmt.Sprintf("%x", h[:])
 }
