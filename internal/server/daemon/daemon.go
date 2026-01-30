@@ -148,47 +148,6 @@ func (d *Daemon) ApplySpecs(ctx context.Context, specJSONs []string) error {
 	return nil
 }
 
-// GetStatus returns the status of a single unit.
-func (d *Daemon) GetStatus(ctx context.Context, fullUnitName string) (*UnitStatus, error) {
-	unitType := parser.UnitTypeFromExtension(fullUnitName)
-	if unitType == parser.UnitTypeUnknown {
-		return nil, fmt.Errorf("unknown unit type for %s", fullUnitName)
-	}
-
-	state, err := d.unitRuntimeState(ctx, fullUnitName, unitType)
-	if err != nil {
-		return nil, err
-	}
-
-	// Look up desired state from store
-	unitName := parser.UnitName(fullUnitName)
-	var desiredState string
-	specJSON, err := d.store.Get(unitName, unitType.String())
-	if err == nil {
-		var cs spec.ContainerSpec
-		if err := json.Unmarshal([]byte(specJSON), &cs); err == nil {
-			desiredState = cs.DesiredState
-		}
-	}
-
-	cfgFiles, _ := d.config.ListFiles(fullUnitName)
-	us := &UnitStatus{
-		Name:         fullUnitName,
-		Type:         unitType,
-		DesiredState: desiredState,
-		ActiveState:  state.ActiveState,
-		Enabled:      state.Enabled,
-		ConfigFiles:  cfgFiles,
-	}
-
-	if rs, err := d.store.GetReconcileStatus(unitName, unitType.String()); err == nil {
-		us.LastReconciled = rs.LastReconciled
-		us.Error = rs.Error
-	}
-
-	return us, nil
-}
-
 // ListUnits returns the status of all managed units, optionally filtered by type.
 func (d *Daemon) ListUnits(ctx context.Context, typeFilter parser.UnitType) ([]UnitStatus, error) {
 	loaded, err := d.loadUnitsFromStore()
@@ -198,38 +157,34 @@ func (d *Daemon) ListUnits(ctx context.Context, typeFilter parser.UnitType) ([]U
 
 	var units []UnitStatus
 	for _, uc := range loaded {
-		pu := uc.Unit
-		if typeFilter != parser.UnitTypeUnknown && pu.Type != typeFilter {
+		if typeFilter != parser.UnitTypeUnknown && uc.Unit.Type != typeFilter {
 			continue
 		}
 
-		state, err := d.unitRuntimeState(ctx, pu.FullName, pu.Type)
+		us, err := d.buildUnitStatus(ctx, &uc)
 		if err != nil {
-			d.logger.Error("status error", "unit", pu.FullName, "error", err)
+			d.logger.Error("status error", "unit", uc.Unit.FullName, "error", err)
 			continue
 		}
-
-		cfgFiles, _ := d.config.ListFiles(pu.FullName)
-
-		us := UnitStatus{
-			Name:         pu.FullName,
-			Type:         pu.Type,
-			DesiredState: desiredStateString(pu.DesiredState),
-			ActiveState:  state.ActiveState,
-			Enabled:      state.Enabled,
-			ConfigFiles:  cfgFiles,
-		}
-
-		unitName := parser.UnitName(pu.FullName)
-		if rs, err := d.store.GetReconcileStatus(unitName, pu.Type.String()); err == nil {
-			us.LastReconciled = rs.LastReconciled
-			us.Error = rs.Error
-		}
-
-		units = append(units, us)
+		units = append(units, *us)
 	}
 
 	return units, nil
+}
+
+// GetStatus returns the status of a single unit.
+func (d *Daemon) GetStatus(ctx context.Context, fullUnitName string) (*UnitStatus, error) {
+	unitType := parser.UnitTypeFromExtension(fullUnitName)
+	if unitType == parser.UnitTypeUnknown {
+		return nil, fmt.Errorf("unknown unit type for %s", fullUnitName)
+	}
+
+	uc, err := d.loadUnitFromStore(parser.UnitName(fullUnitName), unitType)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.buildUnitStatus(ctx, uc)
 }
 
 // DeleteUnit deletes a unit by name.
@@ -318,6 +273,14 @@ func (d *Daemon) removeUnitFile(fullUnitName string, unitType parser.UnitType) e
 	}
 }
 
+func configFilenames(configs []containerconfig.ConfigFile) []string {
+	names := make([]string, len(configs))
+	for i, c := range configs {
+		names[i] = c.Filename
+	}
+	return names
+}
+
 func desiredStateString(ds parser.DesiredState) string {
 	switch ds {
 	case parser.DesiredStateRunning:
@@ -329,6 +292,14 @@ func desiredStateString(ds parser.DesiredState) string {
 	}
 }
 
+func (d *Daemon) loadUnitFromStore(unitName string, unitType parser.UnitType) (*UnitWithConfigs, error) {
+	specJSON, err := d.store.Get(unitName, unitType.String())
+	if err != nil {
+		return nil, err
+	}
+	return d.parseSpec(specJSON)
+}
+
 func (d *Daemon) loadUnitsFromStore() ([]UnitWithConfigs, error) {
 	jsons, err := d.store.List()
 	if err != nil {
@@ -337,15 +308,48 @@ func (d *Daemon) loadUnitsFromStore() ([]UnitWithConfigs, error) {
 
 	var units []UnitWithConfigs
 	for _, j := range jsons {
-		var cs spec.ContainerSpec
-		if err := json.Unmarshal([]byte(j), &cs); err != nil {
-			return nil, err
-		}
-		pu, cfgFiles, err := spec.Convert(&cs, d.configBase)
+		uc, err := d.parseSpec(j)
 		if err != nil {
 			return nil, err
 		}
-		units = append(units, UnitWithConfigs{Unit: pu, Configs: cfgFiles})
+		units = append(units, *uc)
 	}
 	return units, nil
+}
+
+func (d *Daemon) parseSpec(specJSON string) (*UnitWithConfigs, error) {
+	var cs spec.ContainerSpec
+	if err := json.Unmarshal([]byte(specJSON), &cs); err != nil {
+		return nil, err
+	}
+	pu, cfgFiles, err := spec.Convert(&cs, d.configBase)
+	if err != nil {
+		return nil, err
+	}
+	return &UnitWithConfigs{Unit: pu, Configs: cfgFiles}, nil
+}
+
+func (d *Daemon) buildUnitStatus(ctx context.Context, uc *UnitWithConfigs) (*UnitStatus, error) {
+	pu := uc.Unit
+	state, err := d.unitRuntimeState(ctx, pu.FullName, pu.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	us := &UnitStatus{
+		Name:         pu.FullName,
+		Type:         pu.Type,
+		DesiredState: desiredStateString(pu.DesiredState),
+		ActiveState:  state.ActiveState,
+		Enabled:      state.Enabled,
+		ConfigFiles:  configFilenames(uc.Configs),
+	}
+
+	unitName := parser.UnitName(pu.FullName)
+	if rs, err := d.store.GetReconcileStatus(unitName, pu.Type.String()); err == nil {
+		us.LastReconciled = rs.LastReconciled
+		us.Error = rs.Error
+	}
+
+	return us, nil
 }
