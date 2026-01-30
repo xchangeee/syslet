@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	pb "codeberg.org/xchangeee/syslet/proto"
@@ -214,9 +216,18 @@ func applyCmd() *cobra.Command {
 				return fmt.Errorf("--file/-f is required")
 			}
 
-			specs, err := loadSpecs(filePath)
+			jsonSpecs, err := loadSpecs(filePath)
 			if err != nil {
 				return err
+			}
+
+			var specs []*pb.UnitSpec
+			for _, js := range jsonSpecs {
+				spec, err := parseJSONSpec(js)
+				if err != nil {
+					return fmt.Errorf("parsing spec: %w", err)
+				}
+				specs = append(specs, spec)
 			}
 
 			client, conn, err := connect()
@@ -278,6 +289,107 @@ func loadSpecs(path string) ([]string, error) {
 		specs = append(specs, string(data))
 	}
 	return specs, nil
+}
+
+type jsonSpec struct {
+	Name         string                    `json:"name"`
+	Type         string                    `json:"type"`
+	DesiredState string                    `json:"desiredState"`
+	Unit         map[string]map[string]any `json:"unit"`
+	Configs      []jsonConfigEntry         `json:"configs,omitempty"`
+}
+
+type jsonConfigEntry struct {
+	Content          string `json:"content"`
+	TargetVolumePath string `json:"targetVolumePath"`
+}
+
+func parseJSONSpec(data string) (*pb.UnitSpec, error) {
+	var js jsonSpec
+	if err := json.Unmarshal([]byte(data), &js); err != nil {
+		return nil, fmt.Errorf("parsing spec JSON: %w", err)
+	}
+
+	spec := &pb.UnitSpec{
+		Name: js.Name,
+	}
+
+	switch strings.ToLower(js.Type) {
+	case "container":
+		spec.Type = pb.UnitType_UNIT_TYPE_CONTAINER
+	case "volume":
+		spec.Type = pb.UnitType_UNIT_TYPE_VOLUME
+	case "network":
+		spec.Type = pb.UnitType_UNIT_TYPE_NETWORK
+	default:
+		return nil, fmt.Errorf("unknown unit type: %q", js.Type)
+	}
+
+	switch strings.ToLower(js.DesiredState) {
+	case "running":
+		spec.DesiredState = pb.DesiredState_DESIRED_STATE_RUNNING
+	case "stopped":
+		spec.DesiredState = pb.DesiredState_DESIRED_STATE_STOPPED
+	case "":
+		// no desired state specified
+	default:
+		return nil, fmt.Errorf("unknown desired state: %q", js.DesiredState)
+	}
+
+	// Flatten unit map → repeated UnitOption.
+	// Sort sections and keys for deterministic ordering.
+	sections := make([]string, 0, len(js.Unit))
+	for s := range js.Unit {
+		sections = append(sections, s)
+	}
+	sort.Strings(sections)
+
+	for _, section := range sections {
+		keys := make([]string, 0, len(js.Unit[section]))
+		for k := range js.Unit[section] {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, key := range keys {
+			val := js.Unit[section][key]
+			switch v := val.(type) {
+			case string:
+				spec.Options = append(spec.Options, &pb.UnitOption{
+					Section: section,
+					Name:    key,
+					Value:   v,
+				})
+			case []any:
+				for _, item := range v {
+					s, ok := item.(string)
+					if !ok {
+						return nil, fmt.Errorf("option %s.%s: expected string value, got %T", section, key, item)
+					}
+					spec.Options = append(spec.Options, &pb.UnitOption{
+						Section: section,
+						Name:    key,
+						Value:   s,
+					})
+				}
+			default:
+				spec.Options = append(spec.Options, &pb.UnitOption{
+					Section: section,
+					Name:    key,
+					Value:   fmt.Sprintf("%v", v),
+				})
+			}
+		}
+	}
+
+	for _, ce := range js.Configs {
+		spec.Configs = append(spec.Configs, &pb.ConfigEntry{
+			Content:          ce.Content,
+			TargetVolumePath: ce.TargetVolumePath,
+		})
+	}
+
+	return spec, nil
 }
 
 func statusCmd() *cobra.Command {

@@ -10,7 +10,6 @@ import (
 	"syscall"
 
 	"codeberg.org/xchangeee/syslet/internal/server/api"
-	"codeberg.org/xchangeee/syslet/internal/server/containerconfig"
 	"codeberg.org/xchangeee/syslet/internal/server/daemon"
 	"codeberg.org/xchangeee/syslet/internal/server/store"
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
@@ -52,9 +51,7 @@ func main() {
 	}
 	defer st.Close()
 
-	cfg := containerconfig.NewManager(fs)
-
-	d := daemon.New(sd, cfg, st, logger, daemon.Config{})
+	d := daemon.New(fs, logger, sd, st, daemon.Config{})
 
 	// Start gRPC server
 	listenAddr := ":7233"

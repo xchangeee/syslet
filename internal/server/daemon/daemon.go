@@ -2,77 +2,76 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"codeberg.org/xchangeee/syslet/internal/server/containerconfig"
-	"codeberg.org/xchangeee/syslet/internal/server/parser"
-	"codeberg.org/xchangeee/syslet/internal/server/spec"
+	pb "codeberg.org/xchangeee/syslet/proto"
+
 	"codeberg.org/xchangeee/syslet/internal/server/store"
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 	"github.com/coder/quartz"
+	"github.com/spf13/afero"
 )
 
 const (
-	DefaultInterval   = 10 * time.Second
-	DefaultConfigBase = "/etc/containers/config"
+	DefaultReconcilationInterval    = 10 * time.Second
+	DefaultContainerConfigDirectory = "/etc/containers/config"
 )
 
 // Daemon is the main syslet daemon.
 type Daemon struct {
-	reconciler *Reconciler
-	store      *store.Store
-	systemd    *systemd.Client
-	config     *containerconfig.Manager
-	configBase string
-	interval   time.Duration
-	clock      quartz.Clock
-	logger     *slog.Logger
+	clock                   quartz.Clock
+	logger                  *slog.Logger
+	systemd                 *systemd.Client
+	store                   *store.Store
+	config                  *ConfigFileManager
+	reconciler              *Reconciler
+	containeConfigDirectory string
+	reconcilationInterval   time.Duration
 }
 
 // Config holds daemon configuration.
 type Config struct {
-	ConfigBase string
-	Interval   time.Duration
-	Clock      quartz.Clock
+	Clock                    quartz.Clock
+	ContainerConfigDirectory string
+	ReconcilationInterval    time.Duration
 }
 
 // New creates a new daemon.
-func New(sd *systemd.Client, cfg *containerconfig.Manager, st *store.Store, logger *slog.Logger, dcfg Config) *Daemon {
-	if dcfg.ConfigBase == "" {
-		dcfg.ConfigBase = DefaultConfigBase
-	}
-	if dcfg.Interval == 0 {
-		dcfg.Interval = DefaultInterval
-	}
+func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, st *store.Store, dcfg Config) *Daemon {
 	if dcfg.Clock == nil {
 		dcfg.Clock = quartz.NewReal()
 	}
-
+	if dcfg.ContainerConfigDirectory == "" {
+		dcfg.ContainerConfigDirectory = DefaultContainerConfigDirectory
+	}
+	if dcfg.ReconcilationInterval == 0 {
+		dcfg.ReconcilationInterval = DefaultReconcilationInterval
+	}
+	cfg := NewConfigFileManager(fs)
 	return &Daemon{
-		reconciler: NewReconciler(sd, cfg, logger),
-		store:      st,
-		systemd:    sd,
-		config:     cfg,
-		configBase: dcfg.ConfigBase,
-		interval:   dcfg.Interval,
-		clock:      dcfg.Clock,
-		logger:     logger,
+		clock:                   dcfg.Clock,
+		logger:                  logger,
+		store:                   st,
+		config:                  cfg,
+		systemd:                 sd,
+		reconciler:              NewReconciler(sd, cfg, logger),
+		containeConfigDirectory: dcfg.ContainerConfigDirectory,
+		reconcilationInterval:   dcfg.ReconcilationInterval,
 	}
 }
 
 // Run starts the reconciliation loop. It blocks until ctx is cancelled.
 func (d *Daemon) Run(ctx context.Context) error {
 	d.logger.Info("starting syslet daemon",
-		"interval", d.interval,
+		"interval", d.reconcilationInterval,
 	)
 
 	// Run immediately on start
 	d.reconcileOnce(ctx)
 
-	ticker := d.clock.NewTicker(d.interval)
+	ticker := d.clock.NewTicker(d.reconcilationInterval)
 	defer ticker.Stop()
 
 	for {
@@ -124,7 +123,7 @@ func (d *Daemon) reconcileOnce(ctx context.Context) []UnitResult {
 		if r.Error {
 			errMsg = r.Message
 		}
-		if err := d.store.UpdateReconcileStatus(parser.UnitName(r.FullName), r.Type.String(), errMsg, now); err != nil {
+		if err := d.store.UpdateReconcileStatus(pb.UnitName(r.FullName), r.Type.ShortName(), errMsg, now); err != nil {
 			d.logger.Error("failed to update reconcile status", "unit", r.FullName, "error", err)
 		}
 	}
@@ -133,15 +132,10 @@ func (d *Daemon) reconcileOnce(ctx context.Context) []UnitResult {
 }
 
 // ApplySpecs stores specs in SQLite.
-func (d *Daemon) ApplySpecs(ctx context.Context, specJSONs []string) error {
-	for _, j := range specJSONs {
-		var cs spec.ContainerSpec
-		if err := json.Unmarshal([]byte(j), &cs); err != nil {
-			d.logger.Error("failed to unmarshal spec", "error", err)
-			return err
-		}
-		if err := d.store.Put(cs.Name, cs.Type, j); err != nil {
-			d.logger.Error("failed to store spec", "name", cs.Name, "error", err)
+func (d *Daemon) ApplySpecs(ctx context.Context, specs []*pb.UnitSpec) error {
+	for _, spec := range specs {
+		if err := d.store.Put(spec); err != nil {
+			d.logger.Error("failed to store spec", "name", spec.Name, "error", err)
 			return err
 		}
 	}
@@ -149,21 +143,21 @@ func (d *Daemon) ApplySpecs(ctx context.Context, specJSONs []string) error {
 }
 
 // ListUnits returns the status of all managed units, optionally filtered by type.
-func (d *Daemon) ListUnits(ctx context.Context, typeFilter parser.UnitType) ([]UnitStatus, error) {
+func (d *Daemon) ListUnits(ctx context.Context, typeFilter pb.UnitType) ([]ManagedUnitState, error) {
 	loaded, err := d.loadUnitsFromStore()
 	if err != nil {
 		return nil, err
 	}
 
-	var units []UnitStatus
-	for _, uc := range loaded {
-		if typeFilter != parser.UnitTypeUnknown && uc.Unit.Type != typeFilter {
+	var units []ManagedUnitState
+	for _, ru := range loaded {
+		if typeFilter != pb.UnitType_UNIT_TYPE_UNSPECIFIED && ru.Spec.Type != typeFilter {
 			continue
 		}
 
-		us, err := d.buildUnitStatus(ctx, &uc)
+		us, err := d.buildManagedUnitState(ctx, &ru)
 		if err != nil {
-			d.logger.Error("status error", "unit", uc.Unit.FullName, "error", err)
+			d.logger.Error("status error", "unit", ru.FullName(), "error", err)
 			continue
 		}
 		units = append(units, *us)
@@ -173,18 +167,18 @@ func (d *Daemon) ListUnits(ctx context.Context, typeFilter parser.UnitType) ([]U
 }
 
 // GetStatus returns the status of a single unit.
-func (d *Daemon) GetStatus(ctx context.Context, fullUnitName string) (*UnitStatus, error) {
-	unitType := parser.UnitTypeFromExtension(fullUnitName)
-	if unitType == parser.UnitTypeUnknown {
+func (d *Daemon) GetStatus(ctx context.Context, fullUnitName string) (*ManagedUnitState, error) {
+	unitType := pb.UnitTypeFromExtension(fullUnitName)
+	if unitType == pb.UnitType_UNIT_TYPE_UNSPECIFIED {
 		return nil, fmt.Errorf("unknown unit type for %s", fullUnitName)
 	}
 
-	uc, err := d.loadUnitFromStore(parser.UnitName(fullUnitName), unitType)
+	ru, err := d.loadUnitFromStore(pb.UnitName(fullUnitName), unitType)
 	if err != nil {
 		return nil, err
 	}
 
-	return d.buildUnitStatus(ctx, uc)
+	return d.buildManagedUnitState(ctx, ru)
 }
 
 // DeleteUnit deletes a unit by name.
@@ -195,15 +189,15 @@ func (d *Daemon) DeleteUnit(ctx context.Context, unitName string) error {
 
 	// unit_name can be "webapp.container" or just "webapp" — try to resolve
 	fullUnitName := unitName
-	unitType := parser.UnitTypeFromExtension(fullUnitName)
+	unitType := pb.UnitTypeFromExtension(fullUnitName)
 
-	if unitType == parser.UnitTypeUnknown {
+	if unitType == pb.UnitType_UNIT_TYPE_UNSPECIFIED {
 		// Input is a bare unit name (e.g. "webapp"); find its type in the store
 		baseName := fullUnitName
 		for _, t := range []string{"container", "volume", "network"} {
 			_, err := d.store.Get(baseName, t)
 			if err == nil {
-				unitType = parser.UnitTypeFromExtension(baseName + "." + t)
+				unitType = pb.UnitTypeFromExtension(baseName + "." + t)
 				fullUnitName = baseName + "." + t
 				// Delete from store
 				if err := d.store.Delete(baseName, t); err != nil {
@@ -212,12 +206,12 @@ func (d *Daemon) DeleteUnit(ctx context.Context, unitName string) error {
 				break
 			}
 		}
-		if unitType == parser.UnitTypeUnknown {
+		if unitType == pb.UnitType_UNIT_TYPE_UNSPECIFIED {
 			return fmt.Errorf("unit %q not found", unitName)
 		}
 	} else {
-		baseName := parser.UnitName(fullUnitName)
-		typeName := unitType.String()
+		baseName := pb.UnitName(fullUnitName)
+		typeName := unitType.ShortName()
 		if err := d.store.Delete(baseName, typeName); err != nil {
 			d.logger.Warn("store delete failed", "name", baseName, "error", err)
 		}
@@ -246,107 +240,92 @@ func (d *Daemon) DeleteUnit(ctx context.Context, unitName string) error {
 	return nil
 }
 
-// Returns systemd runtime state for the unit
-func (d *Daemon) unitRuntimeState(ctx context.Context, fullUnitName string, unitType parser.UnitType) (*systemd.UnitState, error) {
+// unitRuntimeState returns systemd runtime state for the unit.
+func (d *Daemon) unitRuntimeState(ctx context.Context, fullUnitName string, unitType pb.UnitType) (*systemd.UnitState, error) {
 	switch unitType {
-	case parser.UnitTypeContainer:
+	case pb.UnitType_UNIT_TYPE_CONTAINER:
 		return d.systemd.Container().RuntimeState(ctx, fullUnitName)
-	case parser.UnitTypeVolume:
+	case pb.UnitType_UNIT_TYPE_VOLUME:
 		return d.systemd.Volume().RuntimeState(ctx, fullUnitName)
-	case parser.UnitTypeNetwork:
+	case pb.UnitType_UNIT_TYPE_NETWORK:
 		return d.systemd.Network().RuntimeState(ctx, fullUnitName)
 	default:
 		return nil, fmt.Errorf("unsupported unit type: %s", unitType)
 	}
 }
 
-func (d *Daemon) removeUnitFile(fullUnitName string, unitType parser.UnitType) error {
+func (d *Daemon) removeUnitFile(fullUnitName string, unitType pb.UnitType) error {
 	switch unitType {
-	case parser.UnitTypeContainer:
+	case pb.UnitType_UNIT_TYPE_CONTAINER:
 		return d.systemd.Container().RemoveUnitFile(fullUnitName)
-	case parser.UnitTypeVolume:
+	case pb.UnitType_UNIT_TYPE_VOLUME:
 		return d.systemd.Volume().RemoveUnitFile(fullUnitName)
-	case parser.UnitTypeNetwork:
+	case pb.UnitType_UNIT_TYPE_NETWORK:
 		return d.systemd.Network().RemoveUnitFile(fullUnitName)
 	default:
 		return fmt.Errorf("unsupported unit type: %s", unitType)
 	}
 }
 
-func configFilenames(configs []containerconfig.ConfigFile) []string {
-	names := make([]string, len(configs))
-	for i, c := range configs {
-		names[i] = c.Filename
-	}
-	return names
-}
-
-func desiredStateString(ds parser.DesiredState) string {
-	switch ds {
-	case parser.DesiredStateRunning:
-		return "running"
-	case parser.DesiredStateStopped:
-		return "stopped"
-	default:
-		return ""
-	}
-}
-
-func (d *Daemon) loadUnitFromStore(unitName string, unitType parser.UnitType) (*UnitWithConfigs, error) {
-	specJSON, err := d.store.Get(unitName, unitType.String())
+func (d *Daemon) loadUnitFromStore(unitName string, unitType pb.UnitType) (*ResolvedUnit, error) {
+	spec, err := d.store.Get(unitName, unitType.ShortName())
 	if err != nil {
 		return nil, err
 	}
-	return d.parseSpec(specJSON)
+	return resolveSpec(spec, d.containeConfigDirectory)
 }
 
-func (d *Daemon) loadUnitsFromStore() ([]UnitWithConfigs, error) {
-	jsons, err := d.store.List()
+func (d *Daemon) loadUnitsFromStore() ([]ResolvedUnit, error) {
+	specs, err := d.store.List()
 	if err != nil {
 		return nil, err
 	}
 
-	var units []UnitWithConfigs
-	for _, j := range jsons {
-		uc, err := d.parseSpec(j)
+	var units []ResolvedUnit
+	for _, spec := range specs {
+		ru, err := resolveSpec(spec, d.containeConfigDirectory)
 		if err != nil {
 			return nil, err
 		}
-		units = append(units, *uc)
+		units = append(units, *ru)
 	}
 	return units, nil
 }
 
-func (d *Daemon) parseSpec(specJSON string) (*UnitWithConfigs, error) {
-	var cs spec.ContainerSpec
-	if err := json.Unmarshal([]byte(specJSON), &cs); err != nil {
-		return nil, err
+func pbActiveState(s string) pb.ActiveState {
+	switch s {
+	case "active":
+		return pb.ActiveState_ACTIVE_STATE_ACTIVE
+	case "inactive":
+		return pb.ActiveState_ACTIVE_STATE_INACTIVE
+	case "failed":
+		return pb.ActiveState_ACTIVE_STATE_FAILED
+	case "activating":
+		return pb.ActiveState_ACTIVE_STATE_ACTIVATING
+	case "deactivating":
+		return pb.ActiveState_ACTIVE_STATE_DEACTIVATING
+	default:
+		return pb.ActiveState_ACTIVE_STATE_UNSPECIFIED
 	}
-	pu, cfgFiles, err := spec.Convert(&cs, d.configBase)
-	if err != nil {
-		return nil, err
-	}
-	return &UnitWithConfigs{Unit: pu, Configs: cfgFiles}, nil
 }
 
-func (d *Daemon) buildUnitStatus(ctx context.Context, uc *UnitWithConfigs) (*UnitStatus, error) {
-	pu := uc.Unit
-	state, err := d.unitRuntimeState(ctx, pu.FullName, pu.Type)
+func (d *Daemon) buildManagedUnitState(ctx context.Context, ru *ResolvedUnit) (*ManagedUnitState, error) {
+	state, err := d.unitRuntimeState(ctx, ru.FullName(), ru.Spec.Type)
 	if err != nil {
 		return nil, err
 	}
 
-	us := &UnitStatus{
-		Name:         pu.FullName,
-		Type:         pu.Type,
-		DesiredState: desiredStateString(pu.DesiredState),
-		ActiveState:  state.ActiveState,
+	us := &ManagedUnitState{
+		Name:         ru.FullName(),
+		Type:         ru.Spec.Type,
+		DesiredState: ru.Spec.DesiredState,
+		ActiveState:  pbActiveState(state.ActiveState),
 		Enabled:      state.Enabled,
-		ConfigFiles:  configFilenames(uc.Configs),
+		ConfigFiles:  configFilenames(ru.Configs),
 	}
 
-	unitName := parser.UnitName(pu.FullName)
-	if rs, err := d.store.GetReconcileStatus(unitName, pu.Type.String()); err == nil {
+	unitName := pb.UnitName(ru.FullName())
+	if rs, err := d.store.GetReconcileStatus(unitName, ru.Spec.Type.ShortName()); err == nil {
 		us.LastReconciled = rs.LastReconciled
 		us.Error = rs.Error
 	}

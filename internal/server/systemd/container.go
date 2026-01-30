@@ -6,7 +6,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"codeberg.org/xchangeee/syslet/internal/server/parser"
+	pb "codeberg.org/xchangeee/syslet/proto"
 )
 
 const containerExt = ".container"
@@ -35,7 +35,7 @@ func (u *ContainerUnit) qualifyName(name string) (string, error) {
 // serviceName maps a quadlet container name to its generated systemd service name.
 // e.g. "webapp.container" → "webapp.service"
 func (u *ContainerUnit) serviceName(fullUnitName string) string {
-	return parser.UnitName(fullUnitName) + ".service"
+	return pb.UnitName(fullUnitName) + ".service"
 }
 
 // UnitFileExists checks if a container unit file is installed.

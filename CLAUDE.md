@@ -1,5 +1,7 @@
 # Claude Instructions
 
+## Build
+
 This project uses a Makefile. Key targets:
 
 - `make proto` — Generate Go code from proto files (run after any `.proto` changes)
@@ -15,3 +17,7 @@ To see source files from a dependency, or to answer questions about a dependency
 Use `go doc foo.Bar` or `go doc -all foo` to read documentation for packages, types, functions, etc.
 
 Use `go run .` or `go run ./cmd/foo` instead of `go build` to run programs, to avoid leaving behind build artifacts.
+
+## Code
+
+Document not only what a piece of logic does, but also what its responsibilities are in the bigger picture and how its supposed to interact with other components.

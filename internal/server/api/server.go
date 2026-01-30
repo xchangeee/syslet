@@ -10,7 +10,6 @@ import (
 
 	"codeberg.org/xchangeee/syslet/internal/server/daemon"
 	"codeberg.org/xchangeee/syslet/internal/server/journal"
-	"codeberg.org/xchangeee/syslet/internal/server/parser"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -48,33 +47,31 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		if err != nil {
 			return nil, status.Errorf(codes.NotFound, "unit %s: %v", req.UnitName, err)
 		}
-		resp.Units = append(resp.Units, unitStatusToPb(us))
+		resp.Units = append(resp.Units, managedUnitStateToPb(us))
 		return resp, nil
 	}
 
 	// All units
-	units, err := s.daemon.ListUnits(ctx, parser.UnitTypeUnknown)
+	units, err := s.daemon.ListUnits(ctx, pb.UnitType_UNIT_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "listing units: %v", err)
 	}
 	for _, us := range units {
-		resp.Units = append(resp.Units, unitStatusToPb(&us))
+		resp.Units = append(resp.Units, managedUnitStateToPb(&us))
 	}
 
 	return resp, nil
 }
 
 func (s *Server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListResponse, error) {
-	typeFilter := parserUnitTypeFromPb(req.TypeFilter)
-
-	units, err := s.daemon.ListUnits(ctx, typeFilter)
+	units, err := s.daemon.ListUnits(ctx, req.TypeFilter)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "listing units: %v", err)
 	}
 
 	resp := &pb.ListResponse{}
 	for _, us := range units {
-		resp.Units = append(resp.Units, unitStatusToPb(&us))
+		resp.Units = append(resp.Units, managedUnitStateToPb(&us))
 	}
 
 	return resp, nil
@@ -140,13 +137,13 @@ func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteR
 	}, nil
 }
 
-// unitStatusToPb converts a domain UnitStatus to protobuf.
-func unitStatusToPb(us *daemon.UnitStatus) *pb.UnitStatus {
+// managedUnitStateToPb converts a domain ManagedUnitState to protobuf UnitStatus.
+func managedUnitStateToPb(us *daemon.ManagedUnitState) *pb.UnitStatus {
 	pbus := &pb.UnitStatus{
 		Name:         us.Name,
-		Type:         pbUnitType(us.Type),
-		DesiredState: pbDesiredState(us.DesiredState),
-		ActiveState:  pbActiveState(us.ActiveState),
+		Type:         us.Type,
+		DesiredState: us.DesiredState,
+		ActiveState:  us.ActiveState,
 		Enabled:      us.Enabled,
 		ConfigFiles:  us.ConfigFiles,
 		Error:        us.Error,
@@ -155,59 +152,4 @@ func unitStatusToPb(us *daemon.UnitStatus) *pb.UnitStatus {
 		pbus.LastReconciled = us.LastReconciled.Format(time.RFC3339)
 	}
 	return pbus
-}
-
-// parserUnitTypeFromPb converts a protobuf UnitType to parser.UnitType.
-func parserUnitTypeFromPb(t pb.UnitType) parser.UnitType {
-	switch t {
-	case pb.UnitType_UNIT_TYPE_CONTAINER:
-		return parser.UnitTypeContainer
-	case pb.UnitType_UNIT_TYPE_VOLUME:
-		return parser.UnitTypeVolume
-	case pb.UnitType_UNIT_TYPE_NETWORK:
-		return parser.UnitTypeNetwork
-	default:
-		return parser.UnitTypeUnknown
-	}
-}
-
-func pbUnitType(t parser.UnitType) pb.UnitType {
-	switch t {
-	case parser.UnitTypeContainer:
-		return pb.UnitType_UNIT_TYPE_CONTAINER
-	case parser.UnitTypeVolume:
-		return pb.UnitType_UNIT_TYPE_VOLUME
-	case parser.UnitTypeNetwork:
-		return pb.UnitType_UNIT_TYPE_NETWORK
-	default:
-		return pb.UnitType_UNIT_TYPE_UNSPECIFIED
-	}
-}
-
-func pbActiveState(s string) pb.ActiveState {
-	switch s {
-	case "active":
-		return pb.ActiveState_ACTIVE_STATE_ACTIVE
-	case "inactive":
-		return pb.ActiveState_ACTIVE_STATE_INACTIVE
-	case "failed":
-		return pb.ActiveState_ACTIVE_STATE_FAILED
-	case "activating":
-		return pb.ActiveState_ACTIVE_STATE_ACTIVATING
-	case "deactivating":
-		return pb.ActiveState_ACTIVE_STATE_DEACTIVATING
-	default:
-		return pb.ActiveState_ACTIVE_STATE_UNSPECIFIED
-	}
-}
-
-func pbDesiredState(s string) pb.DesiredState {
-	switch s {
-	case "running":
-		return pb.DesiredState_DESIRED_STATE_RUNNING
-	case "stopped":
-		return pb.DesiredState_DESIRED_STATE_STOPPED
-	default:
-		return pb.DesiredState_DESIRED_STATE_UNSPECIFIED
-	}
 }

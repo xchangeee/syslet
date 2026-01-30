@@ -36,10 +36,31 @@ enum ActiveState {
   ACTIVE_STATE_DEACTIVATING = 5;
 }
 
+// --- Spec ---
+
+message UnitOption {
+  string section = 1;
+  string name = 2;
+  string value = 3;
+}
+
+message ConfigEntry {
+  string content = 1;
+  string target_volume_path = 2;
+}
+
+message UnitSpec {
+  string name = 1;
+  UnitType type = 2;
+  DesiredState desired_state = 3;
+  repeated UnitOption options = 4;
+  repeated ConfigEntry configs = 5;
+}
+
 // --- Apply ---
 
 message ApplyRequest {
-  repeated string specs = 1; // JSON-encoded ContainerSpec documents
+  repeated UnitSpec specs = 1;
 }
 
 message UnitResult {

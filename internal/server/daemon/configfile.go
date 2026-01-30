@@ -1,6 +1,6 @@
 // Package config manages configuration files associated with container units.
 // Container configs go to /etc/containers/config/<unit>/
-package containerconfig
+package daemon
 
 import (
 	"crypto/sha256"
@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"codeberg.org/xchangeee/syslet/internal/server/parser"
 	"github.com/spf13/afero"
 )
 
@@ -16,43 +15,37 @@ const (
 	ContainerConfigBase = "/var/syslet/config"
 )
 
-// Manager handles config file operations.
-type Manager struct {
+// ConfigFileManager handles config file operations.
+type ConfigFileManager struct {
 	fs                  afero.Fs
 	containerConfigBase string
 }
 
-// ConfigFile represents a config file to deploy.
-type ConfigFile struct {
-	UnitName string // e.g. "myapp" (without extension)
-	Filename string // e.g. "config.yaml"
-	Content  string
-}
-
-// NewManager creates a config manager with provided dependencies.
-func NewManager(fs afero.Fs) *Manager {
-	return &Manager{
+// NewConfigFileManager creates a config manager with provided dependencies.
+func NewConfigFileManager(fs afero.Fs) *ConfigFileManager {
+	return &ConfigFileManager{
 		fs:                  fs,
 		containerConfigBase: ContainerConfigBase,
 	}
 }
 
-// NewManagerWithPaths creates a config manager with a custom base path (for testing).
-func NewManagerWithPaths(fs afero.Fs, containerBase string) *Manager {
-	return &Manager{
+// NewConfigFileManagerWithPaths creates a config manager with a custom base path (for testing).
+func NewConfigFileManagerWithPaths(fs afero.Fs, containerBase string) *ConfigFileManager {
+	return &ConfigFileManager{
 		fs:                  fs,
 		containerConfigBase: containerBase,
 	}
 }
 
 // configDir returns the config directory for a given unit.
-func (m *Manager) configDir(fullUnitName string) string {
-	unitName := parser.UnitName(fullUnitName)
+func (m *ConfigFileManager) configDir(fullUnitName string) string {
+	ext := filepath.Ext(fullUnitName)
+	unitName := fullUnitName[:len(fullUnitName)-len(ext)]
 	return filepath.Join(m.containerConfigBase, unitName)
 }
 
 // ListFiles returns all config filenames for a unit.
-func (m *Manager) ListFiles(fullUnitName string) ([]string, error) {
+func (m *ConfigFileManager) ListFiles(fullUnitName string) ([]string, error) {
 	dir := m.configDir(fullUnitName)
 	entries, err := afero.ReadDir(m.fs, dir)
 	if os.IsNotExist(err) {
@@ -71,7 +64,7 @@ func (m *Manager) ListFiles(fullUnitName string) ([]string, error) {
 }
 
 // ChecksumDir computes a combined checksum of all files in a unit's config directory.
-func (m *Manager) ChecksumDir(fullUnitName string) (string, error) {
+func (m *ConfigFileManager) ChecksumDir(fullUnitName string) (string, error) {
 	dir := m.configDir(fullUnitName)
 	h := sha256.New()
 
@@ -102,7 +95,7 @@ func (m *Manager) ChecksumDir(fullUnitName string) (string, error) {
 }
 
 // IsChanged checks if a config file differs from what's deployed.
-func (m *Manager) IsChanged(fullUnitName string, filename, content string) (bool, error) {
+func (m *ConfigFileManager) IsChanged(fullUnitName string, filename, content string) (bool, error) {
 	path := filepath.Join(m.configDir(fullUnitName), filename)
 	existing, err := afero.ReadFile(m.fs, path)
 	if os.IsNotExist(err) {
@@ -115,7 +108,7 @@ func (m *Manager) IsChanged(fullUnitName string, filename, content string) (bool
 }
 
 // Write writes a config file to its target directory, creating dirs as needed.
-func (m *Manager) Write(fullUnitName string, filename, content string) error {
+func (m *ConfigFileManager) Write(fullUnitName string, filename, content string) error {
 	dir := m.configDir(fullUnitName)
 	if err := m.fs.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("creating config dir %s: %w", dir, err)
@@ -125,7 +118,7 @@ func (m *Manager) Write(fullUnitName string, filename, content string) error {
 }
 
 // RemoveAll removes all config files for a unit.
-func (m *Manager) RemoveAll(fullUnitName string) error {
+func (m *ConfigFileManager) RemoveAll(fullUnitName string) error {
 	dir := m.configDir(fullUnitName)
 	err := m.fs.RemoveAll(dir)
 	if os.IsNotExist(err) {

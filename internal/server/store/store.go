@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
+	pb "codeberg.org/xchangeee/syslet/proto"
+
 	"github.com/spf13/afero"
 	_ "modernc.org/sqlite"
+	"google.golang.org/protobuf/proto"
 )
 
 const DefaultDBPath = "/var/syslet/state.db"
@@ -17,7 +20,7 @@ const migration = `
 CREATE TABLE IF NOT EXISTS specs (
     name TEXT NOT NULL,
     type TEXT NOT NULL,
-    spec_json TEXT NOT NULL,
+    spec_data BLOB NOT NULL,
     reconcile_error TEXT NOT NULL DEFAULT '',
     last_reconciled DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -62,33 +65,41 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// List returns all stored spec JSONs.
-func (s *Store) List() ([]string, error) {
-	rows, err := s.db.Query("SELECT spec_json FROM specs ORDER BY name, type")
+// List returns all stored specs.
+func (s *Store) List() ([]*pb.UnitSpec, error) {
+	rows, err := s.db.Query("SELECT spec_data FROM specs ORDER BY name, type")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var specs []string
+	var specs []*pb.UnitSpec
 	for rows.Next() {
-		var j string
-		if err := rows.Scan(&j); err != nil {
+		var data []byte
+		if err := rows.Scan(&data); err != nil {
 			return nil, err
 		}
-		specs = append(specs, j)
+		spec := &pb.UnitSpec{}
+		if err := proto.Unmarshal(data, spec); err != nil {
+			return nil, fmt.Errorf("unmarshaling spec: %w", err)
+		}
+		specs = append(specs, spec)
 	}
 	return specs, rows.Err()
 }
 
-// Get returns the spec JSON for a given name and type.
-func (s *Store) Get(name, unitType string) (string, error) {
-	var specJSON string
-	err := s.db.QueryRow("SELECT spec_json FROM specs WHERE name=? AND type=?", name, unitType).Scan(&specJSON)
+// Get returns the spec for a given name and type.
+func (s *Store) Get(name, unitType string) (*pb.UnitSpec, error) {
+	var data []byte
+	err := s.db.QueryRow("SELECT spec_data FROM specs WHERE name=? AND type=?", name, unitType).Scan(&data)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return specJSON, nil
+	spec := &pb.UnitSpec{}
+	if err := proto.Unmarshal(data, spec); err != nil {
+		return nil, fmt.Errorf("unmarshaling spec: %w", err)
+	}
+	return spec, nil
 }
 
 // GetReconcileStatus returns the reconciliation status for a unit.
@@ -110,12 +121,16 @@ func (s *Store) GetReconcileStatus(name, unitType string) (*ReconcileStatus, err
 }
 
 // Put upserts a spec.
-func (s *Store) Put(name, unitType, specJSON string) error {
-	_, err := s.db.Exec(
-		`INSERT INTO specs (name, type, spec_json, updated_at)
+func (s *Store) Put(spec *pb.UnitSpec) error {
+	data, err := proto.Marshal(spec)
+	if err != nil {
+		return fmt.Errorf("marshaling spec: %w", err)
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO specs (name, type, spec_data, updated_at)
 		 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		 ON CONFLICT(name, type) DO UPDATE SET spec_json=excluded.spec_json, updated_at=CURRENT_TIMESTAMP`,
-		name, unitType, specJSON,
+		 ON CONFLICT(name, type) DO UPDATE SET spec_data=excluded.spec_data, updated_at=CURRENT_TIMESTAMP`,
+		spec.Name, spec.Type.ShortName(), data,
 	)
 	return err
 }
