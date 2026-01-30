@@ -1,4 +1,8 @@
-// Package daemon implements the syslet reconciliation daemon.
+// Package daemon implements the syslet reconciliation daemon, which
+// continuously drives the system toward the desired state stored in SQLite.
+// The top-level [Daemon] owns the reconciliation schedule, the store, and the
+// public API, while the [Reconciler] is a stateless engine that computes and
+// applies changes against systemd.
 package daemon
 
 import (
