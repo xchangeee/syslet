@@ -9,40 +9,14 @@ import (
 	"github.com/coreos/go-systemd/v22/unit"
 )
 
-// ResolvedUnit holds a spec resolved into go-systemd options and config files,
-// ready for reconciliation.
-type ResolvedUnit struct {
-	Spec    *pb.UnitSpec
-	Options []*unit.UnitOption
-	Configs []ConfigFile
-}
-
-// FullName returns the full unit name (e.g. "webapp.container").
-func (u *ResolvedUnit) FullName() string {
-	return pb.FullUnitName(u.Spec.Name, u.Spec.Type)
-}
-
-// SystemdContent returns the unit file content serialized as INI,
-// suitable for installing to systemd.
-func (u *ResolvedUnit) SystemdContent() io.Reader {
-	return unit.Serialize(u.Options)
-}
-
-// UnitAction describes what needs to happen to a single unit.
-type UnitAction int
-
-const (
-	ActionNone        UnitAction = iota
-	ActionStop                   // stop before updating
-	ActionWriteConfig            // write config files
-	ActionWriteUnit              // write unit file
-	ActionStart                  // start the unit
-	ActionReject                 // immutable unit changed, reject
-)
-
-// UnitChange captures the diff for a single unit.
+// UnitChange captures the diff for a single unit and, when changes are
+// detected, carries the rendered systemd options and config files needed
+// to apply those changes.
 type UnitChange struct {
-	ResolvedUnit
+	Spec    *pb.UnitSpec
+	Options []*unit.UnitOption // rendered systemd unit options
+	Configs []ConfigFile       // config files to deploy
+
 	UnitChanged   bool
 	ConfigChanged bool
 	NeedsStop     bool // stop before update (unit or config changed)
@@ -50,6 +24,17 @@ type UnitChange struct {
 	IsNew         bool // unit doesn't exist yet
 	Rejected      bool // immutable unit changed
 	RejectReason  string
+}
+
+// FullName returns the full unit name (e.g. "webapp.container").
+func (c *UnitChange) FullName() string {
+	return pb.FullUnitName(c.Spec.Name, c.Spec.Type)
+}
+
+// SystemdContent returns the unit file content serialized as INI,
+// suitable for installing to systemd.
+func (c *UnitChange) SystemdContent() io.Reader {
+	return unit.Serialize(c.Options)
 }
 
 // ChangePlan is the result of diffing all units.

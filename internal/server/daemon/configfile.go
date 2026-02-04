@@ -10,22 +10,10 @@ import (
 	"github.com/spf13/afero"
 )
 
-const (
-	DefaultContainerConfigDirectory = "/var/syslet/containers/config"
-)
-
 // ConfigFileManager handles config file operations.
 type ConfigFileManager struct {
 	fs                       afero.Fs
 	containerConfigDirectory string
-}
-
-// NewConfigFileManager creates a config manager with provided dependencies.
-func NewConfigFileManager(fs afero.Fs) *ConfigFileManager {
-	return &ConfigFileManager{
-		fs:                       fs,
-		containerConfigDirectory: DefaultContainerConfigDirectory,
-	}
 }
 
 // NewConfigFileManagerWithPaths creates a config manager with a custom base path (for testing).

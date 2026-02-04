@@ -11,32 +11,37 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 	pb "codeberg.org/xchangeee/syslet/proto"
 	"github.com/coder/quartz"
-	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/spf13/afero"
 )
 
 const (
-	DefaultReconcilationInterval  = 10 * time.Second
-	DefaultContainerUnitDirectory = "/etc/containers/config"
+	DefaultReconcilationInterval    = 10 * time.Second
+	DefaultContainerUnitDirectory   = "/etc/containers/config"
+	DefaultContainerConfigDirectory = "/var/syslet/containers/config"
 )
 
 // Daemon is the main syslet daemon.
 type Daemon struct {
-	clock                  quartz.Clock
-	logger                 *slog.Logger
-	systemd                *systemd.Client
-	store                  *store.Store
-	config                 *ConfigFileManager
-	reconciler             *Reconciler
-	containerUnitDirectory string
-	reconcilationInterval  time.Duration
+	clock                 quartz.Clock
+	logger                *slog.Logger
+	systemd               *systemd.Client
+	store                 *store.Store
+	config                *ConfigFileManager
+	reconciler            *Reconciler
+	reconcilationInterval time.Duration
 }
 
 // Config holds daemon configuration.
 type Config struct {
-	Clock                  quartz.Clock
+	Clock quartz.Clock
+
+	// Directory where quadlet container unit files are stored
 	ContainerUnitDirectory string
-	ReconcilationInterval  time.Duration
+
+	// Directory where bind-mounted container config files are stored
+	ContainerConfigDirectory string
+
+	ReconcilationInterval time.Duration
 }
 
 // New creates a new daemon.
@@ -47,19 +52,30 @@ func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, st *store.Store, 
 	if dcfg.ContainerUnitDirectory == "" {
 		dcfg.ContainerUnitDirectory = DefaultContainerUnitDirectory
 	}
+	if dcfg.ContainerConfigDirectory == "" {
+		dcfg.ContainerConfigDirectory = DefaultContainerConfigDirectory
+	}
 	if dcfg.ReconcilationInterval == 0 {
 		dcfg.ReconcilationInterval = DefaultReconcilationInterval
 	}
-	cfg := NewConfigFileManager(fs)
+	cfg := NewConfigFileManagerWithPaths(
+		fs,
+		dcfg.ContainerConfigDirectory,
+	)
+	reconciler := NewReconciler(
+		logger,
+		sd,
+		cfg,
+		dcfg.ContainerUnitDirectory,
+	)
 	return &Daemon{
-		clock:                  dcfg.Clock,
-		logger:                 logger,
-		store:                  st,
-		config:                 cfg,
-		systemd:                sd,
-		reconciler:             NewReconciler(sd, cfg, logger),
-		containerUnitDirectory: dcfg.ContainerUnitDirectory,
-		reconcilationInterval:  dcfg.ReconcilationInterval,
+		clock:                 dcfg.Clock,
+		logger:                logger,
+		store:                 st,
+		config:                cfg,
+		systemd:               sd,
+		reconciler:            reconciler,
+		reconcilationInterval: dcfg.ReconcilationInterval,
 	}
 }
 
@@ -89,19 +105,19 @@ func (d *Daemon) Run(ctx context.Context) error {
 func (d *Daemon) reconcileOnce(ctx context.Context) []UnitResult {
 	d.logger.Debug("starting reconciliation cycle")
 
-	units, err := d.loadUnitsFromStore()
+	specs, err := d.store.List()
 	if err != nil {
 		d.logger.Error("failed to load specs from store", "error", err)
 		return nil
 	}
 
-	if len(units) == 0 {
+	if len(specs) == 0 {
 		d.logger.Debug("no managed units found")
 		return nil
 	}
 
 	// Phase 1: Diff
-	plan, err := d.reconciler.Diff(ctx, units)
+	plan, err := d.reconciler.Diff(ctx, specs)
 	if err != nil {
 		d.logger.Error("diff failed", "error", err)
 		return nil
@@ -145,20 +161,20 @@ func (d *Daemon) ApplySpecs(ctx context.Context, specs []*pb.UnitSpec) error {
 
 // ListUnits returns the status of all managed units, optionally filtered by type.
 func (d *Daemon) ListUnits(ctx context.Context, typeFilter pb.UnitType) ([]*pb.UnitStatus, error) {
-	loaded, err := d.loadUnitsFromStore()
+	specs, err := d.store.List()
 	if err != nil {
 		return nil, err
 	}
 
 	var units []*pb.UnitStatus
-	for _, ru := range loaded {
-		if typeFilter != pb.UnitType_UNIT_TYPE_UNSPECIFIED && ru.Spec.Type != typeFilter {
+	for _, spec := range specs {
+		if typeFilter != pb.UnitType_UNIT_TYPE_UNSPECIFIED && spec.Type != typeFilter {
 			continue
 		}
 
-		us, err := d.buildUnitStatus(ctx, &ru)
+		us, err := d.buildUnitStatus(ctx, spec)
 		if err != nil {
-			d.logger.Error("status error", "unit", ru.FullName(), "error", err)
+			d.logger.Error("status error", "unit", pb.FullUnitName(spec.Name, spec.Type), "error", err)
 			continue
 		}
 		units = append(units, us)
@@ -174,12 +190,12 @@ func (d *Daemon) GetStatus(ctx context.Context, fullUnitName string) (*pb.UnitSt
 		return nil, fmt.Errorf("unknown unit type for %s", fullUnitName)
 	}
 
-	ru, err := d.loadUnitFromStore(pb.UnitName(fullUnitName), unitType)
+	spec, err := d.store.Get(pb.UnitName(fullUnitName), unitType.ShortName())
 	if err != nil {
 		return nil, err
 	}
 
-	return d.buildUnitStatus(ctx, ru)
+	return d.buildUnitStatus(ctx, spec)
 }
 
 // DeleteUnit deletes a unit by name.
@@ -241,20 +257,6 @@ func (d *Daemon) DeleteUnit(ctx context.Context, unitName string) error {
 	return nil
 }
 
-// unitRuntimeState returns systemd runtime state for the unit.
-func (d *Daemon) unitRuntimeState(ctx context.Context, fullUnitName string, unitType pb.UnitType) (*systemd.UnitState, error) {
-	switch unitType {
-	case pb.UnitType_UNIT_TYPE_CONTAINER:
-		return d.systemd.Container().RuntimeState(ctx, fullUnitName)
-	case pb.UnitType_UNIT_TYPE_VOLUME:
-		return d.systemd.Volume().RuntimeState(ctx, fullUnitName)
-	case pb.UnitType_UNIT_TYPE_NETWORK:
-		return d.systemd.Network().RuntimeState(ctx, fullUnitName)
-	default:
-		return nil, fmt.Errorf("unsupported unit type: %s", unitType)
-	}
-}
-
 func (d *Daemon) removeUnitFile(fullUnitName string, unitType pb.UnitType) error {
 	switch unitType {
 	case pb.UnitType_UNIT_TYPE_CONTAINER:
@@ -268,29 +270,50 @@ func (d *Daemon) removeUnitFile(fullUnitName string, unitType pb.UnitType) error
 	}
 }
 
-func (d *Daemon) loadUnitFromStore(unitName string, unitType pb.UnitType) (*ResolvedUnit, error) {
-	spec, err := d.store.Get(unitName, unitType.ShortName())
+func (d *Daemon) buildUnitStatus(ctx context.Context, spec *pb.UnitSpec) (*pb.UnitStatus, error) {
+	fullName := pb.FullUnitName(spec.Name, spec.Type)
+	state, err := d.unitRuntimeState(ctx, fullName, spec.Type)
 	if err != nil {
 		return nil, err
 	}
-	return resolveSpec(spec, d.containerUnitDirectory)
+
+	configFiles := make([]string, 0, len(spec.Configs))
+	for _, c := range spec.Configs {
+		configFiles = append(configFiles, filepath.Base(c.TargetVolumePath))
+	}
+
+	us := &pb.UnitStatus{
+		Name:         fullName,
+		Type:         spec.Type,
+		DesiredState: spec.DesiredState,
+		ActiveState:  pbActiveState(state.ActiveState),
+		Enabled:      state.Enabled,
+		ConfigFiles:  configFiles,
+	}
+
+	unitName := pb.UnitName(fullName)
+	if rs, err := d.store.GetReconcileStatus(unitName, spec.Type.ShortName()); err == nil {
+		if !rs.LastReconciled.IsZero() {
+			us.LastReconciled = rs.LastReconciled.Format(time.RFC3339)
+		}
+		us.Error = rs.Error
+	}
+
+	return us, nil
 }
 
-func (d *Daemon) loadUnitsFromStore() ([]ResolvedUnit, error) {
-	specs, err := d.store.List()
-	if err != nil {
-		return nil, err
+// unitRuntimeState returns systemd runtime state for the unit.
+func (d *Daemon) unitRuntimeState(ctx context.Context, fullUnitName string, unitType pb.UnitType) (*systemd.UnitState, error) {
+	switch unitType {
+	case pb.UnitType_UNIT_TYPE_CONTAINER:
+		return d.systemd.Container().RuntimeState(ctx, fullUnitName)
+	case pb.UnitType_UNIT_TYPE_VOLUME:
+		return d.systemd.Volume().RuntimeState(ctx, fullUnitName)
+	case pb.UnitType_UNIT_TYPE_NETWORK:
+		return d.systemd.Network().RuntimeState(ctx, fullUnitName)
+	default:
+		return nil, fmt.Errorf("unsupported unit type: %s", unitType)
 	}
-
-	var units []ResolvedUnit
-	for _, spec := range specs {
-		ru, err := resolveSpec(spec, d.containerUnitDirectory)
-		if err != nil {
-			return nil, err
-		}
-		units = append(units, *ru)
-	}
-	return units, nil
 }
 
 func pbActiveState(s string) pb.ActiveState {
@@ -308,98 +331,4 @@ func pbActiveState(s string) pb.ActiveState {
 	default:
 		return pb.ActiveState_ACTIVE_STATE_UNSPECIFIED
 	}
-}
-
-func (d *Daemon) buildUnitStatus(ctx context.Context, ru *ResolvedUnit) (*pb.UnitStatus, error) {
-	state, err := d.unitRuntimeState(ctx, ru.FullName(), ru.Spec.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	us := &pb.UnitStatus{
-		Name:         ru.FullName(),
-		Type:         ru.Spec.Type,
-		DesiredState: ru.Spec.DesiredState,
-		ActiveState:  pbActiveState(state.ActiveState),
-		Enabled:      state.Enabled,
-		ConfigFiles:  configFilenames(ru.Configs),
-	}
-
-	unitName := pb.UnitName(ru.FullName())
-	if rs, err := d.store.GetReconcileStatus(unitName, ru.Spec.Type.ShortName()); err == nil {
-		if !rs.LastReconciled.IsZero() {
-			us.LastReconciled = rs.LastReconciled.Format(time.RFC3339)
-		}
-		us.Error = rs.Error
-	}
-
-	return us, nil
-}
-
-// resolveSpec converts a pb.UnitSpec into a ResolvedUnit.
-// configBase is the host directory where config files are stored (e.g. /etc/containers/config).
-func resolveSpec(spec *pb.UnitSpec, configBase string) (*ResolvedUnit, error) {
-	if spec.Type == pb.UnitType_UNIT_TYPE_UNSPECIFIED {
-		return nil, fmt.Errorf("unspecified unit type for %q", spec.Name)
-	}
-
-	// Map pb options to go-systemd UnitOptions.
-	var opts []*unit.UnitOption
-	for _, o := range spec.Options {
-		opts = append(opts, &unit.UnitOption{
-			Section: o.Section,
-			Name:    o.Name,
-			Value:   o.Value,
-		})
-	}
-
-	// Process configs: generate Volume= entries and ConfigFile list.
-	var cfgFiles []ConfigFile
-	seen := make(map[string]bool)
-
-	for _, ce := range spec.Configs {
-		basename := filepath.Base(ce.TargetVolumePath)
-		if seen[basename] {
-			return nil, fmt.Errorf("duplicate config basename %q (from targetVolumePath %q)", basename, ce.TargetVolumePath)
-		}
-		seen[basename] = true
-
-		hostPath := filepath.Join(configBase, spec.Name, basename)
-		volumeEntry := fmt.Sprintf("%s:%s:ro", hostPath, ce.TargetVolumePath)
-
-		opts = append(opts, &unit.UnitOption{
-			Section: "Container",
-			Name:    "Volume",
-			Value:   volumeEntry,
-		})
-
-		cfgFiles = append(cfgFiles, ConfigFile{
-			UnitName: spec.Name,
-			Filename: basename,
-			Content:  ce.Content,
-		})
-	}
-
-	// Auto-generate [Install] section for startable units.
-	if spec.Type.IsStartable() {
-		opts = append(opts, &unit.UnitOption{
-			Section: "Install",
-			Name:    "WantedBy",
-			Value:   "multi-user.target default.target",
-		})
-	}
-
-	return &ResolvedUnit{
-		Spec:    spec,
-		Options: opts,
-		Configs: cfgFiles,
-	}, nil
-}
-
-func configFilenames(configs []ConfigFile) []string {
-	names := make([]string, len(configs))
-	for i, c := range configs {
-		names[i] = c.Filename
-	}
-	return names
 }

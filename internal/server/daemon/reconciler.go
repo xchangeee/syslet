@@ -1,8 +1,9 @@
 // Package daemon implements the syslet reconciliation daemon, which
 // continuously drives the system toward the desired state stored in SQLite.
 // The top-level [Daemon] owns the reconciliation schedule, the store, and the
-// public API, while the [Reconciler] is a stateless engine that computes and
-// applies changes against systemd.
+// public API, while the [Reconciler] is the engine that computes and applies
+// changes against systemd. It owns the spec-to-systemd rendering logic and
+// knows how to diff rendered units against installed state.
 package daemon
 
 import (
@@ -11,37 +12,45 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	pb "codeberg.org/xchangeee/syslet/proto"
 
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
+	"github.com/coreos/go-systemd/v22/unit"
 )
 
 // Reconciler performs two-phase reconciliation.
+// It renders UnitSpecs into systemd unit content, diffs them against the
+// installed state, and applies any required changes.
 type Reconciler struct {
-	systemd *systemd.Client
-	config  *ConfigFileManager
-	logger  *slog.Logger
+	systemd    *systemd.Client
+	config     *ConfigFileManager
+	configBase string // host directory used in Volume= entries for config mounts
+	logger     *slog.Logger
 }
 
 // NewReconciler creates a new reconciler.
-func NewReconciler(sd *systemd.Client, cfg *ConfigFileManager, logger *slog.Logger) *Reconciler {
+// configBase is the host directory referenced in Volume= entries for config
+// file mounts (e.g. "/etc/containers/config").
+func NewReconciler(logger *slog.Logger, sd *systemd.Client, cfg *ConfigFileManager, configBase string) *Reconciler {
 	return &Reconciler{
-		systemd: sd,
-		config:  cfg,
-		logger:  logger,
+		systemd:    sd,
+		config:     cfg,
+		configBase: configBase,
+		logger:     logger,
 	}
 }
 
-// Diff computes a ChangePlan for all provided units.
-func (r *Reconciler) Diff(ctx context.Context, units []ResolvedUnit) (*ChangePlan, error) {
+// Diff computes a ChangePlan for all provided unit specs.
+func (r *Reconciler) Diff(ctx context.Context, specs []*pb.UnitSpec) (*ChangePlan, error) {
 	plan := &ChangePlan{}
 
-	for _, ru := range units {
-		change, err := r.diffUnit(ctx, ru)
+	for _, spec := range specs {
+		change, err := r.diffUnit(ctx, spec)
 		if err != nil {
-			return nil, fmt.Errorf("diffing %s: %w", ru.FullName(), err)
+			return nil, fmt.Errorf("diffing %s: %w", pb.FullUnitName(spec.Name, spec.Type), err)
 		}
 		if change.UnitChanged {
 			plan.NeedReload = true
@@ -52,11 +61,22 @@ func (r *Reconciler) Diff(ctx context.Context, units []ResolvedUnit) (*ChangePla
 	return plan, nil
 }
 
-func (r *Reconciler) diffUnit(ctx context.Context, ru ResolvedUnit) (*UnitChange, error) {
-	fullName := ru.FullName()
-	unitType := ru.Spec.Type
+func (r *Reconciler) diffUnit(ctx context.Context, spec *pb.UnitSpec) (*UnitChange, error) {
+	fullName := pb.FullUnitName(spec.Name, spec.Type)
+	unitType := spec.Type
+
+	// Render the spec into systemd options and config files up front so
+	// that the rendered content is available for both diffing and (later)
+	// execution.
+	opts, cfgs, err := r.renderSpec(spec)
+	if err != nil {
+		return nil, err
+	}
+
 	change := &UnitChange{
-		ResolvedUnit: ru,
+		Spec:    spec,
+		Options: opts,
+		Configs: cfgs,
 	}
 
 	// Check if unit file exists
@@ -68,14 +88,14 @@ func (r *Reconciler) diffUnit(ctx context.Context, ru ResolvedUnit) (*UnitChange
 	if !installed {
 		change.IsNew = true
 		change.UnitChanged = true
-		change.ConfigChanged = len(ru.Configs) > 0
+		change.ConfigChanged = len(cfgs) > 0
 
 		if unitType.IsImmutable() {
 			// New immutable unit: just create it
 			return change, nil
 		}
 
-		if ru.Spec.DesiredState == pb.DesiredState_DESIRED_STATE_RUNNING && unitType.IsStartable() {
+		if spec.DesiredState == pb.DesiredState_DESIRED_STATE_RUNNING && unitType.IsStartable() {
 			change.NeedsStart = true
 		}
 		return change, nil
@@ -83,7 +103,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, ru ResolvedUnit) (*UnitChange
 
 	// Unit exists - check for changes
 	if unitType.IsImmutable() {
-		unitChanged, err := r.unitFileChanged(&ru)
+		unitChanged, err := r.unitFileChanged(change)
 		if err != nil {
 			return nil, err
 		}
@@ -96,14 +116,14 @@ func (r *Reconciler) diffUnit(ctx context.Context, ru ResolvedUnit) (*UnitChange
 	}
 
 	// Check unit file changes
-	unitChanged, err := r.unitFileChanged(&ru)
+	unitChanged, err := r.unitFileChanged(change)
 	if err != nil {
 		return nil, err
 	}
 	change.UnitChanged = unitChanged
 
 	// Check config file changes
-	for _, cf := range ru.Configs {
+	for _, cf := range cfgs {
 		changed, err := r.config.IsChanged(fullName, cf.Filename, cf.Content)
 		if err != nil {
 			return nil, err
@@ -114,7 +134,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, ru ResolvedUnit) (*UnitChange
 		}
 	}
 
-	// If unit or config changed, need to stop first (using old config)
+	// If unit or config changed, need to stop first (uses OLD config)
 	if (change.UnitChanged || change.ConfigChanged) && unitType.IsStartable() {
 		state, err := r.systemd.Container().RuntimeState(ctx, fullName)
 		if err != nil {
@@ -132,7 +152,7 @@ func (r *Reconciler) diffUnit(ctx context.Context, ru ResolvedUnit) (*UnitChange
 			return nil, err
 		}
 
-		switch ru.Spec.DesiredState {
+		switch spec.DesiredState {
 		case pb.DesiredState_DESIRED_STATE_RUNNING:
 			if state.ActiveState != "active" || change.NeedsStop {
 				change.NeedsStart = true
@@ -147,8 +167,65 @@ func (r *Reconciler) diffUnit(ctx context.Context, ru ResolvedUnit) (*UnitChange
 	return change, nil
 }
 
-func (r *Reconciler) unitFileChanged(ru *ResolvedUnit) (bool, error) {
-	existing, err := r.readInstalledUnit(ru.FullName(), ru.Spec.Type)
+// renderSpec converts a UnitSpec into go-systemd options and config files.
+// The configBase directory is used to generate host paths for Volume= entries
+// in container units.
+func (r *Reconciler) renderSpec(spec *pb.UnitSpec) ([]*unit.UnitOption, []ConfigFile, error) {
+	if spec.Type == pb.UnitType_UNIT_TYPE_UNSPECIFIED {
+		return nil, nil, fmt.Errorf("unspecified unit type for %q", spec.Name)
+	}
+
+	// Map pb options to go-systemd UnitOptions.
+	var opts []*unit.UnitOption
+	for _, o := range spec.Options {
+		opts = append(opts, &unit.UnitOption{
+			Section: o.Section,
+			Name:    o.Name,
+			Value:   o.Value,
+		})
+	}
+
+	// Process configs: generate Volume= entries and ConfigFile list.
+	var cfgFiles []ConfigFile
+	seen := make(map[string]bool)
+
+	for _, ce := range spec.Configs {
+		basename := filepath.Base(ce.TargetVolumePath)
+		if seen[basename] {
+			return nil, nil, fmt.Errorf("duplicate config basename %q (from targetVolumePath %q)", basename, ce.TargetVolumePath)
+		}
+		seen[basename] = true
+
+		hostPath := filepath.Join(r.configBase, spec.Name, basename)
+		volumeEntry := fmt.Sprintf("%s:%s:ro", hostPath, ce.TargetVolumePath)
+
+		opts = append(opts, &unit.UnitOption{
+			Section: "Container",
+			Name:    "Volume",
+			Value:   volumeEntry,
+		})
+
+		cfgFiles = append(cfgFiles, ConfigFile{
+			UnitName: spec.Name,
+			Filename: basename,
+			Content:  ce.Content,
+		})
+	}
+
+	// Auto-generate [Install] section for startable units.
+	if spec.Type.IsStartable() {
+		opts = append(opts, &unit.UnitOption{
+			Section: "Install",
+			Name:    "WantedBy",
+			Value:   "multi-user.target default.target",
+		})
+	}
+
+	return opts, cfgFiles, nil
+}
+
+func (r *Reconciler) unitFileChanged(c *UnitChange) (bool, error) {
+	existing, err := r.readInstalledUnit(c.FullName(), c.Spec.Type)
 	if os.IsNotExist(err) {
 		return true, nil
 	}
@@ -156,7 +233,7 @@ func (r *Reconciler) unitFileChanged(ru *ResolvedUnit) (bool, error) {
 		return false, err
 	}
 
-	newContent, err := io.ReadAll(ru.SystemdContent())
+	newContent, err := io.ReadAll(c.SystemdContent())
 	if err != nil {
 		return false, err
 	}
@@ -219,7 +296,7 @@ func (r *Reconciler) Execute(ctx context.Context, plan *ChangePlan) []UnitResult
 		}
 		fullName := c.FullName()
 		r.logger.Info("installing unit file", "unit", fullName)
-		if err := r.installUnitFile(&c.ResolvedUnit); err != nil {
+		if err := r.installUnitFile(c); err != nil {
 			r.logger.Error("failed to install unit file", "unit", fullName, "error", err)
 		}
 	}
@@ -318,16 +395,16 @@ func (r *Reconciler) readInstalledUnit(fullName string, unitType pb.UnitType) ([
 	}
 }
 
-func (r *Reconciler) installUnitFile(ru *ResolvedUnit) error {
-	fullName := ru.FullName()
-	switch ru.Spec.Type {
+func (r *Reconciler) installUnitFile(c *UnitChange) error {
+	fullName := c.FullName()
+	switch c.Spec.Type {
 	case pb.UnitType_UNIT_TYPE_CONTAINER:
-		return r.systemd.Container().InstallUnitFile(fullName, ru.SystemdContent())
+		return r.systemd.Container().InstallUnitFile(fullName, c.SystemdContent())
 	case pb.UnitType_UNIT_TYPE_VOLUME:
-		return r.systemd.Volume().InstallUnitFile(fullName, ru.SystemdContent())
+		return r.systemd.Volume().InstallUnitFile(fullName, c.SystemdContent())
 	case pb.UnitType_UNIT_TYPE_NETWORK:
-		return r.systemd.Network().InstallUnitFile(fullName, ru.SystemdContent())
+		return r.systemd.Network().InstallUnitFile(fullName, c.SystemdContent())
 	default:
-		return fmt.Errorf("unsupported unit type: %v", ru.Spec.Type)
+		return fmt.Errorf("unsupported unit type: %v", c.Spec.Type)
 	}
 }
