@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"time"
 
 	"codeberg.org/xchangeee/syslet/internal/server/store"
@@ -277,18 +276,12 @@ func (d *Daemon) buildUnitStatus(ctx context.Context, spec *pb.UnitSpec) (*pb.Un
 		return nil, err
 	}
 
-	configFiles := make([]string, 0, len(spec.Configs))
-	for _, c := range spec.Configs {
-		configFiles = append(configFiles, filepath.Base(c.TargetVolumePath))
-	}
-
 	us := &pb.UnitStatus{
 		Name:         fullName,
 		Type:         spec.Type,
 		DesiredState: spec.DesiredState,
 		ActiveState:  pbActiveState(state.ActiveState),
 		Enabled:      state.Enabled,
-		ConfigFiles:  configFiles,
 	}
 
 	unitName := pb.UnitName(fullName)
