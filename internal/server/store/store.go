@@ -1,4 +1,7 @@
-// Package store provides SQLite-backed persistent storage for container specs.
+// Package store provides SQLite-backed persistent storage for container,
+// volume, and network specs. Each resource type has its own table with a
+// simple name primary key and operational status columns (last_error,
+// last_applied) that are updated after each apply or delete operation.
 package store
 
 import (
@@ -17,15 +20,33 @@ import (
 const DefaultDBPath = "/var/syslet/state.db"
 
 const migration = `
-CREATE TABLE IF NOT EXISTS specs (
-    name TEXT NOT NULL,
-    type TEXT NOT NULL,
+DROP TABLE IF EXISTS specs;
+
+CREATE TABLE IF NOT EXISTS containers (
+    name TEXT PRIMARY KEY,
     spec_data BLOB NOT NULL,
-    reconcile_error TEXT NOT NULL DEFAULT '',
-    last_reconciled DATETIME,
+    last_error TEXT NOT NULL DEFAULT '',
+    last_applied DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (name, type)
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS volumes (
+    name TEXT PRIMARY KEY,
+    spec_data BLOB NOT NULL,
+    last_error TEXT NOT NULL DEFAULT '',
+    last_applied DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS networks (
+    name TEXT PRIMARY KEY,
+    spec_data BLOB NOT NULL,
+    last_error TEXT NOT NULL DEFAULT '',
+    last_applied DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 `
 
@@ -35,10 +56,28 @@ type Store struct {
 	fs afero.Fs
 }
 
-// ReconcileStatus holds the reconciliation status for a unit.
-type ReconcileStatus struct {
-	Error          string
-	LastReconciled time.Time
+// OperationalStatus holds the operational tracking info for any resource.
+type OperationalStatus struct {
+	LastError   string
+	LastApplied time.Time
+}
+
+// ContainerRow bundles a container spec with its operational status.
+type ContainerRow struct {
+	Spec   *pb.ContainerSpec
+	Status OperationalStatus
+}
+
+// VolumeRow bundles a volume spec with its operational status.
+type VolumeRow struct {
+	Spec   *pb.VolumeSpec
+	Status OperationalStatus
+}
+
+// NetworkRow bundles a network spec with its operational status.
+type NetworkRow struct {
+	Spec   *pb.NetworkSpec
+	Status OperationalStatus
 }
 
 // New opens (or creates) the database at dbPath and runs migrations.
@@ -65,87 +104,251 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// List returns all stored specs.
-func (s *Store) List() ([]*pb.UnitSpec, error) {
-	rows, err := s.db.Query("SELECT spec_data FROM specs ORDER BY name, type")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+// --- Container methods ---
 
-	var specs []*pb.UnitSpec
-	for rows.Next() {
-		var data []byte
-		if err := rows.Scan(&data); err != nil {
-			return nil, err
-		}
-		spec := &pb.UnitSpec{}
-		if err := proto.Unmarshal(data, spec); err != nil {
-			return nil, fmt.Errorf("unmarshaling spec: %w", err)
-		}
-		specs = append(specs, spec)
-	}
-	return specs, rows.Err()
-}
-
-// Get returns the spec for a given name and type.
-func (s *Store) Get(name, unitType string) (*pb.UnitSpec, error) {
-	var data []byte
-	err := s.db.QueryRow("SELECT spec_data FROM specs WHERE name=? AND type=?", name, unitType).Scan(&data)
-	if err != nil {
-		return nil, err
-	}
-	spec := &pb.UnitSpec{}
-	if err := proto.Unmarshal(data, spec); err != nil {
-		return nil, fmt.Errorf("unmarshaling spec: %w", err)
-	}
-	return spec, nil
-}
-
-// GetReconcileStatus returns the reconciliation status for a unit.
-func (s *Store) GetReconcileStatus(name, unitType string) (*ReconcileStatus, error) {
-	var errMsg string
-	var lastRec sql.NullString
-	err := s.db.QueryRow(
-		`SELECT reconcile_error, last_reconciled FROM specs WHERE name=? AND type=?`,
-		name, unitType,
-	).Scan(&errMsg, &lastRec)
-	if err != nil {
-		return nil, err
-	}
-	rs := &ReconcileStatus{Error: errMsg}
-	if lastRec.Valid {
-		rs.LastReconciled, _ = time.Parse(time.RFC3339, lastRec.String)
-	}
-	return rs, nil
-}
-
-// Put upserts a spec.
-func (s *Store) Put(spec *pb.UnitSpec) error {
+// PutContainer upserts a container spec.
+func (s *Store) PutContainer(spec *pb.ContainerSpec) error {
 	data, err := proto.Marshal(spec)
 	if err != nil {
 		return fmt.Errorf("marshaling spec: %w", err)
 	}
 	_, err = s.db.Exec(
-		`INSERT INTO specs (name, type, spec_data, updated_at)
-		 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		 ON CONFLICT(name, type) DO UPDATE SET spec_data=excluded.spec_data, updated_at=CURRENT_TIMESTAMP`,
-		spec.Name, spec.Type.ShortName(), data,
+		`INSERT INTO containers (name, spec_data, updated_at)
+		 VALUES (?, ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(name) DO UPDATE SET spec_data=excluded.spec_data, updated_at=CURRENT_TIMESTAMP`,
+		spec.Name, data,
 	)
 	return err
 }
 
-// UpdateReconcileStatus updates the reconciliation status for a unit.
-func (s *Store) UpdateReconcileStatus(name, unitType, errMsg string, lastReconciled time.Time) error {
+// GetContainer returns the container spec and operational status for a given name.
+func (s *Store) GetContainer(name string) (*pb.ContainerSpec, *OperationalStatus, error) {
+	var data []byte
+	var lastErr string
+	var lastApplied sql.NullString
+	err := s.db.QueryRow(
+		"SELECT spec_data, last_error, last_applied FROM containers WHERE name=?", name,
+	).Scan(&data, &lastErr, &lastApplied)
+	if err != nil {
+		return nil, nil, err
+	}
+	spec := &pb.ContainerSpec{}
+	if err := proto.Unmarshal(data, spec); err != nil {
+		return nil, nil, fmt.Errorf("unmarshaling spec: %w", err)
+	}
+	st := &OperationalStatus{LastError: lastErr}
+	if lastApplied.Valid {
+		st.LastApplied, _ = time.Parse(time.RFC3339, lastApplied.String)
+	}
+	return spec, st, nil
+}
+
+// ListContainers returns all stored container rows with specs and status.
+func (s *Store) ListContainers() ([]ContainerRow, error) {
+	rows, err := s.db.Query("SELECT spec_data, last_error, last_applied FROM containers ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []ContainerRow
+	for rows.Next() {
+		var data []byte
+		var lastErr string
+		var lastApplied sql.NullString
+		if err := rows.Scan(&data, &lastErr, &lastApplied); err != nil {
+			return nil, err
+		}
+		spec := &pb.ContainerSpec{}
+		if err := proto.Unmarshal(data, spec); err != nil {
+			return nil, fmt.Errorf("unmarshaling spec: %w", err)
+		}
+		st := OperationalStatus{LastError: lastErr}
+		if lastApplied.Valid {
+			st.LastApplied, _ = time.Parse(time.RFC3339, lastApplied.String)
+		}
+		result = append(result, ContainerRow{Spec: spec, Status: st})
+	}
+	return result, rows.Err()
+}
+
+// DeleteContainer removes a container spec by name.
+func (s *Store) DeleteContainer(name string) error {
+	_, err := s.db.Exec("DELETE FROM containers WHERE name=?", name)
+	return err
+}
+
+// UpdateContainerStatus updates the operational status for a container.
+func (s *Store) UpdateContainerStatus(name string, lastError string, lastApplied time.Time) error {
 	_, err := s.db.Exec(
-		`UPDATE specs SET reconcile_error=?, last_reconciled=? WHERE name=? AND type=?`,
-		errMsg, lastReconciled.UTC().Format(time.RFC3339), name, unitType,
+		`UPDATE containers SET last_error=?, last_applied=? WHERE name=?`,
+		lastError, lastApplied.UTC().Format(time.RFC3339), name,
 	)
 	return err
 }
 
-// Delete removes a spec by name and type.
-func (s *Store) Delete(name, unitType string) error {
-	_, err := s.db.Exec("DELETE FROM specs WHERE name=? AND type=?", name, unitType)
+// --- Volume methods ---
+
+// PutVolume upserts a volume spec.
+func (s *Store) PutVolume(spec *pb.VolumeSpec) error {
+	data, err := proto.Marshal(spec)
+	if err != nil {
+		return fmt.Errorf("marshaling spec: %w", err)
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO volumes (name, spec_data, updated_at)
+		 VALUES (?, ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(name) DO UPDATE SET spec_data=excluded.spec_data, updated_at=CURRENT_TIMESTAMP`,
+		spec.Name, data,
+	)
+	return err
+}
+
+// GetVolume returns the volume spec and operational status for a given name.
+func (s *Store) GetVolume(name string) (*pb.VolumeSpec, *OperationalStatus, error) {
+	var data []byte
+	var lastErr string
+	var lastApplied sql.NullString
+	err := s.db.QueryRow(
+		"SELECT spec_data, last_error, last_applied FROM volumes WHERE name=?", name,
+	).Scan(&data, &lastErr, &lastApplied)
+	if err != nil {
+		return nil, nil, err
+	}
+	spec := &pb.VolumeSpec{}
+	if err := proto.Unmarshal(data, spec); err != nil {
+		return nil, nil, fmt.Errorf("unmarshaling spec: %w", err)
+	}
+	st := &OperationalStatus{LastError: lastErr}
+	if lastApplied.Valid {
+		st.LastApplied, _ = time.Parse(time.RFC3339, lastApplied.String)
+	}
+	return spec, st, nil
+}
+
+// ListVolumes returns all stored volume rows with specs and status.
+func (s *Store) ListVolumes() ([]VolumeRow, error) {
+	rows, err := s.db.Query("SELECT spec_data, last_error, last_applied FROM volumes ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []VolumeRow
+	for rows.Next() {
+		var data []byte
+		var lastErr string
+		var lastApplied sql.NullString
+		if err := rows.Scan(&data, &lastErr, &lastApplied); err != nil {
+			return nil, err
+		}
+		spec := &pb.VolumeSpec{}
+		if err := proto.Unmarshal(data, spec); err != nil {
+			return nil, fmt.Errorf("unmarshaling spec: %w", err)
+		}
+		st := OperationalStatus{LastError: lastErr}
+		if lastApplied.Valid {
+			st.LastApplied, _ = time.Parse(time.RFC3339, lastApplied.String)
+		}
+		result = append(result, VolumeRow{Spec: spec, Status: st})
+	}
+	return result, rows.Err()
+}
+
+// DeleteVolume removes a volume spec by name.
+func (s *Store) DeleteVolume(name string) error {
+	_, err := s.db.Exec("DELETE FROM volumes WHERE name=?", name)
+	return err
+}
+
+// UpdateVolumeStatus updates the operational status for a volume.
+func (s *Store) UpdateVolumeStatus(name string, lastError string, lastApplied time.Time) error {
+	_, err := s.db.Exec(
+		`UPDATE volumes SET last_error=?, last_applied=? WHERE name=?`,
+		lastError, lastApplied.UTC().Format(time.RFC3339), name,
+	)
+	return err
+}
+
+// --- Network methods ---
+
+// PutNetwork upserts a network spec.
+func (s *Store) PutNetwork(spec *pb.NetworkSpec) error {
+	data, err := proto.Marshal(spec)
+	if err != nil {
+		return fmt.Errorf("marshaling spec: %w", err)
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO networks (name, spec_data, updated_at)
+		 VALUES (?, ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(name) DO UPDATE SET spec_data=excluded.spec_data, updated_at=CURRENT_TIMESTAMP`,
+		spec.Name, data,
+	)
+	return err
+}
+
+// GetNetwork returns the network spec and operational status for a given name.
+func (s *Store) GetNetwork(name string) (*pb.NetworkSpec, *OperationalStatus, error) {
+	var data []byte
+	var lastErr string
+	var lastApplied sql.NullString
+	err := s.db.QueryRow(
+		"SELECT spec_data, last_error, last_applied FROM networks WHERE name=?", name,
+	).Scan(&data, &lastErr, &lastApplied)
+	if err != nil {
+		return nil, nil, err
+	}
+	spec := &pb.NetworkSpec{}
+	if err := proto.Unmarshal(data, spec); err != nil {
+		return nil, nil, fmt.Errorf("unmarshaling spec: %w", err)
+	}
+	st := &OperationalStatus{LastError: lastErr}
+	if lastApplied.Valid {
+		st.LastApplied, _ = time.Parse(time.RFC3339, lastApplied.String)
+	}
+	return spec, st, nil
+}
+
+// ListNetworks returns all stored network rows with specs and status.
+func (s *Store) ListNetworks() ([]NetworkRow, error) {
+	rows, err := s.db.Query("SELECT spec_data, last_error, last_applied FROM networks ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []NetworkRow
+	for rows.Next() {
+		var data []byte
+		var lastErr string
+		var lastApplied sql.NullString
+		if err := rows.Scan(&data, &lastErr, &lastApplied); err != nil {
+			return nil, err
+		}
+		spec := &pb.NetworkSpec{}
+		if err := proto.Unmarshal(data, spec); err != nil {
+			return nil, fmt.Errorf("unmarshaling spec: %w", err)
+		}
+		st := OperationalStatus{LastError: lastErr}
+		if lastApplied.Valid {
+			st.LastApplied, _ = time.Parse(time.RFC3339, lastApplied.String)
+		}
+		result = append(result, NetworkRow{Spec: spec, Status: st})
+	}
+	return result, rows.Err()
+}
+
+// DeleteNetwork removes a network spec by name.
+func (s *Store) DeleteNetwork(name string) error {
+	_, err := s.db.Exec("DELETE FROM networks WHERE name=?", name)
+	return err
+}
+
+// UpdateNetworkStatus updates the operational status for a network.
+func (s *Store) UpdateNetworkStatus(name string, lastError string, lastApplied time.Time) error {
+	_, err := s.db.Exec(
+		`UPDATE networks SET last_error=?, last_applied=? WHERE name=?`,
+		lastError, lastApplied.UTC().Format(time.RFC3339), name,
+	)
 	return err
 }
