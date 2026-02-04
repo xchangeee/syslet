@@ -6,19 +6,19 @@ option go_package = "codeberg.org/xchangeee/syslet/proto;sysletv1";
 
 service SysletService {
   // Container RPCs
-  rpc ApplyContainer(ApplyContainerRequest) returns (ApplyContainerResponse);
+  rpc ApplyContainers(ApplyContainersRequest) returns (ApplyContainersResponse);
   rpc GetContainer(GetContainerRequest) returns (GetContainerResponse);
   rpc ListContainers(ListContainersRequest) returns (ListContainersResponse);
   rpc DeleteContainer(DeleteContainerRequest) returns (DeleteContainerResponse);
 
   // Volume RPCs
-  rpc ApplyVolume(ApplyVolumeRequest) returns (ApplyVolumeResponse);
+  rpc ApplyVolumes(ApplyVolumesRequest) returns (ApplyVolumesResponse);
   rpc GetVolume(GetVolumeRequest) returns (GetVolumeResponse);
   rpc ListVolumes(ListVolumesRequest) returns (ListVolumesResponse);
   rpc DeleteVolume(DeleteVolumeRequest) returns (DeleteVolumeResponse);
 
   // Network RPCs
-  rpc ApplyNetwork(ApplyNetworkRequest) returns (ApplyNetworkResponse);
+  rpc ApplyNetworks(ApplyNetworksRequest) returns (ApplyNetworksResponse);
   rpc GetNetwork(GetNetworkRequest) returns (GetNetworkResponse);
   rpc ListNetworks(ListNetworksRequest) returns (ListNetworksResponse);
   rpc DeleteNetwork(DeleteNetworkRequest) returns (DeleteNetworkResponse);
@@ -57,6 +57,13 @@ message ConfigEntry {
   string target_volume_path = 2;
 }
 
+// Per-unit result returned from Apply RPCs.
+message ApplyResult {
+  string name = 1;
+  bool changed = 2;
+  string message = 3;
+}
+
 // --- Specs ---
 
 message ContainerSpec {
@@ -78,14 +85,12 @@ message NetworkSpec {
 
 // --- Container RPCs ---
 
-message ApplyContainerRequest {
-  ContainerSpec spec = 1;
+message ApplyContainersRequest {
+  repeated ContainerSpec specs = 1;
 }
 
-message ApplyContainerResponse {
-  string name = 1;
-  bool changed = 2;
-  string message = 3;
+message ApplyContainersResponse {
+  repeated ApplyResult results = 1;
 }
 
 message GetContainerRequest {
@@ -112,14 +117,12 @@ message DeleteContainerResponse {
 
 // --- Volume RPCs ---
 
-message ApplyVolumeRequest {
-  VolumeSpec spec = 1;
+message ApplyVolumesRequest {
+  repeated VolumeSpec specs = 1;
 }
 
-message ApplyVolumeResponse {
-  string name = 1;
-  bool changed = 2;
-  string message = 3;
+message ApplyVolumesResponse {
+  repeated ApplyResult results = 1;
 }
 
 message GetVolumeRequest {
@@ -146,14 +149,12 @@ message DeleteVolumeResponse {
 
 // --- Network RPCs ---
 
-message ApplyNetworkRequest {
-  NetworkSpec spec = 1;
+message ApplyNetworksRequest {
+  repeated NetworkSpec specs = 1;
 }
 
-message ApplyNetworkResponse {
-  string name = 1;
-  bool changed = 2;
-  string message = 3;
+message ApplyNetworksResponse {
+  repeated ApplyResult results = 1;
 }
 
 message GetNetworkRequest {

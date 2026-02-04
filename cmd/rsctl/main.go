@@ -40,10 +40,10 @@ func main() {
 	root.PersistentFlags().StringVar(&contextName, "context", "", "named context to use")
 
 	root.AddCommand(applyCmd())
-	root.AddCommand(statusCmd())
+	root.AddCommand(getCmd())
 	root.AddCommand(listCmd())
-	root.AddCommand(logsCmd())
 	root.AddCommand(deleteCmd())
+	root.AddCommand(logsCmd())
 	root.AddCommand(contextCmd())
 
 	if err := root.Execute(); err != nil {
@@ -205,6 +205,23 @@ func connect() (pb.SysletServiceClient, *grpc.ClientConn, error) {
 	return pb.NewSysletServiceClient(conn), conn, nil
 }
 
+// ---------------------------------------------------------------------------
+// apply
+// ---------------------------------------------------------------------------
+
+type jsonSpec struct {
+	Name         string                    `json:"name"`
+	Type         string                    `json:"type"`
+	DesiredState string                    `json:"desiredState"`
+	Unit         map[string]map[string]any `json:"unit"`
+	Configs      []jsonConfigEntry         `json:"configs,omitempty"`
+}
+
+type jsonConfigEntry struct {
+	Content          string `json:"content"`
+	TargetVolumePath string `json:"targetVolumePath"`
+}
+
 func applyCmd() *cobra.Command {
 	var filePath string
 
@@ -216,18 +233,43 @@ func applyCmd() *cobra.Command {
 				return fmt.Errorf("--file/-f is required")
 			}
 
-			jsonSpecs, err := loadSpecs(filePath)
+			rawSpecs, err := loadSpecs(filePath)
 			if err != nil {
 				return err
 			}
 
-			var specs []*pb.UnitSpec
-			for _, js := range jsonSpecs {
-				spec, err := parseJSONSpec(js)
-				if err != nil {
-					return fmt.Errorf("parsing spec: %w", err)
+			// Parse and group by type.
+			var containers []*pb.ContainerSpec
+			var volumes []*pb.VolumeSpec
+			var networks []*pb.NetworkSpec
+
+			for _, raw := range rawSpecs {
+				var js jsonSpec
+				if err := json.Unmarshal([]byte(raw), &js); err != nil {
+					return fmt.Errorf("parsing spec JSON: %w", err)
 				}
-				specs = append(specs, spec)
+				switch strings.ToLower(js.Type) {
+				case "container":
+					spec, err := toContainerSpec(js)
+					if err != nil {
+						return fmt.Errorf("container %q: %w", js.Name, err)
+					}
+					containers = append(containers, spec)
+				case "volume":
+					spec, err := toVolumeSpec(js)
+					if err != nil {
+						return fmt.Errorf("volume %q: %w", js.Name, err)
+					}
+					volumes = append(volumes, spec)
+				case "network":
+					spec, err := toNetworkSpec(js)
+					if err != nil {
+						return fmt.Errorf("network %q: %w", js.Name, err)
+					}
+					networks = append(networks, spec)
+				default:
+					return fmt.Errorf("unknown type %q for spec %q", js.Type, js.Name)
+				}
 			}
 
 			client, conn, err := connect()
@@ -236,14 +278,34 @@ func applyCmd() *cobra.Command {
 			}
 			defer conn.Close()
 
-			resp, err := client.Apply(context.Background(), &pb.ApplyRequest{
-				Specs: specs,
-			})
-			if err != nil {
-				return fmt.Errorf("apply: %w", err)
+			// Apply in dependency order: networks → volumes → containers.
+			var allResults []*pb.ApplyResult
+
+			if len(networks) > 0 {
+				resp, err := client.ApplyNetworks(context.Background(), &pb.ApplyNetworksRequest{Specs: networks})
+				if err != nil {
+					return fmt.Errorf("apply networks: %w", err)
+				}
+				allResults = append(allResults, resp.Results...)
 			}
 
-			for _, r := range resp.Results {
+			if len(volumes) > 0 {
+				resp, err := client.ApplyVolumes(context.Background(), &pb.ApplyVolumesRequest{Specs: volumes})
+				if err != nil {
+					return fmt.Errorf("apply volumes: %w", err)
+				}
+				allResults = append(allResults, resp.Results...)
+			}
+
+			if len(containers) > 0 {
+				resp, err := client.ApplyContainers(context.Background(), &pb.ApplyContainersRequest{Specs: containers})
+				if err != nil {
+					return fmt.Errorf("apply containers: %w", err)
+				}
+				allResults = append(allResults, resp.Results...)
+			}
+
+			for _, r := range allResults {
 				status := "unchanged"
 				if r.Changed {
 					status = "changed"
@@ -291,38 +353,64 @@ func loadSpecs(path string) ([]string, error) {
 	return specs, nil
 }
 
-type jsonSpec struct {
-	Name         string                    `json:"name"`
-	Type         string                    `json:"type"`
-	DesiredState string                    `json:"desiredState"`
-	Unit         map[string]map[string]any `json:"unit"`
-	Configs      []jsonConfigEntry         `json:"configs,omitempty"`
+// flattenUnitOptions converts the JSON "unit" map to sorted proto UnitOptions.
+func flattenUnitOptions(unitMap map[string]map[string]any) ([]*pb.UnitOption, error) {
+	sections := make([]string, 0, len(unitMap))
+	for s := range unitMap {
+		sections = append(sections, s)
+	}
+	sort.Strings(sections)
+
+	var opts []*pb.UnitOption
+	for _, section := range sections {
+		keys := make([]string, 0, len(unitMap[section]))
+		for k := range unitMap[section] {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, key := range keys {
+			val := unitMap[section][key]
+			switch v := val.(type) {
+			case string:
+				opts = append(opts, &pb.UnitOption{
+					Section: section,
+					Name:    key,
+					Value:   v,
+				})
+			case []any:
+				for _, item := range v {
+					s, ok := item.(string)
+					if !ok {
+						return nil, fmt.Errorf("option %s.%s: expected string value, got %T", section, key, item)
+					}
+					opts = append(opts, &pb.UnitOption{
+						Section: section,
+						Name:    key,
+						Value:   s,
+					})
+				}
+			default:
+				opts = append(opts, &pb.UnitOption{
+					Section: section,
+					Name:    key,
+					Value:   fmt.Sprintf("%v", v),
+				})
+			}
+		}
+	}
+	return opts, nil
 }
 
-type jsonConfigEntry struct {
-	Content          string `json:"content"`
-	TargetVolumePath string `json:"targetVolumePath"`
-}
-
-func parseJSONSpec(data string) (*pb.UnitSpec, error) {
-	var js jsonSpec
-	if err := json.Unmarshal([]byte(data), &js); err != nil {
-		return nil, fmt.Errorf("parsing spec JSON: %w", err)
+func toContainerSpec(js jsonSpec) (*pb.ContainerSpec, error) {
+	opts, err := flattenUnitOptions(js.Unit)
+	if err != nil {
+		return nil, err
 	}
 
-	spec := &pb.UnitSpec{
-		Name: js.Name,
-	}
-
-	switch strings.ToLower(js.Type) {
-	case "container":
-		spec.Type = pb.UnitType_UNIT_TYPE_CONTAINER
-	case "volume":
-		spec.Type = pb.UnitType_UNIT_TYPE_VOLUME
-	case "network":
-		spec.Type = pb.UnitType_UNIT_TYPE_NETWORK
-	default:
-		return nil, fmt.Errorf("unknown unit type: %q", js.Type)
+	spec := &pb.ContainerSpec{
+		Name:    js.Name,
+		Options: opts,
 	}
 
 	switch strings.ToLower(js.DesiredState) {
@@ -336,52 +424,6 @@ func parseJSONSpec(data string) (*pb.UnitSpec, error) {
 		return nil, fmt.Errorf("unknown desired state: %q", js.DesiredState)
 	}
 
-	// Flatten unit map → repeated UnitOption.
-	// Sort sections and keys for deterministic ordering.
-	sections := make([]string, 0, len(js.Unit))
-	for s := range js.Unit {
-		sections = append(sections, s)
-	}
-	sort.Strings(sections)
-
-	for _, section := range sections {
-		keys := make([]string, 0, len(js.Unit[section]))
-		for k := range js.Unit[section] {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		for _, key := range keys {
-			val := js.Unit[section][key]
-			switch v := val.(type) {
-			case string:
-				spec.Options = append(spec.Options, &pb.UnitOption{
-					Section: section,
-					Name:    key,
-					Value:   v,
-				})
-			case []any:
-				for _, item := range v {
-					s, ok := item.(string)
-					if !ok {
-						return nil, fmt.Errorf("option %s.%s: expected string value, got %T", section, key, item)
-					}
-					spec.Options = append(spec.Options, &pb.UnitOption{
-						Section: section,
-						Name:    key,
-						Value:   s,
-					})
-				}
-			default:
-				spec.Options = append(spec.Options, &pb.UnitOption{
-					Section: section,
-					Name:    key,
-					Value:   fmt.Sprintf("%v", v),
-				})
-			}
-		}
-	}
-
 	for _, ce := range js.Configs {
 		spec.Configs = append(spec.Configs, &pb.ConfigEntry{
 			Content:          ce.Content,
@@ -392,10 +434,48 @@ func parseJSONSpec(data string) (*pb.UnitSpec, error) {
 	return spec, nil
 }
 
-func statusCmd() *cobra.Command {
+func toVolumeSpec(js jsonSpec) (*pb.VolumeSpec, error) {
+	opts, err := flattenUnitOptions(js.Unit)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.VolumeSpec{
+		Name:    js.Name,
+		Options: opts,
+	}, nil
+}
+
+func toNetworkSpec(js jsonSpec) (*pb.NetworkSpec, error) {
+	opts, err := flattenUnitOptions(js.Unit)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.NetworkSpec{
+		Name:    js.Name,
+		Options: opts,
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// get
+// ---------------------------------------------------------------------------
+
+func getCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get",
+		Short: "Get status of a resource",
+	}
+	cmd.AddCommand(getContainerCmd())
+	cmd.AddCommand(getVolumeCmd())
+	cmd.AddCommand(getNetworkCmd())
+	return cmd
+}
+
+func getContainerCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status [unit]",
-		Short: "Show status of managed units",
+		Use:   "container <name>",
+		Short: "Get status of a container",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, conn, err := connect()
 			if err != nil {
@@ -403,30 +483,21 @@ func statusCmd() *cobra.Command {
 			}
 			defer conn.Close()
 
-			unitName := ""
-			if len(args) > 0 {
-				unitName = args[0]
-			}
-
-			resp, err := client.Status(context.Background(), &pb.StatusRequest{UnitName: unitName})
+			resp, err := client.GetContainer(context.Background(), &pb.GetContainerRequest{Name: args[0]})
 			if err != nil {
-				return fmt.Errorf("status: %w", err)
+				return fmt.Errorf("get container: %w", err)
 			}
-
-			for _, u := range resp.Units {
-				printUnitStatus(u)
-			}
+			printContainerStatus(resp.Container)
 			return nil
 		},
 	}
 }
 
-func listCmd() *cobra.Command {
-	var typeFilter string
-
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List managed units",
+func getVolumeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "volume <name>",
+		Short: "Get status of a volume",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, conn, err := connect()
 			if err != nil {
@@ -434,41 +505,233 @@ func listCmd() *cobra.Command {
 			}
 			defer conn.Close()
 
-			req := &pb.ListRequest{}
-			if typeFilter != "" {
-				req.TypeFilter = parseTypeFilter(typeFilter)
-			}
-
-			resp, err := client.List(context.Background(), req)
+			resp, err := client.GetVolume(context.Background(), &pb.GetVolumeRequest{Name: args[0]})
 			if err != nil {
-				return fmt.Errorf("list: %w", err)
+				return fmt.Errorf("get volume: %w", err)
+			}
+			printVolumeStatus(resp.Volume)
+			return nil
+		},
+	}
+}
+
+func getNetworkCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "network <name>",
+		Short: "Get status of a network",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := connect()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.GetNetwork(context.Background(), &pb.GetNetworkRequest{Name: args[0]})
+			if err != nil {
+				return fmt.Errorf("get network: %w", err)
+			}
+			printNetworkStatus(resp.Network)
+			return nil
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// list
+// ---------------------------------------------------------------------------
+
+func listCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List managed resources",
+	}
+	cmd.AddCommand(listContainersCmd())
+	cmd.AddCommand(listVolumesCmd())
+	cmd.AddCommand(listNetworksCmd())
+	return cmd
+}
+
+func listContainersCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "containers",
+		Short: "List managed containers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := connect()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.ListContainers(context.Background(), &pb.ListContainersRequest{})
+			if err != nil {
+				return fmt.Errorf("list containers: %w", err)
 			}
 
-			fmt.Printf("%-30s %-12s %-12s %-10s %-8s\n", "NAME", "TYPE", "DESIRED", "ACTIVE", "ENABLED")
-			for _, u := range resp.Units {
-				fmt.Printf("%-30s %-12s %-12s %-10s %-8v\n",
-					u.Name,
-					strings.TrimPrefix(u.Type.String(), "UNIT_TYPE_"),
-					strings.TrimPrefix(u.DesiredState.String(), "DESIRED_STATE_"),
-					strings.TrimPrefix(u.ActiveState.String(), "ACTIVE_STATE_"),
-					u.Enabled,
+			fmt.Printf("%-30s %-12s %-10s %-8s\n", "NAME", "DESIRED", "ACTIVE", "ENABLED")
+			for _, c := range resp.Containers {
+				fmt.Printf("%-30s %-12s %-10s %-8v\n",
+					c.Name,
+					strings.TrimPrefix(c.DesiredState.String(), "DESIRED_STATE_"),
+					strings.TrimPrefix(c.ActiveState.String(), "ACTIVE_STATE_"),
+					c.Enabled,
 				)
 			}
 			return nil
 		},
 	}
+}
 
-	cmd.Flags().StringVar(&typeFilter, "type", "", "filter by type (container, volume, network)")
+func listVolumesCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "volumes",
+		Short: "List managed volumes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := connect()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.ListVolumes(context.Background(), &pb.ListVolumesRequest{})
+			if err != nil {
+				return fmt.Errorf("list volumes: %w", err)
+			}
+
+			fmt.Printf("%-30s %-10s %-8s\n", "NAME", "ACTIVE", "ENABLED")
+			for _, v := range resp.Volumes {
+				fmt.Printf("%-30s %-10s %-8v\n",
+					v.Name,
+					strings.TrimPrefix(v.ActiveState.String(), "ACTIVE_STATE_"),
+					v.Enabled,
+				)
+			}
+			return nil
+		},
+	}
+}
+
+func listNetworksCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "networks",
+		Short: "List managed networks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := connect()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.ListNetworks(context.Background(), &pb.ListNetworksRequest{})
+			if err != nil {
+				return fmt.Errorf("list networks: %w", err)
+			}
+
+			fmt.Printf("%-30s %-10s %-8s\n", "NAME", "ACTIVE", "ENABLED")
+			for _, n := range resp.Networks {
+				fmt.Printf("%-30s %-10s %-8v\n",
+					n.Name,
+					strings.TrimPrefix(n.ActiveState.String(), "ACTIVE_STATE_"),
+					n.Enabled,
+				)
+			}
+			return nil
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// delete
+// ---------------------------------------------------------------------------
+
+func deleteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "Delete a managed resource",
+	}
+	cmd.AddCommand(deleteContainerCmd())
+	cmd.AddCommand(deleteVolumeCmd())
+	cmd.AddCommand(deleteNetworkCmd())
 	return cmd
 }
+
+func deleteContainerCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "container <name>",
+		Short: "Delete a managed container",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := connect()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.DeleteContainer(context.Background(), &pb.DeleteContainerRequest{Name: args[0]})
+			if err != nil {
+				return fmt.Errorf("delete container: %w", err)
+			}
+			fmt.Println(resp.Message)
+			return nil
+		},
+	}
+}
+
+func deleteVolumeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "volume <name>",
+		Short: "Delete a managed volume",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := connect()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.DeleteVolume(context.Background(), &pb.DeleteVolumeRequest{Name: args[0]})
+			if err != nil {
+				return fmt.Errorf("delete volume: %w", err)
+			}
+			fmt.Println(resp.Message)
+			return nil
+		},
+	}
+}
+
+func deleteNetworkCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "network <name>",
+		Short: "Delete a managed network",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := connect()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.DeleteNetwork(context.Background(), &pb.DeleteNetworkRequest{Name: args[0]})
+			if err != nil {
+				return fmt.Errorf("delete network: %w", err)
+			}
+			fmt.Println(resp.Message)
+			return nil
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// logs
+// ---------------------------------------------------------------------------
 
 func logsCmd() *cobra.Command {
 	var follow bool
 	var lines int32
 
 	cmd := &cobra.Command{
-		Use:   "logs <unit>",
-		Short: "Stream journal logs for a unit",
+		Use:   "logs <container>",
+		Short: "Stream journal logs for a container",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, conn, err := connect()
@@ -508,52 +771,49 @@ func logsCmd() *cobra.Command {
 	return cmd
 }
 
-func deleteCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "delete <name>",
-		Short: "Delete a managed unit",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, conn, err := connect()
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
+// ---------------------------------------------------------------------------
+// status printers
+// ---------------------------------------------------------------------------
 
-			resp, err := client.Delete(context.Background(), &pb.DeleteRequest{UnitName: args[0]})
-			if err != nil {
-				return fmt.Errorf("delete: %w", err)
-			}
-			fmt.Println(resp.Message)
-			return nil
-		},
+func printContainerStatus(c *pb.ContainerStatus) {
+	fmt.Printf("● %s\n", c.Name)
+	fmt.Printf("  Desired:  %s\n", strings.TrimPrefix(c.DesiredState.String(), "DESIRED_STATE_"))
+	fmt.Printf("  Active:   %s\n", strings.TrimPrefix(c.ActiveState.String(), "ACTIVE_STATE_"))
+	fmt.Printf("  Enabled:  %v\n", c.Enabled)
+	if len(c.ConfigFiles) > 0 {
+		fmt.Printf("  Configs:  %s\n", strings.Join(c.ConfigFiles, ", "))
 	}
-}
-
-func printUnitStatus(u *pb.UnitStatus) {
-	fmt.Printf("● %s\n", u.Name)
-	fmt.Printf("  Type:     %s\n", strings.TrimPrefix(u.Type.String(), "UNIT_TYPE_"))
-	fmt.Printf("  Desired:  %s\n", strings.TrimPrefix(u.DesiredState.String(), "DESIRED_STATE_"))
-	fmt.Printf("  Active:   %s\n", strings.TrimPrefix(u.ActiveState.String(), "ACTIVE_STATE_"))
-	fmt.Printf("  Enabled:  %v\n", u.Enabled)
-	if len(u.ConfigFiles) > 0 {
-		fmt.Printf("  Configs:  %s\n", strings.Join(u.ConfigFiles, ", "))
+	if c.LastApplied != "" {
+		fmt.Printf("  Applied:  %s\n", c.LastApplied)
 	}
-	if u.Error != "" {
-		fmt.Printf("  Error:    %s\n", u.Error)
+	if c.LastError != "" {
+		fmt.Printf("  Error:    %s\n", c.LastError)
 	}
 	fmt.Println()
 }
 
-func parseTypeFilter(s string) pb.UnitType {
-	switch strings.ToLower(s) {
-	case "container":
-		return pb.UnitType_UNIT_TYPE_CONTAINER
-	case "volume":
-		return pb.UnitType_UNIT_TYPE_VOLUME
-	case "network":
-		return pb.UnitType_UNIT_TYPE_NETWORK
-	default:
-		return pb.UnitType_UNIT_TYPE_UNSPECIFIED
+func printVolumeStatus(v *pb.VolumeStatus) {
+	fmt.Printf("● %s\n", v.Name)
+	fmt.Printf("  Active:   %s\n", strings.TrimPrefix(v.ActiveState.String(), "ACTIVE_STATE_"))
+	fmt.Printf("  Enabled:  %v\n", v.Enabled)
+	if v.LastApplied != "" {
+		fmt.Printf("  Applied:  %s\n", v.LastApplied)
 	}
+	if v.LastError != "" {
+		fmt.Printf("  Error:    %s\n", v.LastError)
+	}
+	fmt.Println()
+}
+
+func printNetworkStatus(n *pb.NetworkStatus) {
+	fmt.Printf("● %s\n", n.Name)
+	fmt.Printf("  Active:   %s\n", strings.TrimPrefix(n.ActiveState.String(), "ACTIVE_STATE_"))
+	fmt.Printf("  Enabled:  %v\n", n.Enabled)
+	if n.LastApplied != "" {
+		fmt.Printf("  Applied:  %s\n", n.LastApplied)
+	}
+	if n.LastError != "" {
+		fmt.Printf("  Error:    %s\n", n.LastError)
+	}
+	fmt.Println()
 }

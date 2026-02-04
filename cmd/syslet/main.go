@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -75,11 +74,8 @@ func main() {
 		}
 	}()
 
-	// Run reconciliation loop
-	if err := d.Run(ctx); err != nil && err != context.Canceled {
-		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
-		os.Exit(1)
-	}
-
+	// Block until shutdown signal.
+	<-ctx.Done()
+	logger.Info("shutting down")
 	grpcServer.GracefulStop()
 }

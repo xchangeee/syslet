@@ -1,8 +1,9 @@
 // Package daemon implements the syslet daemon, which provides synchronous
 // CRUD operations for containers, volumes, and networks backed by systemd
-// quadlet files. Each Apply* method stores the spec, writes unit/config files,
-// reloads systemd, and starts/stops units inline—there is no background
-// reconciliation loop.
+// quadlet files. Each Apply* method stores the specs, computes a diff against
+// the installed state, and executes changes in the strict global order:
+// stop all changed → write configs → write unit files → single daemon-reload →
+// start all that need starting.
 package daemon
 
 import (
@@ -24,7 +25,6 @@ import (
 )
 
 const (
-	DefaultContainerUnitDirectory   = "/etc/containers/config"
 	DefaultContainerConfigDirectory = "/var/syslet/containers/config"
 )
 
@@ -38,15 +38,12 @@ type Daemon struct {
 	config  *ConfigFileManager
 
 	// Host directory referenced in Volume= entries for config mounts
-	containerUnitDirectory string
+	containerConfigDirectory string
 }
 
 // Config holds daemon configuration.
 type Config struct {
 	Clock quartz.Clock
-
-	// Directory where quadlet container unit files are stored
-	ContainerUnitDirectory string
 
 	// Directory where bind-mounted container config files are stored
 	ContainerConfigDirectory string
@@ -57,9 +54,6 @@ func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, st *store.Store, 
 	if dcfg.Clock == nil {
 		dcfg.Clock = quartz.NewReal()
 	}
-	if dcfg.ContainerUnitDirectory == "" {
-		dcfg.ContainerUnitDirectory = DefaultContainerUnitDirectory
-	}
 	if dcfg.ContainerConfigDirectory == "" {
 		dcfg.ContainerConfigDirectory = DefaultContainerConfigDirectory
 	}
@@ -68,12 +62,12 @@ func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, st *store.Store, 
 		dcfg.ContainerConfigDirectory,
 	)
 	return &Daemon{
-		clock:                  dcfg.Clock,
-		logger:                 logger,
-		store:                  st,
-		config:                 cfg,
-		systemd:                sd,
-		containerUnitDirectory: dcfg.ContainerUnitDirectory,
+		clock:                    dcfg.Clock,
+		logger:                   logger,
+		store:                    st,
+		config:                   cfg,
+		systemd:                  sd,
+		containerConfigDirectory: dcfg.ContainerConfigDirectory,
 	}
 }
 
@@ -81,126 +75,228 @@ func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, st *store.Store, 
 // Container operations
 // ---------------------------------------------------------------------------
 
-// ApplyContainer creates or updates a container. It writes the unit file and
-// config files to disk, reloads systemd, and starts/stops the container
-// according to the desired state. Returns whether anything changed and a
-// human-readable message describing what happened.
-func (d *Daemon) ApplyContainer(ctx context.Context, spec *pb.ContainerSpec) (bool, string, error) {
+// containerChange captures the diff for a single container and carries the
+// rendered content needed to apply it.
+type containerChange struct {
+	spec       *pb.ContainerSpec
+	fullName   string
+	opts       []*unit.UnitOption
+	cfgs       []ConfigFile
+	newContent string
+
+	isNew         bool
+	unitChanged   bool
+	configChanged bool
+	needsStop     bool
+	needsStart    bool
+
+	// Set when this change is rejected or errored during execution.
+	errored bool
+	message string
+}
+
+// ApplyContainers applies multiple container specs in a single batched
+// operation. Changes are executed in strict global order:
+//  1. Stop all containers whose unit or config changed (using OLD config)
+//  2. Write all config files
+//  3. Write all unit files
+//  4. Single daemon-reload (if any unit files changed)
+//  5. Start all containers that need starting
+func (d *Daemon) ApplyContainers(ctx context.Context, specs []*pb.ContainerSpec) ([]*pb.ApplyResult, error) {
+	// Phase 1: Diff — compute changes for every spec.
+	var changes []*containerChange
+	for _, spec := range specs {
+		c, err := d.diffContainer(ctx, spec)
+		if err != nil {
+			return nil, fmt.Errorf("diffing %s: %w", spec.Name, err)
+		}
+		changes = append(changes, c)
+	}
+
+	// Phase 2: Execute — strict global order.
+
+	// 2a. Stop all that need stopping.
+	for _, c := range changes {
+		if !c.needsStop {
+			continue
+		}
+		d.logger.Info("stopping container", "name", c.fullName)
+		if err := d.systemd.Container().Stop(ctx, c.fullName); err != nil {
+			d.logger.Error("failed to stop container", "name", c.fullName, "error", err)
+			c.errored = true
+			c.message = fmt.Sprintf("failed to stop: %v", err)
+		}
+	}
+
+	// 2b. Write config files.
+	for _, c := range changes {
+		if c.errored || !c.configChanged {
+			continue
+		}
+		for _, cf := range c.cfgs {
+			d.logger.Info("writing config", "container", c.fullName, "file", cf.Filename)
+			if err := d.config.Write(c.fullName, cf.Filename, cf.Content); err != nil {
+				d.logger.Error("failed to write config", "container", c.fullName, "file", cf.Filename, "error", err)
+			}
+		}
+	}
+
+	// 2c. Write unit files.
+	needReload := false
+	for _, c := range changes {
+		if c.errored || !c.unitChanged {
+			continue
+		}
+		d.logger.Info("installing unit file", "container", c.fullName)
+		if err := d.systemd.Container().InstallUnitFile(c.fullName, strings.NewReader(c.newContent)); err != nil {
+			d.logger.Error("failed to install unit file", "container", c.fullName, "error", err)
+			c.errored = true
+			c.message = fmt.Sprintf("failed to install unit file: %v", err)
+			continue
+		}
+		needReload = true
+	}
+
+	// 2d. Single daemon-reload.
+	if needReload {
+		d.logger.Info("daemon-reload")
+		if err := d.systemd.DaemonReload(ctx); err != nil {
+			d.logger.Error("daemon-reload failed", "error", err)
+		}
+	}
+
+	// 2e. Start all that need starting.
+	for _, c := range changes {
+		if c.errored || !c.needsStart {
+			continue
+		}
+		d.logger.Info("starting container", "name", c.fullName)
+		if err := d.systemd.Container().Start(ctx, c.fullName); err != nil {
+			d.logger.Error("failed to start container", "name", c.fullName, "error", err)
+			c.errored = true
+			c.message = fmt.Sprintf("failed to start: %v", err)
+		}
+	}
+
+	// Phase 3: Persist specs and build results.
+	now := d.clock.Now()
+	var results []*pb.ApplyResult
+	for _, c := range changes {
+		changed := c.unitChanged || c.configChanged || c.needsStart || c.needsStop
+		msg := c.message
+		if !c.errored && msg == "" {
+			msg = d.containerResultMessage(c)
+		}
+
+		if err := d.store.PutContainer(c.spec); err != nil {
+			d.logger.Error("failed to store spec", "name", c.spec.Name, "error", err)
+		}
+
+		errStr := ""
+		if c.errored {
+			errStr = c.message
+		}
+		if err := d.store.UpdateContainerStatus(c.spec.Name, errStr, now); err != nil {
+			d.logger.Error("failed to update status", "name", c.spec.Name, "error", err)
+		}
+
+		results = append(results, &pb.ApplyResult{
+			Name:    c.spec.Name,
+			Changed: changed,
+			Message: msg,
+		})
+	}
+	return results, nil
+}
+
+// diffContainer computes the diff for a single container spec against the
+// installed systemd state.
+func (d *Daemon) diffContainer(ctx context.Context, spec *pb.ContainerSpec) (*containerChange, error) {
 	fullName := spec.Name + ".container"
 
 	opts, cfgs, err := d.renderContainerSpec(spec)
 	if err != nil {
-		return false, "", fmt.Errorf("rendering spec: %w", err)
+		return nil, fmt.Errorf("rendering spec: %w", err)
 	}
 	newContent := unitContent(opts)
 
+	c := &containerChange{
+		spec:       spec,
+		fullName:   fullName,
+		opts:       opts,
+		cfgs:       cfgs,
+		newContent: newContent,
+	}
+
 	installed, err := d.systemd.Container().UnitFileExists(fullName)
 	if err != nil {
-		return false, "", err
+		return nil, err
 	}
 
 	if !installed {
-		// New container: write everything, reload, optionally start.
-		if err := d.writeConfigs(fullName, cfgs); err != nil {
-			return false, "", err
-		}
-		if err := d.systemd.Container().InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
-			return false, "", fmt.Errorf("installing unit file: %w", err)
-		}
-		if err := d.systemd.DaemonReload(ctx); err != nil {
-			return false, "", fmt.Errorf("daemon-reload: %w", err)
-		}
-
-		if err := d.store.PutContainer(spec); err != nil {
-			return false, "", fmt.Errorf("storing spec: %w", err)
-		}
-
-		msg := "created"
+		c.isNew = true
+		c.unitChanged = true
+		c.configChanged = len(cfgs) > 0
 		if spec.DesiredState == pb.DesiredState_DESIRED_STATE_RUNNING {
-			if err := d.systemd.Container().Start(ctx, fullName); err != nil {
-				d.store.UpdateContainerStatus(spec.Name, fmt.Sprintf("failed to start: %v", err), d.clock.Now()) //nolint:errcheck
-				return true, "created, failed to start: " + err.Error(), nil
-			}
-			msg = "created, started"
+			c.needsStart = true
 		}
-
-		d.store.UpdateContainerStatus(spec.Name, "", d.clock.Now()) //nolint:errcheck
-		return true, msg, nil
+		return c, nil
 	}
 
-	// Existing container: diff and apply changes.
+	// Unit exists — check for changes.
 	unitChanged, err := d.unitFileChanged(fullName, newContent)
 	if err != nil {
-		return false, "", err
+		return nil, err
 	}
+	c.unitChanged = unitChanged
+	c.configChanged = d.configsChanged(fullName, cfgs)
 
-	configChanged := d.configsChanged(fullName, cfgs)
-
-	// Check desired state vs runtime.
 	state, err := d.systemd.Container().RuntimeState(ctx, fullName)
 	if err != nil {
-		return false, "", err
+		return nil, err
 	}
 
-	needsStop := false
-	needsStart := false
-
-	if (unitChanged || configChanged) && (state.ActiveState == "active" || state.ActiveState == "activating") {
-		needsStop = true
+	// If unit or config changed and currently running, stop first.
+	if (c.unitChanged || c.configChanged) && (state.ActiveState == "active" || state.ActiveState == "activating") {
+		c.needsStop = true
 	}
 
 	switch spec.DesiredState {
 	case pb.DesiredState_DESIRED_STATE_RUNNING:
-		if state.ActiveState != "active" || needsStop {
-			needsStart = true
+		if state.ActiveState != "active" || c.needsStop {
+			c.needsStart = true
 		}
 	case pb.DesiredState_DESIRED_STATE_STOPPED:
 		if state.ActiveState == "active" || state.ActiveState == "activating" {
-			needsStop = true
+			c.needsStop = true
 		}
 	}
 
-	changed := unitChanged || configChanged || needsStart || needsStop
-	if !changed {
-		return false, "up to date", nil
-	}
+	return c, nil
+}
 
-	// Stop before update.
-	if needsStop {
-		if err := d.systemd.Container().Stop(ctx, fullName); err != nil {
-			d.store.UpdateContainerStatus(spec.Name, fmt.Sprintf("failed to stop: %v", err), d.clock.Now()) //nolint:errcheck
-			return false, "", fmt.Errorf("stopping container: %w", err)
-		}
+func (d *Daemon) containerResultMessage(c *containerChange) string {
+	var parts []string
+	if c.isNew {
+		parts = append(parts, "created")
 	}
-
-	if configChanged {
-		if err := d.writeConfigs(fullName, cfgs); err != nil {
-			return false, "", err
-		}
+	if c.unitChanged && !c.isNew {
+		parts = append(parts, "unit updated")
 	}
-
-	if unitChanged {
-		if err := d.systemd.Container().InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
-			return false, "", fmt.Errorf("installing unit file: %w", err)
-		}
-		if err := d.systemd.DaemonReload(ctx); err != nil {
-			return false, "", fmt.Errorf("daemon-reload: %w", err)
-		}
+	if c.configChanged {
+		parts = append(parts, "config updated")
 	}
-
-	if err := d.store.PutContainer(spec); err != nil {
-		return false, "", fmt.Errorf("storing spec: %w", err)
+	if c.needsStop && c.needsStart {
+		parts = append(parts, "restarted")
+	} else if c.needsStart {
+		parts = append(parts, "started")
+	} else if c.needsStop {
+		parts = append(parts, "stopped")
 	}
-
-	if needsStart {
-		if err := d.systemd.Container().Start(ctx, fullName); err != nil {
-			d.store.UpdateContainerStatus(spec.Name, fmt.Sprintf("failed to start: %v", err), d.clock.Now()) //nolint:errcheck
-			return true, "updated, failed to start: " + err.Error(), nil
-		}
+	if len(parts) == 0 {
+		return "up to date"
 	}
-
-	d.store.UpdateContainerStatus(spec.Name, "", d.clock.Now()) //nolint:errcheck
-	return true, buildMessage(unitChanged, configChanged, needsStop, needsStart), nil
+	return strings.Join(parts, ", ")
 }
 
 // GetContainer returns the status of a single container.
@@ -264,22 +360,18 @@ func (d *Daemon) ListContainers(ctx context.Context) ([]*pb.ContainerStatus, err
 func (d *Daemon) DeleteContainer(ctx context.Context, name string) error {
 	fullName := name + ".container"
 
-	// Stop if running.
 	if err := d.systemd.Container().Stop(ctx, fullName); err != nil {
 		d.logger.Warn("stop failed during delete", "container", name, "error", err)
 	}
-
 	if err := d.systemd.Container().RemoveUnitFile(fullName); err != nil {
 		return fmt.Errorf("removing unit file: %w", err)
 	}
 	if err := d.config.RemoveAll(fullName); err != nil {
 		d.logger.Warn("config cleanup failed during delete", "container", name, "error", err)
 	}
-
 	if err := d.systemd.DaemonReload(ctx); err != nil {
 		d.logger.Warn("daemon-reload failed during delete", "error", err)
 	}
-
 	return d.store.DeleteContainer(name)
 }
 
@@ -287,43 +379,60 @@ func (d *Daemon) DeleteContainer(ctx context.Context, name string) error {
 // Volume operations
 // ---------------------------------------------------------------------------
 
-// ApplyVolume creates a volume. Volumes are immutable after creation — if the
-// spec differs from the installed unit file, an error is returned.
-func (d *Daemon) ApplyVolume(ctx context.Context, spec *pb.VolumeSpec) (bool, string, error) {
-	fullName := spec.Name + ".volume"
+// ApplyVolumes applies multiple volume specs. Volumes are immutable after
+// creation — if a spec differs from the installed unit file, the result
+// contains an error. A single daemon-reload is issued if any new volumes
+// were created.
+func (d *Daemon) ApplyVolumes(ctx context.Context, specs []*pb.VolumeSpec) ([]*pb.ApplyResult, error) {
+	needReload := false
+	now := d.clock.Now()
+	var results []*pb.ApplyResult
 
-	opts := d.renderSimpleSpec(spec.Options)
-	newContent := unitContent(opts)
+	for _, spec := range specs {
+		fullName := spec.Name + ".volume"
+		opts := d.renderSimpleSpec(spec.Options)
+		newContent := unitContent(opts)
 
-	installed, err := d.systemd.Volume().UnitFileExists(fullName)
-	if err != nil {
-		return false, "", err
+		installed, err := d.systemd.Volume().UnitFileExists(fullName)
+		if err != nil {
+			return nil, fmt.Errorf("checking %s: %w", spec.Name, err)
+		}
+
+		if !installed {
+			if err := d.systemd.Volume().InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
+				return nil, fmt.Errorf("installing %s: %w", fullName, err)
+			}
+			needReload = true
+			if err := d.store.PutVolume(spec); err != nil {
+				return nil, fmt.Errorf("storing spec %s: %w", spec.Name, err)
+			}
+			d.store.UpdateVolumeStatus(spec.Name, "", now) //nolint:errcheck
+			results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: true, Message: "created"})
+			continue
+		}
+
+		// Existing volume: reject if changed.
+		changed, err := d.unitFileChangedVolume(fullName, newContent)
+		if err != nil {
+			return nil, fmt.Errorf("diffing %s: %w", spec.Name, err)
+		}
+		if changed {
+			msg := fmt.Sprintf("immutable volume %q cannot be modified after creation", spec.Name)
+			d.store.UpdateVolumeStatus(spec.Name, msg, now) //nolint:errcheck
+			results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: false, Message: msg})
+			continue
+		}
+
+		results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: false, Message: "up to date"})
 	}
 
-	if !installed {
-		if err := d.systemd.Volume().InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
-			return false, "", fmt.Errorf("installing unit file: %w", err)
-		}
+	if needReload {
 		if err := d.systemd.DaemonReload(ctx); err != nil {
-			return false, "", fmt.Errorf("daemon-reload: %w", err)
+			d.logger.Error("daemon-reload failed", "error", err)
 		}
-		if err := d.store.PutVolume(spec); err != nil {
-			return false, "", fmt.Errorf("storing spec: %w", err)
-		}
-		d.store.UpdateVolumeStatus(spec.Name, "", d.clock.Now()) //nolint:errcheck
-		return true, "created", nil
 	}
 
-	// Existing volume: check if content changed (immutable).
-	unitChanged, err := d.unitFileChangedVolume(fullName, newContent)
-	if err != nil {
-		return false, "", err
-	}
-	if unitChanged {
-		return false, "", fmt.Errorf("immutable volume %q cannot be modified after creation", spec.Name)
-	}
-
-	return false, "up to date", nil
+	return results, nil
 }
 
 // GetVolume returns the status of a single volume.
@@ -382,7 +491,6 @@ func (d *Daemon) ListVolumes(ctx context.Context) ([]*pb.VolumeStatus, error) {
 // DeleteVolume removes a volume unit file and its store entry.
 func (d *Daemon) DeleteVolume(ctx context.Context, name string) error {
 	fullName := name + ".volume"
-
 	if err := d.systemd.Volume().RemoveUnitFile(fullName); err != nil {
 		return fmt.Errorf("removing unit file: %w", err)
 	}
@@ -396,43 +504,60 @@ func (d *Daemon) DeleteVolume(ctx context.Context, name string) error {
 // Network operations
 // ---------------------------------------------------------------------------
 
-// ApplyNetwork creates a network. Networks are immutable after creation — if
-// the spec differs from the installed unit file, an error is returned.
-func (d *Daemon) ApplyNetwork(ctx context.Context, spec *pb.NetworkSpec) (bool, string, error) {
-	fullName := spec.Name + ".network"
+// ApplyNetworks applies multiple network specs. Networks are immutable after
+// creation — if a spec differs from the installed unit file, the result
+// contains an error. A single daemon-reload is issued if any new networks
+// were created.
+func (d *Daemon) ApplyNetworks(ctx context.Context, specs []*pb.NetworkSpec) ([]*pb.ApplyResult, error) {
+	needReload := false
+	now := d.clock.Now()
+	var results []*pb.ApplyResult
 
-	opts := d.renderSimpleSpec(spec.Options)
-	newContent := unitContent(opts)
+	for _, spec := range specs {
+		fullName := spec.Name + ".network"
+		opts := d.renderSimpleSpec(spec.Options)
+		newContent := unitContent(opts)
 
-	installed, err := d.systemd.Network().UnitFileExists(fullName)
-	if err != nil {
-		return false, "", err
+		installed, err := d.systemd.Network().UnitFileExists(fullName)
+		if err != nil {
+			return nil, fmt.Errorf("checking %s: %w", spec.Name, err)
+		}
+
+		if !installed {
+			if err := d.systemd.Network().InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
+				return nil, fmt.Errorf("installing %s: %w", fullName, err)
+			}
+			needReload = true
+			if err := d.store.PutNetwork(spec); err != nil {
+				return nil, fmt.Errorf("storing spec %s: %w", spec.Name, err)
+			}
+			d.store.UpdateNetworkStatus(spec.Name, "", now) //nolint:errcheck
+			results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: true, Message: "created"})
+			continue
+		}
+
+		// Existing network: reject if changed.
+		changed, err := d.unitFileChangedNetwork(fullName, newContent)
+		if err != nil {
+			return nil, fmt.Errorf("diffing %s: %w", spec.Name, err)
+		}
+		if changed {
+			msg := fmt.Sprintf("immutable network %q cannot be modified after creation", spec.Name)
+			d.store.UpdateNetworkStatus(spec.Name, msg, now) //nolint:errcheck
+			results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: false, Message: msg})
+			continue
+		}
+
+		results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: false, Message: "up to date"})
 	}
 
-	if !installed {
-		if err := d.systemd.Network().InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
-			return false, "", fmt.Errorf("installing unit file: %w", err)
-		}
+	if needReload {
 		if err := d.systemd.DaemonReload(ctx); err != nil {
-			return false, "", fmt.Errorf("daemon-reload: %w", err)
+			d.logger.Error("daemon-reload failed", "error", err)
 		}
-		if err := d.store.PutNetwork(spec); err != nil {
-			return false, "", fmt.Errorf("storing spec: %w", err)
-		}
-		d.store.UpdateNetworkStatus(spec.Name, "", d.clock.Now()) //nolint:errcheck
-		return true, "created", nil
 	}
 
-	// Existing network: check if content changed (immutable).
-	unitChanged, err := d.unitFileChangedNetwork(fullName, newContent)
-	if err != nil {
-		return false, "", err
-	}
-	if unitChanged {
-		return false, "", fmt.Errorf("immutable network %q cannot be modified after creation", spec.Name)
-	}
-
-	return false, "up to date", nil
+	return results, nil
 }
 
 // GetNetwork returns the status of a single network.
@@ -491,7 +616,6 @@ func (d *Daemon) ListNetworks(ctx context.Context) ([]*pb.NetworkStatus, error) 
 // DeleteNetwork removes a network unit file and its store entry.
 func (d *Daemon) DeleteNetwork(ctx context.Context, name string) error {
 	fullName := name + ".network"
-
 	if err := d.systemd.Network().RemoveUnitFile(fullName); err != nil {
 		return fmt.Errorf("removing unit file: %w", err)
 	}
@@ -528,7 +652,7 @@ func (d *Daemon) renderContainerSpec(spec *pb.ContainerSpec) ([]*unit.UnitOption
 		}
 		seen[basename] = true
 
-		hostPath := filepath.Join(d.containerUnitDirectory, spec.Name, basename)
+		hostPath := filepath.Join(d.containerConfigDirectory, spec.Name, basename)
 		volumeEntry := fmt.Sprintf("%s:%s:ro", hostPath, ce.TargetVolumePath)
 
 		opts = append(opts, &unit.UnitOption{
@@ -544,7 +668,6 @@ func (d *Daemon) renderContainerSpec(spec *pb.ContainerSpec) ([]*unit.UnitOption
 		})
 	}
 
-	// Auto-generate [Install] section for containers.
 	opts = append(opts, &unit.UnitOption{
 		Section: "Install",
 		Name:    "WantedBy",
@@ -616,27 +739,14 @@ func (d *Daemon) configsChanged(fullName string, cfgs []ConfigFile) bool {
 }
 
 // ---------------------------------------------------------------------------
-// Writing helpers
+// Shared helpers
 // ---------------------------------------------------------------------------
-
-func (d *Daemon) writeConfigs(fullName string, cfgs []ConfigFile) error {
-	for _, cf := range cfgs {
-		if err := d.config.Write(fullName, cf.Filename, cf.Content); err != nil {
-			return fmt.Errorf("writing config %s: %w", cf.Filename, err)
-		}
-	}
-	return nil
-}
 
 // unitContent serializes go-systemd options into INI-style unit file content.
 func unitContent(opts []*unit.UnitOption) string {
 	data, _ := io.ReadAll(unit.Serialize(opts))
 	return string(data)
 }
-
-// ---------------------------------------------------------------------------
-// Status helpers
-// ---------------------------------------------------------------------------
 
 func pbActiveState(s string) pb.ActiveState {
 	switch s {
@@ -653,25 +763,4 @@ func pbActiveState(s string) pb.ActiveState {
 	default:
 		return pb.ActiveState_ACTIVE_STATE_UNSPECIFIED
 	}
-}
-
-func buildMessage(unitChanged, configChanged, needsStop, needsStart bool) string {
-	var parts []string
-	if unitChanged {
-		parts = append(parts, "unit updated")
-	}
-	if configChanged {
-		parts = append(parts, "config updated")
-	}
-	if needsStop && needsStart {
-		parts = append(parts, "restarted")
-	} else if needsStart {
-		parts = append(parts, "started")
-	} else if needsStop {
-		parts = append(parts, "stopped")
-	}
-	if len(parts) == 0 {
-		return "up to date"
-	}
-	return strings.Join(parts, ", ")
 }

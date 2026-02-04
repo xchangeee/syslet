@@ -19,15 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SysletService_ApplyContainer_FullMethodName  = "/syslet.v1.SysletService/ApplyContainer"
+	SysletService_ApplyContainers_FullMethodName = "/syslet.v1.SysletService/ApplyContainers"
 	SysletService_GetContainer_FullMethodName    = "/syslet.v1.SysletService/GetContainer"
 	SysletService_ListContainers_FullMethodName  = "/syslet.v1.SysletService/ListContainers"
 	SysletService_DeleteContainer_FullMethodName = "/syslet.v1.SysletService/DeleteContainer"
-	SysletService_ApplyVolume_FullMethodName     = "/syslet.v1.SysletService/ApplyVolume"
+	SysletService_ApplyVolumes_FullMethodName    = "/syslet.v1.SysletService/ApplyVolumes"
 	SysletService_GetVolume_FullMethodName       = "/syslet.v1.SysletService/GetVolume"
 	SysletService_ListVolumes_FullMethodName     = "/syslet.v1.SysletService/ListVolumes"
 	SysletService_DeleteVolume_FullMethodName    = "/syslet.v1.SysletService/DeleteVolume"
-	SysletService_ApplyNetwork_FullMethodName    = "/syslet.v1.SysletService/ApplyNetwork"
+	SysletService_ApplyNetworks_FullMethodName   = "/syslet.v1.SysletService/ApplyNetworks"
 	SysletService_GetNetwork_FullMethodName      = "/syslet.v1.SysletService/GetNetwork"
 	SysletService_ListNetworks_FullMethodName    = "/syslet.v1.SysletService/ListNetworks"
 	SysletService_DeleteNetwork_FullMethodName   = "/syslet.v1.SysletService/DeleteNetwork"
@@ -39,17 +39,17 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SysletServiceClient interface {
 	// Container RPCs
-	ApplyContainer(ctx context.Context, in *ApplyContainerRequest, opts ...grpc.CallOption) (*ApplyContainerResponse, error)
+	ApplyContainers(ctx context.Context, in *ApplyContainersRequest, opts ...grpc.CallOption) (*ApplyContainersResponse, error)
 	GetContainer(ctx context.Context, in *GetContainerRequest, opts ...grpc.CallOption) (*GetContainerResponse, error)
 	ListContainers(ctx context.Context, in *ListContainersRequest, opts ...grpc.CallOption) (*ListContainersResponse, error)
 	DeleteContainer(ctx context.Context, in *DeleteContainerRequest, opts ...grpc.CallOption) (*DeleteContainerResponse, error)
 	// Volume RPCs
-	ApplyVolume(ctx context.Context, in *ApplyVolumeRequest, opts ...grpc.CallOption) (*ApplyVolumeResponse, error)
+	ApplyVolumes(ctx context.Context, in *ApplyVolumesRequest, opts ...grpc.CallOption) (*ApplyVolumesResponse, error)
 	GetVolume(ctx context.Context, in *GetVolumeRequest, opts ...grpc.CallOption) (*GetVolumeResponse, error)
 	ListVolumes(ctx context.Context, in *ListVolumesRequest, opts ...grpc.CallOption) (*ListVolumesResponse, error)
 	DeleteVolume(ctx context.Context, in *DeleteVolumeRequest, opts ...grpc.CallOption) (*DeleteVolumeResponse, error)
 	// Network RPCs
-	ApplyNetwork(ctx context.Context, in *ApplyNetworkRequest, opts ...grpc.CallOption) (*ApplyNetworkResponse, error)
+	ApplyNetworks(ctx context.Context, in *ApplyNetworksRequest, opts ...grpc.CallOption) (*ApplyNetworksResponse, error)
 	GetNetwork(ctx context.Context, in *GetNetworkRequest, opts ...grpc.CallOption) (*GetNetworkResponse, error)
 	ListNetworks(ctx context.Context, in *ListNetworksRequest, opts ...grpc.CallOption) (*ListNetworksResponse, error)
 	DeleteNetwork(ctx context.Context, in *DeleteNetworkRequest, opts ...grpc.CallOption) (*DeleteNetworkResponse, error)
@@ -65,10 +65,10 @@ func NewSysletServiceClient(cc grpc.ClientConnInterface) SysletServiceClient {
 	return &sysletServiceClient{cc}
 }
 
-func (c *sysletServiceClient) ApplyContainer(ctx context.Context, in *ApplyContainerRequest, opts ...grpc.CallOption) (*ApplyContainerResponse, error) {
+func (c *sysletServiceClient) ApplyContainers(ctx context.Context, in *ApplyContainersRequest, opts ...grpc.CallOption) (*ApplyContainersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApplyContainerResponse)
-	err := c.cc.Invoke(ctx, SysletService_ApplyContainer_FullMethodName, in, out, cOpts...)
+	out := new(ApplyContainersResponse)
+	err := c.cc.Invoke(ctx, SysletService_ApplyContainers_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -105,10 +105,10 @@ func (c *sysletServiceClient) DeleteContainer(ctx context.Context, in *DeleteCon
 	return out, nil
 }
 
-func (c *sysletServiceClient) ApplyVolume(ctx context.Context, in *ApplyVolumeRequest, opts ...grpc.CallOption) (*ApplyVolumeResponse, error) {
+func (c *sysletServiceClient) ApplyVolumes(ctx context.Context, in *ApplyVolumesRequest, opts ...grpc.CallOption) (*ApplyVolumesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApplyVolumeResponse)
-	err := c.cc.Invoke(ctx, SysletService_ApplyVolume_FullMethodName, in, out, cOpts...)
+	out := new(ApplyVolumesResponse)
+	err := c.cc.Invoke(ctx, SysletService_ApplyVolumes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -145,10 +145,10 @@ func (c *sysletServiceClient) DeleteVolume(ctx context.Context, in *DeleteVolume
 	return out, nil
 }
 
-func (c *sysletServiceClient) ApplyNetwork(ctx context.Context, in *ApplyNetworkRequest, opts ...grpc.CallOption) (*ApplyNetworkResponse, error) {
+func (c *sysletServiceClient) ApplyNetworks(ctx context.Context, in *ApplyNetworksRequest, opts ...grpc.CallOption) (*ApplyNetworksResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApplyNetworkResponse)
-	err := c.cc.Invoke(ctx, SysletService_ApplyNetwork_FullMethodName, in, out, cOpts...)
+	out := new(ApplyNetworksResponse)
+	err := c.cc.Invoke(ctx, SysletService_ApplyNetworks_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -209,17 +209,17 @@ type SysletService_LogsClient = grpc.ServerStreamingClient[LogEntry]
 // for forward compatibility.
 type SysletServiceServer interface {
 	// Container RPCs
-	ApplyContainer(context.Context, *ApplyContainerRequest) (*ApplyContainerResponse, error)
+	ApplyContainers(context.Context, *ApplyContainersRequest) (*ApplyContainersResponse, error)
 	GetContainer(context.Context, *GetContainerRequest) (*GetContainerResponse, error)
 	ListContainers(context.Context, *ListContainersRequest) (*ListContainersResponse, error)
 	DeleteContainer(context.Context, *DeleteContainerRequest) (*DeleteContainerResponse, error)
 	// Volume RPCs
-	ApplyVolume(context.Context, *ApplyVolumeRequest) (*ApplyVolumeResponse, error)
+	ApplyVolumes(context.Context, *ApplyVolumesRequest) (*ApplyVolumesResponse, error)
 	GetVolume(context.Context, *GetVolumeRequest) (*GetVolumeResponse, error)
 	ListVolumes(context.Context, *ListVolumesRequest) (*ListVolumesResponse, error)
 	DeleteVolume(context.Context, *DeleteVolumeRequest) (*DeleteVolumeResponse, error)
 	// Network RPCs
-	ApplyNetwork(context.Context, *ApplyNetworkRequest) (*ApplyNetworkResponse, error)
+	ApplyNetworks(context.Context, *ApplyNetworksRequest) (*ApplyNetworksResponse, error)
 	GetNetwork(context.Context, *GetNetworkRequest) (*GetNetworkResponse, error)
 	ListNetworks(context.Context, *ListNetworksRequest) (*ListNetworksResponse, error)
 	DeleteNetwork(context.Context, *DeleteNetworkRequest) (*DeleteNetworkResponse, error)
@@ -235,8 +235,8 @@ type SysletServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSysletServiceServer struct{}
 
-func (UnimplementedSysletServiceServer) ApplyContainer(context.Context, *ApplyContainerRequest) (*ApplyContainerResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ApplyContainer not implemented")
+func (UnimplementedSysletServiceServer) ApplyContainers(context.Context, *ApplyContainersRequest) (*ApplyContainersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyContainers not implemented")
 }
 func (UnimplementedSysletServiceServer) GetContainer(context.Context, *GetContainerRequest) (*GetContainerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetContainer not implemented")
@@ -247,8 +247,8 @@ func (UnimplementedSysletServiceServer) ListContainers(context.Context, *ListCon
 func (UnimplementedSysletServiceServer) DeleteContainer(context.Context, *DeleteContainerRequest) (*DeleteContainerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteContainer not implemented")
 }
-func (UnimplementedSysletServiceServer) ApplyVolume(context.Context, *ApplyVolumeRequest) (*ApplyVolumeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ApplyVolume not implemented")
+func (UnimplementedSysletServiceServer) ApplyVolumes(context.Context, *ApplyVolumesRequest) (*ApplyVolumesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyVolumes not implemented")
 }
 func (UnimplementedSysletServiceServer) GetVolume(context.Context, *GetVolumeRequest) (*GetVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetVolume not implemented")
@@ -259,8 +259,8 @@ func (UnimplementedSysletServiceServer) ListVolumes(context.Context, *ListVolume
 func (UnimplementedSysletServiceServer) DeleteVolume(context.Context, *DeleteVolumeRequest) (*DeleteVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteVolume not implemented")
 }
-func (UnimplementedSysletServiceServer) ApplyNetwork(context.Context, *ApplyNetworkRequest) (*ApplyNetworkResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ApplyNetwork not implemented")
+func (UnimplementedSysletServiceServer) ApplyNetworks(context.Context, *ApplyNetworksRequest) (*ApplyNetworksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyNetworks not implemented")
 }
 func (UnimplementedSysletServiceServer) GetNetwork(context.Context, *GetNetworkRequest) (*GetNetworkResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetNetwork not implemented")
@@ -295,20 +295,20 @@ func RegisterSysletServiceServer(s grpc.ServiceRegistrar, srv SysletServiceServe
 	s.RegisterService(&SysletService_ServiceDesc, srv)
 }
 
-func _SysletService_ApplyContainer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ApplyContainerRequest)
+func _SysletService_ApplyContainers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyContainersRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SysletServiceServer).ApplyContainer(ctx, in)
+		return srv.(SysletServiceServer).ApplyContainers(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SysletService_ApplyContainer_FullMethodName,
+		FullMethod: SysletService_ApplyContainers_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SysletServiceServer).ApplyContainer(ctx, req.(*ApplyContainerRequest))
+		return srv.(SysletServiceServer).ApplyContainers(ctx, req.(*ApplyContainersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -367,20 +367,20 @@ func _SysletService_DeleteContainer_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SysletService_ApplyVolume_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ApplyVolumeRequest)
+func _SysletService_ApplyVolumes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyVolumesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SysletServiceServer).ApplyVolume(ctx, in)
+		return srv.(SysletServiceServer).ApplyVolumes(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SysletService_ApplyVolume_FullMethodName,
+		FullMethod: SysletService_ApplyVolumes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SysletServiceServer).ApplyVolume(ctx, req.(*ApplyVolumeRequest))
+		return srv.(SysletServiceServer).ApplyVolumes(ctx, req.(*ApplyVolumesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -439,20 +439,20 @@ func _SysletService_DeleteVolume_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SysletService_ApplyNetwork_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ApplyNetworkRequest)
+func _SysletService_ApplyNetworks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyNetworksRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SysletServiceServer).ApplyNetwork(ctx, in)
+		return srv.(SysletServiceServer).ApplyNetworks(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SysletService_ApplyNetwork_FullMethodName,
+		FullMethod: SysletService_ApplyNetworks_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SysletServiceServer).ApplyNetwork(ctx, req.(*ApplyNetworkRequest))
+		return srv.(SysletServiceServer).ApplyNetworks(ctx, req.(*ApplyNetworksRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -530,8 +530,8 @@ var SysletService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*SysletServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "ApplyContainer",
-			Handler:    _SysletService_ApplyContainer_Handler,
+			MethodName: "ApplyContainers",
+			Handler:    _SysletService_ApplyContainers_Handler,
 		},
 		{
 			MethodName: "GetContainer",
@@ -546,8 +546,8 @@ var SysletService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SysletService_DeleteContainer_Handler,
 		},
 		{
-			MethodName: "ApplyVolume",
-			Handler:    _SysletService_ApplyVolume_Handler,
+			MethodName: "ApplyVolumes",
+			Handler:    _SysletService_ApplyVolumes_Handler,
 		},
 		{
 			MethodName: "GetVolume",
@@ -562,8 +562,8 @@ var SysletService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SysletService_DeleteVolume_Handler,
 		},
 		{
-			MethodName: "ApplyNetwork",
-			Handler:    _SysletService_ApplyNetwork_Handler,
+			MethodName: "ApplyNetworks",
+			Handler:    _SysletService_ApplyNetworks_Handler,
 		},
 		{
 			MethodName: "GetNetwork",

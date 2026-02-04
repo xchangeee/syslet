@@ -30,46 +30,141 @@ func NewServer(d *daemon.Daemon, logger *slog.Logger) *Server {
 	}
 }
 
-func (s *Server) Apply(ctx context.Context, req *pb.ApplyRequest) (*pb.ApplyResponse, error) {
-	if err := s.daemon.ApplySpecs(ctx, req.Specs); err != nil {
-		return nil, status.Errorf(codes.Internal, "apply specs: %v", err)
+// ---------------------------------------------------------------------------
+// Container RPCs
+// ---------------------------------------------------------------------------
+
+func (s *Server) ApplyContainers(ctx context.Context, req *pb.ApplyContainersRequest) (*pb.ApplyContainersResponse, error) {
+	if len(req.Specs) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "at least one spec is required")
 	}
-
-	return &pb.ApplyResponse{}, nil
-}
-
-func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusResponse, error) {
-	resp := &pb.StatusResponse{}
-
-	if req.UnitName != "" {
-		us, err := s.daemon.GetStatus(ctx, req.UnitName)
-		if err != nil {
-			return nil, status.Errorf(codes.NotFound, "unit %s: %v", req.UnitName, err)
-		}
-		resp.Units = append(resp.Units, us)
-		return resp, nil
-	}
-
-	// All units
-	units, err := s.daemon.ListUnits(ctx, pb.UnitType_UNIT_TYPE_UNSPECIFIED)
+	results, err := s.daemon.ApplyContainers(ctx, req.Specs)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "listing units: %v", err)
+		return nil, status.Errorf(codes.Internal, "apply containers: %v", err)
 	}
-	resp.Units = units
-
-	return resp, nil
+	return &pb.ApplyContainersResponse{Results: results}, nil
 }
 
-func (s *Server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListResponse, error) {
-	units, err := s.daemon.ListUnits(ctx, req.TypeFilter)
+func (s *Server) GetContainer(ctx context.Context, req *pb.GetContainerRequest) (*pb.GetContainerResponse, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	cs, err := s.daemon.GetContainer(ctx, req.Name)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "listing units: %v", err)
+		return nil, status.Errorf(codes.NotFound, "container %s: %v", req.Name, err)
 	}
-
-	return &pb.ListResponse{
-		Units: units,
-	}, nil
+	return &pb.GetContainerResponse{Container: cs}, nil
 }
+
+func (s *Server) ListContainers(ctx context.Context, req *pb.ListContainersRequest) (*pb.ListContainersResponse, error) {
+	containers, err := s.daemon.ListContainers(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "listing containers: %v", err)
+	}
+	return &pb.ListContainersResponse{Containers: containers}, nil
+}
+
+func (s *Server) DeleteContainer(ctx context.Context, req *pb.DeleteContainerRequest) (*pb.DeleteContainerResponse, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	if err := s.daemon.DeleteContainer(ctx, req.Name); err != nil {
+		return nil, status.Errorf(codes.Internal, "delete container: %v", err)
+	}
+	return &pb.DeleteContainerResponse{Message: "deleted " + req.Name}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Volume RPCs
+// ---------------------------------------------------------------------------
+
+func (s *Server) ApplyVolumes(ctx context.Context, req *pb.ApplyVolumesRequest) (*pb.ApplyVolumesResponse, error) {
+	if len(req.Specs) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "at least one spec is required")
+	}
+	results, err := s.daemon.ApplyVolumes(ctx, req.Specs)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "apply volumes: %v", err)
+	}
+	return &pb.ApplyVolumesResponse{Results: results}, nil
+}
+
+func (s *Server) GetVolume(ctx context.Context, req *pb.GetVolumeRequest) (*pb.GetVolumeResponse, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	vs, err := s.daemon.GetVolume(ctx, req.Name)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "volume %s: %v", req.Name, err)
+	}
+	return &pb.GetVolumeResponse{Volume: vs}, nil
+}
+
+func (s *Server) ListVolumes(ctx context.Context, req *pb.ListVolumesRequest) (*pb.ListVolumesResponse, error) {
+	volumes, err := s.daemon.ListVolumes(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "listing volumes: %v", err)
+	}
+	return &pb.ListVolumesResponse{Volumes: volumes}, nil
+}
+
+func (s *Server) DeleteVolume(ctx context.Context, req *pb.DeleteVolumeRequest) (*pb.DeleteVolumeResponse, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	if err := s.daemon.DeleteVolume(ctx, req.Name); err != nil {
+		return nil, status.Errorf(codes.Internal, "delete volume: %v", err)
+	}
+	return &pb.DeleteVolumeResponse{Message: "deleted " + req.Name}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Network RPCs
+// ---------------------------------------------------------------------------
+
+func (s *Server) ApplyNetworks(ctx context.Context, req *pb.ApplyNetworksRequest) (*pb.ApplyNetworksResponse, error) {
+	if len(req.Specs) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "at least one spec is required")
+	}
+	results, err := s.daemon.ApplyNetworks(ctx, req.Specs)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "apply networks: %v", err)
+	}
+	return &pb.ApplyNetworksResponse{Results: results}, nil
+}
+
+func (s *Server) GetNetwork(ctx context.Context, req *pb.GetNetworkRequest) (*pb.GetNetworkResponse, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	ns, err := s.daemon.GetNetwork(ctx, req.Name)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "network %s: %v", req.Name, err)
+	}
+	return &pb.GetNetworkResponse{Network: ns}, nil
+}
+
+func (s *Server) ListNetworks(ctx context.Context, req *pb.ListNetworksRequest) (*pb.ListNetworksResponse, error) {
+	networks, err := s.daemon.ListNetworks(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "listing networks: %v", err)
+	}
+	return &pb.ListNetworksResponse{Networks: networks}, nil
+}
+
+func (s *Server) DeleteNetwork(ctx context.Context, req *pb.DeleteNetworkRequest) (*pb.DeleteNetworkResponse, error) {
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	if err := s.daemon.DeleteNetwork(ctx, req.Name); err != nil {
+		return nil, status.Errorf(codes.Internal, "delete network: %v", err)
+	}
+	return &pb.DeleteNetworkResponse{Message: "deleted " + req.Name}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Logs
+// ---------------------------------------------------------------------------
 
 func (s *Server) Logs(req *pb.LogsRequest, stream pb.SysletService_LogsServer) error {
 	if req.UnitName == "" {
@@ -111,22 +206,4 @@ func (s *Server) Logs(req *pb.LogsRequest, stream pb.SysletService_LogsServer) e
 	}
 
 	return nil
-}
-
-func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error) {
-	if req.UnitName == "" {
-		return nil, status.Error(codes.InvalidArgument, "unit_name is required")
-	}
-
-	if err := s.daemon.DeleteUnit(ctx, req.UnitName); err != nil {
-		// Check if it's a not found error
-		if err.Error() == "unit \""+req.UnitName+"\" not found" {
-			return nil, status.Errorf(codes.NotFound, "%v", err)
-		}
-		return nil, status.Errorf(codes.Internal, "%v", err)
-	}
-
-	return &pb.DeleteResponse{
-		Message: "deleted " + req.UnitName,
-	}, nil
 }

@@ -240,6 +240,67 @@ func (x *ConfigEntry) GetTargetVolumePath() string {
 	return ""
 }
 
+// Per-unit result returned from Apply RPCs.
+type ApplyResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Changed       bool                   `protobuf:"varint,2,opt,name=changed,proto3" json:"changed,omitempty"`
+	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApplyResult) Reset() {
+	*x = ApplyResult{}
+	mi := &file_proto_syslet_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyResult) ProtoMessage() {}
+
+func (x *ApplyResult) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_syslet_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyResult.ProtoReflect.Descriptor instead.
+func (*ApplyResult) Descriptor() ([]byte, []int) {
+	return file_proto_syslet_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ApplyResult) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ApplyResult) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+func (x *ApplyResult) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 type ContainerSpec struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -252,7 +313,7 @@ type ContainerSpec struct {
 
 func (x *ContainerSpec) Reset() {
 	*x = ContainerSpec{}
-	mi := &file_proto_syslet_proto_msgTypes[2]
+	mi := &file_proto_syslet_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -264,7 +325,7 @@ func (x *ContainerSpec) String() string {
 func (*ContainerSpec) ProtoMessage() {}
 
 func (x *ContainerSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[2]
+	mi := &file_proto_syslet_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -277,7 +338,7 @@ func (x *ContainerSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerSpec.ProtoReflect.Descriptor instead.
 func (*ContainerSpec) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{2}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ContainerSpec) GetName() string {
@@ -318,7 +379,7 @@ type VolumeSpec struct {
 
 func (x *VolumeSpec) Reset() {
 	*x = VolumeSpec{}
-	mi := &file_proto_syslet_proto_msgTypes[3]
+	mi := &file_proto_syslet_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -330,7 +391,7 @@ func (x *VolumeSpec) String() string {
 func (*VolumeSpec) ProtoMessage() {}
 
 func (x *VolumeSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[3]
+	mi := &file_proto_syslet_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -343,7 +404,7 @@ func (x *VolumeSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeSpec.ProtoReflect.Descriptor instead.
 func (*VolumeSpec) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{3}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *VolumeSpec) GetName() string {
@@ -370,7 +431,7 @@ type NetworkSpec struct {
 
 func (x *NetworkSpec) Reset() {
 	*x = NetworkSpec{}
-	mi := &file_proto_syslet_proto_msgTypes[4]
+	mi := &file_proto_syslet_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -382,7 +443,7 @@ func (x *NetworkSpec) String() string {
 func (*NetworkSpec) ProtoMessage() {}
 
 func (x *NetworkSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[4]
+	mi := &file_proto_syslet_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -395,7 +456,7 @@ func (x *NetworkSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkSpec.ProtoReflect.Descriptor instead.
 func (*NetworkSpec) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{4}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *NetworkSpec) GetName() string {
@@ -412,28 +473,28 @@ func (x *NetworkSpec) GetOptions() []*UnitOption {
 	return nil
 }
 
-type ApplyContainerRequest struct {
+type ApplyContainersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Spec          *ContainerSpec         `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	Specs         []*ContainerSpec       `protobuf:"bytes,1,rep,name=specs,proto3" json:"specs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ApplyContainerRequest) Reset() {
-	*x = ApplyContainerRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[5]
+func (x *ApplyContainersRequest) Reset() {
+	*x = ApplyContainersRequest{}
+	mi := &file_proto_syslet_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ApplyContainerRequest) String() string {
+func (x *ApplyContainersRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ApplyContainerRequest) ProtoMessage() {}
+func (*ApplyContainersRequest) ProtoMessage() {}
 
-func (x *ApplyContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[5]
+func (x *ApplyContainersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_syslet_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -444,42 +505,40 @@ func (x *ApplyContainerRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ApplyContainerRequest.ProtoReflect.Descriptor instead.
-func (*ApplyContainerRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{5}
+// Deprecated: Use ApplyContainersRequest.ProtoReflect.Descriptor instead.
+func (*ApplyContainersRequest) Descriptor() ([]byte, []int) {
+	return file_proto_syslet_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ApplyContainerRequest) GetSpec() *ContainerSpec {
+func (x *ApplyContainersRequest) GetSpecs() []*ContainerSpec {
 	if x != nil {
-		return x.Spec
+		return x.Specs
 	}
 	return nil
 }
 
-type ApplyContainerResponse struct {
+type ApplyContainersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Changed       bool                   `protobuf:"varint,2,opt,name=changed,proto3" json:"changed,omitempty"`
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	Results       []*ApplyResult         `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ApplyContainerResponse) Reset() {
-	*x = ApplyContainerResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[6]
+func (x *ApplyContainersResponse) Reset() {
+	*x = ApplyContainersResponse{}
+	mi := &file_proto_syslet_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ApplyContainerResponse) String() string {
+func (x *ApplyContainersResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ApplyContainerResponse) ProtoMessage() {}
+func (*ApplyContainersResponse) ProtoMessage() {}
 
-func (x *ApplyContainerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[6]
+func (x *ApplyContainersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_syslet_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -490,30 +549,16 @@ func (x *ApplyContainerResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ApplyContainerResponse.ProtoReflect.Descriptor instead.
-func (*ApplyContainerResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{6}
+// Deprecated: Use ApplyContainersResponse.ProtoReflect.Descriptor instead.
+func (*ApplyContainersResponse) Descriptor() ([]byte, []int) {
+	return file_proto_syslet_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *ApplyContainerResponse) GetName() string {
+func (x *ApplyContainersResponse) GetResults() []*ApplyResult {
 	if x != nil {
-		return x.Name
+		return x.Results
 	}
-	return ""
-}
-
-func (x *ApplyContainerResponse) GetChanged() bool {
-	if x != nil {
-		return x.Changed
-	}
-	return false
-}
-
-func (x *ApplyContainerResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
+	return nil
 }
 
 type GetContainerRequest struct {
@@ -525,7 +570,7 @@ type GetContainerRequest struct {
 
 func (x *GetContainerRequest) Reset() {
 	*x = GetContainerRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[7]
+	mi := &file_proto_syslet_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -537,7 +582,7 @@ func (x *GetContainerRequest) String() string {
 func (*GetContainerRequest) ProtoMessage() {}
 
 func (x *GetContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[7]
+	mi := &file_proto_syslet_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -550,7 +595,7 @@ func (x *GetContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetContainerRequest.ProtoReflect.Descriptor instead.
 func (*GetContainerRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{7}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetContainerRequest) GetName() string {
@@ -569,7 +614,7 @@ type GetContainerResponse struct {
 
 func (x *GetContainerResponse) Reset() {
 	*x = GetContainerResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[8]
+	mi := &file_proto_syslet_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -581,7 +626,7 @@ func (x *GetContainerResponse) String() string {
 func (*GetContainerResponse) ProtoMessage() {}
 
 func (x *GetContainerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[8]
+	mi := &file_proto_syslet_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -594,7 +639,7 @@ func (x *GetContainerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetContainerResponse.ProtoReflect.Descriptor instead.
 func (*GetContainerResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{8}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetContainerResponse) GetContainer() *ContainerStatus {
@@ -612,7 +657,7 @@ type ListContainersRequest struct {
 
 func (x *ListContainersRequest) Reset() {
 	*x = ListContainersRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[9]
+	mi := &file_proto_syslet_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -624,7 +669,7 @@ func (x *ListContainersRequest) String() string {
 func (*ListContainersRequest) ProtoMessage() {}
 
 func (x *ListContainersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[9]
+	mi := &file_proto_syslet_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,7 +682,7 @@ func (x *ListContainersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListContainersRequest.ProtoReflect.Descriptor instead.
 func (*ListContainersRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{9}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{10}
 }
 
 type ListContainersResponse struct {
@@ -649,7 +694,7 @@ type ListContainersResponse struct {
 
 func (x *ListContainersResponse) Reset() {
 	*x = ListContainersResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[10]
+	mi := &file_proto_syslet_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -661,7 +706,7 @@ func (x *ListContainersResponse) String() string {
 func (*ListContainersResponse) ProtoMessage() {}
 
 func (x *ListContainersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[10]
+	mi := &file_proto_syslet_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -674,7 +719,7 @@ func (x *ListContainersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListContainersResponse.ProtoReflect.Descriptor instead.
 func (*ListContainersResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{10}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListContainersResponse) GetContainers() []*ContainerStatus {
@@ -693,7 +738,7 @@ type DeleteContainerRequest struct {
 
 func (x *DeleteContainerRequest) Reset() {
 	*x = DeleteContainerRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[11]
+	mi := &file_proto_syslet_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -705,7 +750,7 @@ func (x *DeleteContainerRequest) String() string {
 func (*DeleteContainerRequest) ProtoMessage() {}
 
 func (x *DeleteContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[11]
+	mi := &file_proto_syslet_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -718,7 +763,7 @@ func (x *DeleteContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteContainerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteContainerRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{11}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DeleteContainerRequest) GetName() string {
@@ -737,7 +782,7 @@ type DeleteContainerResponse struct {
 
 func (x *DeleteContainerResponse) Reset() {
 	*x = DeleteContainerResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[12]
+	mi := &file_proto_syslet_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -749,7 +794,7 @@ func (x *DeleteContainerResponse) String() string {
 func (*DeleteContainerResponse) ProtoMessage() {}
 
 func (x *DeleteContainerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[12]
+	mi := &file_proto_syslet_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -762,7 +807,7 @@ func (x *DeleteContainerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteContainerResponse.ProtoReflect.Descriptor instead.
 func (*DeleteContainerResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{12}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteContainerResponse) GetMessage() string {
@@ -772,28 +817,28 @@ func (x *DeleteContainerResponse) GetMessage() string {
 	return ""
 }
 
-type ApplyVolumeRequest struct {
+type ApplyVolumesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Spec          *VolumeSpec            `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	Specs         []*VolumeSpec          `protobuf:"bytes,1,rep,name=specs,proto3" json:"specs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ApplyVolumeRequest) Reset() {
-	*x = ApplyVolumeRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[13]
+func (x *ApplyVolumesRequest) Reset() {
+	*x = ApplyVolumesRequest{}
+	mi := &file_proto_syslet_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ApplyVolumeRequest) String() string {
+func (x *ApplyVolumesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ApplyVolumeRequest) ProtoMessage() {}
+func (*ApplyVolumesRequest) ProtoMessage() {}
 
-func (x *ApplyVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[13]
+func (x *ApplyVolumesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_syslet_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,42 +849,40 @@ func (x *ApplyVolumeRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ApplyVolumeRequest.ProtoReflect.Descriptor instead.
-func (*ApplyVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{13}
+// Deprecated: Use ApplyVolumesRequest.ProtoReflect.Descriptor instead.
+func (*ApplyVolumesRequest) Descriptor() ([]byte, []int) {
+	return file_proto_syslet_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *ApplyVolumeRequest) GetSpec() *VolumeSpec {
+func (x *ApplyVolumesRequest) GetSpecs() []*VolumeSpec {
 	if x != nil {
-		return x.Spec
+		return x.Specs
 	}
 	return nil
 }
 
-type ApplyVolumeResponse struct {
+type ApplyVolumesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Changed       bool                   `protobuf:"varint,2,opt,name=changed,proto3" json:"changed,omitempty"`
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	Results       []*ApplyResult         `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ApplyVolumeResponse) Reset() {
-	*x = ApplyVolumeResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[14]
+func (x *ApplyVolumesResponse) Reset() {
+	*x = ApplyVolumesResponse{}
+	mi := &file_proto_syslet_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ApplyVolumeResponse) String() string {
+func (x *ApplyVolumesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ApplyVolumeResponse) ProtoMessage() {}
+func (*ApplyVolumesResponse) ProtoMessage() {}
 
-func (x *ApplyVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[14]
+func (x *ApplyVolumesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_syslet_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -850,30 +893,16 @@ func (x *ApplyVolumeResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ApplyVolumeResponse.ProtoReflect.Descriptor instead.
-func (*ApplyVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{14}
+// Deprecated: Use ApplyVolumesResponse.ProtoReflect.Descriptor instead.
+func (*ApplyVolumesResponse) Descriptor() ([]byte, []int) {
+	return file_proto_syslet_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *ApplyVolumeResponse) GetName() string {
+func (x *ApplyVolumesResponse) GetResults() []*ApplyResult {
 	if x != nil {
-		return x.Name
+		return x.Results
 	}
-	return ""
-}
-
-func (x *ApplyVolumeResponse) GetChanged() bool {
-	if x != nil {
-		return x.Changed
-	}
-	return false
-}
-
-func (x *ApplyVolumeResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
+	return nil
 }
 
 type GetVolumeRequest struct {
@@ -885,7 +914,7 @@ type GetVolumeRequest struct {
 
 func (x *GetVolumeRequest) Reset() {
 	*x = GetVolumeRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[15]
+	mi := &file_proto_syslet_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -897,7 +926,7 @@ func (x *GetVolumeRequest) String() string {
 func (*GetVolumeRequest) ProtoMessage() {}
 
 func (x *GetVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[15]
+	mi := &file_proto_syslet_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -910,7 +939,7 @@ func (x *GetVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVolumeRequest.ProtoReflect.Descriptor instead.
 func (*GetVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{15}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetVolumeRequest) GetName() string {
@@ -929,7 +958,7 @@ type GetVolumeResponse struct {
 
 func (x *GetVolumeResponse) Reset() {
 	*x = GetVolumeResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[16]
+	mi := &file_proto_syslet_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -941,7 +970,7 @@ func (x *GetVolumeResponse) String() string {
 func (*GetVolumeResponse) ProtoMessage() {}
 
 func (x *GetVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[16]
+	mi := &file_proto_syslet_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -954,7 +983,7 @@ func (x *GetVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVolumeResponse.ProtoReflect.Descriptor instead.
 func (*GetVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{16}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetVolumeResponse) GetVolume() *VolumeStatus {
@@ -972,7 +1001,7 @@ type ListVolumesRequest struct {
 
 func (x *ListVolumesRequest) Reset() {
 	*x = ListVolumesRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[17]
+	mi := &file_proto_syslet_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -984,7 +1013,7 @@ func (x *ListVolumesRequest) String() string {
 func (*ListVolumesRequest) ProtoMessage() {}
 
 func (x *ListVolumesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[17]
+	mi := &file_proto_syslet_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -997,7 +1026,7 @@ func (x *ListVolumesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVolumesRequest.ProtoReflect.Descriptor instead.
 func (*ListVolumesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{17}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{18}
 }
 
 type ListVolumesResponse struct {
@@ -1009,7 +1038,7 @@ type ListVolumesResponse struct {
 
 func (x *ListVolumesResponse) Reset() {
 	*x = ListVolumesResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[18]
+	mi := &file_proto_syslet_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1021,7 +1050,7 @@ func (x *ListVolumesResponse) String() string {
 func (*ListVolumesResponse) ProtoMessage() {}
 
 func (x *ListVolumesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[18]
+	mi := &file_proto_syslet_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1034,7 +1063,7 @@ func (x *ListVolumesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVolumesResponse.ProtoReflect.Descriptor instead.
 func (*ListVolumesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{18}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListVolumesResponse) GetVolumes() []*VolumeStatus {
@@ -1053,7 +1082,7 @@ type DeleteVolumeRequest struct {
 
 func (x *DeleteVolumeRequest) Reset() {
 	*x = DeleteVolumeRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[19]
+	mi := &file_proto_syslet_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1065,7 +1094,7 @@ func (x *DeleteVolumeRequest) String() string {
 func (*DeleteVolumeRequest) ProtoMessage() {}
 
 func (x *DeleteVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[19]
+	mi := &file_proto_syslet_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1078,7 +1107,7 @@ func (x *DeleteVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVolumeRequest.ProtoReflect.Descriptor instead.
 func (*DeleteVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{19}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DeleteVolumeRequest) GetName() string {
@@ -1097,7 +1126,7 @@ type DeleteVolumeResponse struct {
 
 func (x *DeleteVolumeResponse) Reset() {
 	*x = DeleteVolumeResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[20]
+	mi := &file_proto_syslet_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1109,7 +1138,7 @@ func (x *DeleteVolumeResponse) String() string {
 func (*DeleteVolumeResponse) ProtoMessage() {}
 
 func (x *DeleteVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[20]
+	mi := &file_proto_syslet_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1122,7 +1151,7 @@ func (x *DeleteVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVolumeResponse.ProtoReflect.Descriptor instead.
 func (*DeleteVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{20}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *DeleteVolumeResponse) GetMessage() string {
@@ -1132,28 +1161,28 @@ func (x *DeleteVolumeResponse) GetMessage() string {
 	return ""
 }
 
-type ApplyNetworkRequest struct {
+type ApplyNetworksRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Spec          *NetworkSpec           `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	Specs         []*NetworkSpec         `protobuf:"bytes,1,rep,name=specs,proto3" json:"specs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ApplyNetworkRequest) Reset() {
-	*x = ApplyNetworkRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[21]
+func (x *ApplyNetworksRequest) Reset() {
+	*x = ApplyNetworksRequest{}
+	mi := &file_proto_syslet_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ApplyNetworkRequest) String() string {
+func (x *ApplyNetworksRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ApplyNetworkRequest) ProtoMessage() {}
+func (*ApplyNetworksRequest) ProtoMessage() {}
 
-func (x *ApplyNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[21]
+func (x *ApplyNetworksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_syslet_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1164,42 +1193,40 @@ func (x *ApplyNetworkRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ApplyNetworkRequest.ProtoReflect.Descriptor instead.
-func (*ApplyNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{21}
+// Deprecated: Use ApplyNetworksRequest.ProtoReflect.Descriptor instead.
+func (*ApplyNetworksRequest) Descriptor() ([]byte, []int) {
+	return file_proto_syslet_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *ApplyNetworkRequest) GetSpec() *NetworkSpec {
+func (x *ApplyNetworksRequest) GetSpecs() []*NetworkSpec {
 	if x != nil {
-		return x.Spec
+		return x.Specs
 	}
 	return nil
 }
 
-type ApplyNetworkResponse struct {
+type ApplyNetworksResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Changed       bool                   `protobuf:"varint,2,opt,name=changed,proto3" json:"changed,omitempty"`
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	Results       []*ApplyResult         `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ApplyNetworkResponse) Reset() {
-	*x = ApplyNetworkResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[22]
+func (x *ApplyNetworksResponse) Reset() {
+	*x = ApplyNetworksResponse{}
+	mi := &file_proto_syslet_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ApplyNetworkResponse) String() string {
+func (x *ApplyNetworksResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ApplyNetworkResponse) ProtoMessage() {}
+func (*ApplyNetworksResponse) ProtoMessage() {}
 
-func (x *ApplyNetworkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[22]
+func (x *ApplyNetworksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_syslet_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1210,30 +1237,16 @@ func (x *ApplyNetworkResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ApplyNetworkResponse.ProtoReflect.Descriptor instead.
-func (*ApplyNetworkResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{22}
+// Deprecated: Use ApplyNetworksResponse.ProtoReflect.Descriptor instead.
+func (*ApplyNetworksResponse) Descriptor() ([]byte, []int) {
+	return file_proto_syslet_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *ApplyNetworkResponse) GetName() string {
+func (x *ApplyNetworksResponse) GetResults() []*ApplyResult {
 	if x != nil {
-		return x.Name
+		return x.Results
 	}
-	return ""
-}
-
-func (x *ApplyNetworkResponse) GetChanged() bool {
-	if x != nil {
-		return x.Changed
-	}
-	return false
-}
-
-func (x *ApplyNetworkResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
+	return nil
 }
 
 type GetNetworkRequest struct {
@@ -1245,7 +1258,7 @@ type GetNetworkRequest struct {
 
 func (x *GetNetworkRequest) Reset() {
 	*x = GetNetworkRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[23]
+	mi := &file_proto_syslet_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1257,7 +1270,7 @@ func (x *GetNetworkRequest) String() string {
 func (*GetNetworkRequest) ProtoMessage() {}
 
 func (x *GetNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[23]
+	mi := &file_proto_syslet_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1270,7 +1283,7 @@ func (x *GetNetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNetworkRequest.ProtoReflect.Descriptor instead.
 func (*GetNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{23}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetNetworkRequest) GetName() string {
@@ -1289,7 +1302,7 @@ type GetNetworkResponse struct {
 
 func (x *GetNetworkResponse) Reset() {
 	*x = GetNetworkResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[24]
+	mi := &file_proto_syslet_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1301,7 +1314,7 @@ func (x *GetNetworkResponse) String() string {
 func (*GetNetworkResponse) ProtoMessage() {}
 
 func (x *GetNetworkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[24]
+	mi := &file_proto_syslet_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1314,7 +1327,7 @@ func (x *GetNetworkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNetworkResponse.ProtoReflect.Descriptor instead.
 func (*GetNetworkResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{24}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetNetworkResponse) GetNetwork() *NetworkStatus {
@@ -1332,7 +1345,7 @@ type ListNetworksRequest struct {
 
 func (x *ListNetworksRequest) Reset() {
 	*x = ListNetworksRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[25]
+	mi := &file_proto_syslet_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1344,7 +1357,7 @@ func (x *ListNetworksRequest) String() string {
 func (*ListNetworksRequest) ProtoMessage() {}
 
 func (x *ListNetworksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[25]
+	mi := &file_proto_syslet_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1357,7 +1370,7 @@ func (x *ListNetworksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNetworksRequest.ProtoReflect.Descriptor instead.
 func (*ListNetworksRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{25}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{26}
 }
 
 type ListNetworksResponse struct {
@@ -1369,7 +1382,7 @@ type ListNetworksResponse struct {
 
 func (x *ListNetworksResponse) Reset() {
 	*x = ListNetworksResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[26]
+	mi := &file_proto_syslet_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1381,7 +1394,7 @@ func (x *ListNetworksResponse) String() string {
 func (*ListNetworksResponse) ProtoMessage() {}
 
 func (x *ListNetworksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[26]
+	mi := &file_proto_syslet_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1394,7 +1407,7 @@ func (x *ListNetworksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNetworksResponse.ProtoReflect.Descriptor instead.
 func (*ListNetworksResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{26}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListNetworksResponse) GetNetworks() []*NetworkStatus {
@@ -1413,7 +1426,7 @@ type DeleteNetworkRequest struct {
 
 func (x *DeleteNetworkRequest) Reset() {
 	*x = DeleteNetworkRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[27]
+	mi := &file_proto_syslet_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1425,7 +1438,7 @@ func (x *DeleteNetworkRequest) String() string {
 func (*DeleteNetworkRequest) ProtoMessage() {}
 
 func (x *DeleteNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[27]
+	mi := &file_proto_syslet_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1438,7 +1451,7 @@ func (x *DeleteNetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNetworkRequest.ProtoReflect.Descriptor instead.
 func (*DeleteNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{27}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *DeleteNetworkRequest) GetName() string {
@@ -1457,7 +1470,7 @@ type DeleteNetworkResponse struct {
 
 func (x *DeleteNetworkResponse) Reset() {
 	*x = DeleteNetworkResponse{}
-	mi := &file_proto_syslet_proto_msgTypes[28]
+	mi := &file_proto_syslet_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1469,7 +1482,7 @@ func (x *DeleteNetworkResponse) String() string {
 func (*DeleteNetworkResponse) ProtoMessage() {}
 
 func (x *DeleteNetworkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[28]
+	mi := &file_proto_syslet_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1482,7 +1495,7 @@ func (x *DeleteNetworkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNetworkResponse.ProtoReflect.Descriptor instead.
 func (*DeleteNetworkResponse) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{28}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeleteNetworkResponse) GetMessage() string {
@@ -1507,7 +1520,7 @@ type ContainerStatus struct {
 
 func (x *ContainerStatus) Reset() {
 	*x = ContainerStatus{}
-	mi := &file_proto_syslet_proto_msgTypes[29]
+	mi := &file_proto_syslet_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1519,7 +1532,7 @@ func (x *ContainerStatus) String() string {
 func (*ContainerStatus) ProtoMessage() {}
 
 func (x *ContainerStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[29]
+	mi := &file_proto_syslet_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1532,7 +1545,7 @@ func (x *ContainerStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerStatus.ProtoReflect.Descriptor instead.
 func (*ContainerStatus) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{29}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ContainerStatus) GetName() string {
@@ -1597,7 +1610,7 @@ type VolumeStatus struct {
 
 func (x *VolumeStatus) Reset() {
 	*x = VolumeStatus{}
-	mi := &file_proto_syslet_proto_msgTypes[30]
+	mi := &file_proto_syslet_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1609,7 +1622,7 @@ func (x *VolumeStatus) String() string {
 func (*VolumeStatus) ProtoMessage() {}
 
 func (x *VolumeStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[30]
+	mi := &file_proto_syslet_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1622,7 +1635,7 @@ func (x *VolumeStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeStatus.ProtoReflect.Descriptor instead.
 func (*VolumeStatus) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{30}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *VolumeStatus) GetName() string {
@@ -1673,7 +1686,7 @@ type NetworkStatus struct {
 
 func (x *NetworkStatus) Reset() {
 	*x = NetworkStatus{}
-	mi := &file_proto_syslet_proto_msgTypes[31]
+	mi := &file_proto_syslet_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1685,7 +1698,7 @@ func (x *NetworkStatus) String() string {
 func (*NetworkStatus) ProtoMessage() {}
 
 func (x *NetworkStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[31]
+	mi := &file_proto_syslet_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1698,7 +1711,7 @@ func (x *NetworkStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkStatus.ProtoReflect.Descriptor instead.
 func (*NetworkStatus) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{31}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *NetworkStatus) GetName() string {
@@ -1747,7 +1760,7 @@ type LogsRequest struct {
 
 func (x *LogsRequest) Reset() {
 	*x = LogsRequest{}
-	mi := &file_proto_syslet_proto_msgTypes[32]
+	mi := &file_proto_syslet_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1759,7 +1772,7 @@ func (x *LogsRequest) String() string {
 func (*LogsRequest) ProtoMessage() {}
 
 func (x *LogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[32]
+	mi := &file_proto_syslet_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1772,7 +1785,7 @@ func (x *LogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogsRequest.ProtoReflect.Descriptor instead.
 func (*LogsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{32}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *LogsRequest) GetUnitName() string {
@@ -1807,7 +1820,7 @@ type LogEntry struct {
 
 func (x *LogEntry) Reset() {
 	*x = LogEntry{}
-	mi := &file_proto_syslet_proto_msgTypes[33]
+	mi := &file_proto_syslet_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1819,7 +1832,7 @@ func (x *LogEntry) String() string {
 func (*LogEntry) ProtoMessage() {}
 
 func (x *LogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_syslet_proto_msgTypes[33]
+	mi := &file_proto_syslet_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1832,7 +1845,7 @@ func (x *LogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return file_proto_syslet_proto_rawDescGZIP(), []int{33}
+	return file_proto_syslet_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *LogEntry) GetTimestamp() string {
@@ -1868,7 +1881,11 @@ const file_proto_syslet_proto_rawDesc = "" +
 	"\x05value\x18\x03 \x01(\tR\x05value\"U\n" +
 	"\vConfigEntry\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12,\n" +
-	"\x12target_volume_path\x18\x02 \x01(\tR\x10targetVolumePath\"\xc4\x01\n" +
+	"\x12target_volume_path\x18\x02 \x01(\tR\x10targetVolumePath\"U\n" +
+	"\vApplyResult\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\achanged\x18\x02 \x01(\bR\achanged\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"\xc4\x01\n" +
 	"\rContainerSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
 	"\rdesired_state\x18\x02 \x01(\x0e2\x17.syslet.v1.DesiredStateR\fdesiredState\x12/\n" +
@@ -1880,13 +1897,11 @@ const file_proto_syslet_proto_rawDesc = "" +
 	"\aoptions\x18\x02 \x03(\v2\x15.syslet.v1.UnitOptionR\aoptions\"R\n" +
 	"\vNetworkSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
-	"\aoptions\x18\x02 \x03(\v2\x15.syslet.v1.UnitOptionR\aoptions\"E\n" +
-	"\x15ApplyContainerRequest\x12,\n" +
-	"\x04spec\x18\x01 \x01(\v2\x18.syslet.v1.ContainerSpecR\x04spec\"`\n" +
-	"\x16ApplyContainerResponse\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\achanged\x18\x02 \x01(\bR\achanged\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\")\n" +
+	"\aoptions\x18\x02 \x03(\v2\x15.syslet.v1.UnitOptionR\aoptions\"H\n" +
+	"\x16ApplyContainersRequest\x12.\n" +
+	"\x05specs\x18\x01 \x03(\v2\x18.syslet.v1.ContainerSpecR\x05specs\"K\n" +
+	"\x17ApplyContainersResponse\x120\n" +
+	"\aresults\x18\x01 \x03(\v2\x16.syslet.v1.ApplyResultR\aresults\")\n" +
 	"\x13GetContainerRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"P\n" +
 	"\x14GetContainerResponse\x128\n" +
@@ -1899,13 +1914,11 @@ const file_proto_syslet_proto_rawDesc = "" +
 	"\x16DeleteContainerRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"3\n" +
 	"\x17DeleteContainerResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"?\n" +
-	"\x12ApplyVolumeRequest\x12)\n" +
-	"\x04spec\x18\x01 \x01(\v2\x15.syslet.v1.VolumeSpecR\x04spec\"]\n" +
-	"\x13ApplyVolumeResponse\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\achanged\x18\x02 \x01(\bR\achanged\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"&\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"B\n" +
+	"\x13ApplyVolumesRequest\x12+\n" +
+	"\x05specs\x18\x01 \x03(\v2\x15.syslet.v1.VolumeSpecR\x05specs\"H\n" +
+	"\x14ApplyVolumesResponse\x120\n" +
+	"\aresults\x18\x01 \x03(\v2\x16.syslet.v1.ApplyResultR\aresults\"&\n" +
 	"\x10GetVolumeRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"D\n" +
 	"\x11GetVolumeResponse\x12/\n" +
@@ -1916,13 +1929,11 @@ const file_proto_syslet_proto_rawDesc = "" +
 	"\x13DeleteVolumeRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"0\n" +
 	"\x14DeleteVolumeResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"A\n" +
-	"\x13ApplyNetworkRequest\x12*\n" +
-	"\x04spec\x18\x01 \x01(\v2\x16.syslet.v1.NetworkSpecR\x04spec\"^\n" +
-	"\x14ApplyNetworkResponse\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\achanged\x18\x02 \x01(\bR\achanged\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"'\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"D\n" +
+	"\x14ApplyNetworksRequest\x12,\n" +
+	"\x05specs\x18\x01 \x03(\v2\x16.syslet.v1.NetworkSpecR\x05specs\"I\n" +
+	"\x15ApplyNetworksResponse\x120\n" +
+	"\aresults\x18\x01 \x03(\v2\x16.syslet.v1.ApplyResultR\aresults\"'\n" +
 	"\x11GetNetworkRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"H\n" +
 	"\x12GetNetworkResponse\x122\n" +
@@ -1975,17 +1986,17 @@ const file_proto_syslet_proto_rawDesc = "" +
 	"\x15ACTIVE_STATE_INACTIVE\x10\x02\x12\x17\n" +
 	"\x13ACTIVE_STATE_FAILED\x10\x03\x12\x1b\n" +
 	"\x17ACTIVE_STATE_ACTIVATING\x10\x04\x12\x1d\n" +
-	"\x19ACTIVE_STATE_DEACTIVATING\x10\x052\x95\b\n" +
-	"\rSysletService\x12U\n" +
-	"\x0eApplyContainer\x12 .syslet.v1.ApplyContainerRequest\x1a!.syslet.v1.ApplyContainerResponse\x12O\n" +
+	"\x19ACTIVE_STATE_DEACTIVATING\x10\x052\x9e\b\n" +
+	"\rSysletService\x12X\n" +
+	"\x0fApplyContainers\x12!.syslet.v1.ApplyContainersRequest\x1a\".syslet.v1.ApplyContainersResponse\x12O\n" +
 	"\fGetContainer\x12\x1e.syslet.v1.GetContainerRequest\x1a\x1f.syslet.v1.GetContainerResponse\x12U\n" +
 	"\x0eListContainers\x12 .syslet.v1.ListContainersRequest\x1a!.syslet.v1.ListContainersResponse\x12X\n" +
-	"\x0fDeleteContainer\x12!.syslet.v1.DeleteContainerRequest\x1a\".syslet.v1.DeleteContainerResponse\x12L\n" +
-	"\vApplyVolume\x12\x1d.syslet.v1.ApplyVolumeRequest\x1a\x1e.syslet.v1.ApplyVolumeResponse\x12F\n" +
+	"\x0fDeleteContainer\x12!.syslet.v1.DeleteContainerRequest\x1a\".syslet.v1.DeleteContainerResponse\x12O\n" +
+	"\fApplyVolumes\x12\x1e.syslet.v1.ApplyVolumesRequest\x1a\x1f.syslet.v1.ApplyVolumesResponse\x12F\n" +
 	"\tGetVolume\x12\x1b.syslet.v1.GetVolumeRequest\x1a\x1c.syslet.v1.GetVolumeResponse\x12L\n" +
 	"\vListVolumes\x12\x1d.syslet.v1.ListVolumesRequest\x1a\x1e.syslet.v1.ListVolumesResponse\x12O\n" +
-	"\fDeleteVolume\x12\x1e.syslet.v1.DeleteVolumeRequest\x1a\x1f.syslet.v1.DeleteVolumeResponse\x12O\n" +
-	"\fApplyNetwork\x12\x1e.syslet.v1.ApplyNetworkRequest\x1a\x1f.syslet.v1.ApplyNetworkResponse\x12I\n" +
+	"\fDeleteVolume\x12\x1e.syslet.v1.DeleteVolumeRequest\x1a\x1f.syslet.v1.DeleteVolumeResponse\x12R\n" +
+	"\rApplyNetworks\x12\x1f.syslet.v1.ApplyNetworksRequest\x1a .syslet.v1.ApplyNetworksResponse\x12I\n" +
 	"\n" +
 	"GetNetwork\x12\x1c.syslet.v1.GetNetworkRequest\x1a\x1d.syslet.v1.GetNetworkResponse\x12O\n" +
 	"\fListNetworks\x12\x1e.syslet.v1.ListNetworksRequest\x1a\x1f.syslet.v1.ListNetworksResponse\x12R\n" +
@@ -2005,44 +2016,45 @@ func file_proto_syslet_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_syslet_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_proto_syslet_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_proto_syslet_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_proto_syslet_proto_goTypes = []any{
 	(DesiredState)(0),               // 0: syslet.v1.DesiredState
 	(ActiveState)(0),                // 1: syslet.v1.ActiveState
 	(*UnitOption)(nil),              // 2: syslet.v1.UnitOption
 	(*ConfigEntry)(nil),             // 3: syslet.v1.ConfigEntry
-	(*ContainerSpec)(nil),           // 4: syslet.v1.ContainerSpec
-	(*VolumeSpec)(nil),              // 5: syslet.v1.VolumeSpec
-	(*NetworkSpec)(nil),             // 6: syslet.v1.NetworkSpec
-	(*ApplyContainerRequest)(nil),   // 7: syslet.v1.ApplyContainerRequest
-	(*ApplyContainerResponse)(nil),  // 8: syslet.v1.ApplyContainerResponse
-	(*GetContainerRequest)(nil),     // 9: syslet.v1.GetContainerRequest
-	(*GetContainerResponse)(nil),    // 10: syslet.v1.GetContainerResponse
-	(*ListContainersRequest)(nil),   // 11: syslet.v1.ListContainersRequest
-	(*ListContainersResponse)(nil),  // 12: syslet.v1.ListContainersResponse
-	(*DeleteContainerRequest)(nil),  // 13: syslet.v1.DeleteContainerRequest
-	(*DeleteContainerResponse)(nil), // 14: syslet.v1.DeleteContainerResponse
-	(*ApplyVolumeRequest)(nil),      // 15: syslet.v1.ApplyVolumeRequest
-	(*ApplyVolumeResponse)(nil),     // 16: syslet.v1.ApplyVolumeResponse
-	(*GetVolumeRequest)(nil),        // 17: syslet.v1.GetVolumeRequest
-	(*GetVolumeResponse)(nil),       // 18: syslet.v1.GetVolumeResponse
-	(*ListVolumesRequest)(nil),      // 19: syslet.v1.ListVolumesRequest
-	(*ListVolumesResponse)(nil),     // 20: syslet.v1.ListVolumesResponse
-	(*DeleteVolumeRequest)(nil),     // 21: syslet.v1.DeleteVolumeRequest
-	(*DeleteVolumeResponse)(nil),    // 22: syslet.v1.DeleteVolumeResponse
-	(*ApplyNetworkRequest)(nil),     // 23: syslet.v1.ApplyNetworkRequest
-	(*ApplyNetworkResponse)(nil),    // 24: syslet.v1.ApplyNetworkResponse
-	(*GetNetworkRequest)(nil),       // 25: syslet.v1.GetNetworkRequest
-	(*GetNetworkResponse)(nil),      // 26: syslet.v1.GetNetworkResponse
-	(*ListNetworksRequest)(nil),     // 27: syslet.v1.ListNetworksRequest
-	(*ListNetworksResponse)(nil),    // 28: syslet.v1.ListNetworksResponse
-	(*DeleteNetworkRequest)(nil),    // 29: syslet.v1.DeleteNetworkRequest
-	(*DeleteNetworkResponse)(nil),   // 30: syslet.v1.DeleteNetworkResponse
-	(*ContainerStatus)(nil),         // 31: syslet.v1.ContainerStatus
-	(*VolumeStatus)(nil),            // 32: syslet.v1.VolumeStatus
-	(*NetworkStatus)(nil),           // 33: syslet.v1.NetworkStatus
-	(*LogsRequest)(nil),             // 34: syslet.v1.LogsRequest
-	(*LogEntry)(nil),                // 35: syslet.v1.LogEntry
+	(*ApplyResult)(nil),             // 4: syslet.v1.ApplyResult
+	(*ContainerSpec)(nil),           // 5: syslet.v1.ContainerSpec
+	(*VolumeSpec)(nil),              // 6: syslet.v1.VolumeSpec
+	(*NetworkSpec)(nil),             // 7: syslet.v1.NetworkSpec
+	(*ApplyContainersRequest)(nil),  // 8: syslet.v1.ApplyContainersRequest
+	(*ApplyContainersResponse)(nil), // 9: syslet.v1.ApplyContainersResponse
+	(*GetContainerRequest)(nil),     // 10: syslet.v1.GetContainerRequest
+	(*GetContainerResponse)(nil),    // 11: syslet.v1.GetContainerResponse
+	(*ListContainersRequest)(nil),   // 12: syslet.v1.ListContainersRequest
+	(*ListContainersResponse)(nil),  // 13: syslet.v1.ListContainersResponse
+	(*DeleteContainerRequest)(nil),  // 14: syslet.v1.DeleteContainerRequest
+	(*DeleteContainerResponse)(nil), // 15: syslet.v1.DeleteContainerResponse
+	(*ApplyVolumesRequest)(nil),     // 16: syslet.v1.ApplyVolumesRequest
+	(*ApplyVolumesResponse)(nil),    // 17: syslet.v1.ApplyVolumesResponse
+	(*GetVolumeRequest)(nil),        // 18: syslet.v1.GetVolumeRequest
+	(*GetVolumeResponse)(nil),       // 19: syslet.v1.GetVolumeResponse
+	(*ListVolumesRequest)(nil),      // 20: syslet.v1.ListVolumesRequest
+	(*ListVolumesResponse)(nil),     // 21: syslet.v1.ListVolumesResponse
+	(*DeleteVolumeRequest)(nil),     // 22: syslet.v1.DeleteVolumeRequest
+	(*DeleteVolumeResponse)(nil),    // 23: syslet.v1.DeleteVolumeResponse
+	(*ApplyNetworksRequest)(nil),    // 24: syslet.v1.ApplyNetworksRequest
+	(*ApplyNetworksResponse)(nil),   // 25: syslet.v1.ApplyNetworksResponse
+	(*GetNetworkRequest)(nil),       // 26: syslet.v1.GetNetworkRequest
+	(*GetNetworkResponse)(nil),      // 27: syslet.v1.GetNetworkResponse
+	(*ListNetworksRequest)(nil),     // 28: syslet.v1.ListNetworksRequest
+	(*ListNetworksResponse)(nil),    // 29: syslet.v1.ListNetworksResponse
+	(*DeleteNetworkRequest)(nil),    // 30: syslet.v1.DeleteNetworkRequest
+	(*DeleteNetworkResponse)(nil),   // 31: syslet.v1.DeleteNetworkResponse
+	(*ContainerStatus)(nil),         // 32: syslet.v1.ContainerStatus
+	(*VolumeStatus)(nil),            // 33: syslet.v1.VolumeStatus
+	(*NetworkStatus)(nil),           // 34: syslet.v1.NetworkStatus
+	(*LogsRequest)(nil),             // 35: syslet.v1.LogsRequest
+	(*LogEntry)(nil),                // 36: syslet.v1.LogEntry
 }
 var file_proto_syslet_proto_depIdxs = []int32{
 	0,  // 0: syslet.v1.ContainerSpec.desired_state:type_name -> syslet.v1.DesiredState
@@ -2050,50 +2062,53 @@ var file_proto_syslet_proto_depIdxs = []int32{
 	3,  // 2: syslet.v1.ContainerSpec.configs:type_name -> syslet.v1.ConfigEntry
 	2,  // 3: syslet.v1.VolumeSpec.options:type_name -> syslet.v1.UnitOption
 	2,  // 4: syslet.v1.NetworkSpec.options:type_name -> syslet.v1.UnitOption
-	4,  // 5: syslet.v1.ApplyContainerRequest.spec:type_name -> syslet.v1.ContainerSpec
-	31, // 6: syslet.v1.GetContainerResponse.container:type_name -> syslet.v1.ContainerStatus
-	31, // 7: syslet.v1.ListContainersResponse.containers:type_name -> syslet.v1.ContainerStatus
-	5,  // 8: syslet.v1.ApplyVolumeRequest.spec:type_name -> syslet.v1.VolumeSpec
-	32, // 9: syslet.v1.GetVolumeResponse.volume:type_name -> syslet.v1.VolumeStatus
-	32, // 10: syslet.v1.ListVolumesResponse.volumes:type_name -> syslet.v1.VolumeStatus
-	6,  // 11: syslet.v1.ApplyNetworkRequest.spec:type_name -> syslet.v1.NetworkSpec
-	33, // 12: syslet.v1.GetNetworkResponse.network:type_name -> syslet.v1.NetworkStatus
-	33, // 13: syslet.v1.ListNetworksResponse.networks:type_name -> syslet.v1.NetworkStatus
-	0,  // 14: syslet.v1.ContainerStatus.desired_state:type_name -> syslet.v1.DesiredState
-	1,  // 15: syslet.v1.ContainerStatus.active_state:type_name -> syslet.v1.ActiveState
-	1,  // 16: syslet.v1.VolumeStatus.active_state:type_name -> syslet.v1.ActiveState
-	1,  // 17: syslet.v1.NetworkStatus.active_state:type_name -> syslet.v1.ActiveState
-	7,  // 18: syslet.v1.SysletService.ApplyContainer:input_type -> syslet.v1.ApplyContainerRequest
-	9,  // 19: syslet.v1.SysletService.GetContainer:input_type -> syslet.v1.GetContainerRequest
-	11, // 20: syslet.v1.SysletService.ListContainers:input_type -> syslet.v1.ListContainersRequest
-	13, // 21: syslet.v1.SysletService.DeleteContainer:input_type -> syslet.v1.DeleteContainerRequest
-	15, // 22: syslet.v1.SysletService.ApplyVolume:input_type -> syslet.v1.ApplyVolumeRequest
-	17, // 23: syslet.v1.SysletService.GetVolume:input_type -> syslet.v1.GetVolumeRequest
-	19, // 24: syslet.v1.SysletService.ListVolumes:input_type -> syslet.v1.ListVolumesRequest
-	21, // 25: syslet.v1.SysletService.DeleteVolume:input_type -> syslet.v1.DeleteVolumeRequest
-	23, // 26: syslet.v1.SysletService.ApplyNetwork:input_type -> syslet.v1.ApplyNetworkRequest
-	25, // 27: syslet.v1.SysletService.GetNetwork:input_type -> syslet.v1.GetNetworkRequest
-	27, // 28: syslet.v1.SysletService.ListNetworks:input_type -> syslet.v1.ListNetworksRequest
-	29, // 29: syslet.v1.SysletService.DeleteNetwork:input_type -> syslet.v1.DeleteNetworkRequest
-	34, // 30: syslet.v1.SysletService.Logs:input_type -> syslet.v1.LogsRequest
-	8,  // 31: syslet.v1.SysletService.ApplyContainer:output_type -> syslet.v1.ApplyContainerResponse
-	10, // 32: syslet.v1.SysletService.GetContainer:output_type -> syslet.v1.GetContainerResponse
-	12, // 33: syslet.v1.SysletService.ListContainers:output_type -> syslet.v1.ListContainersResponse
-	14, // 34: syslet.v1.SysletService.DeleteContainer:output_type -> syslet.v1.DeleteContainerResponse
-	16, // 35: syslet.v1.SysletService.ApplyVolume:output_type -> syslet.v1.ApplyVolumeResponse
-	18, // 36: syslet.v1.SysletService.GetVolume:output_type -> syslet.v1.GetVolumeResponse
-	20, // 37: syslet.v1.SysletService.ListVolumes:output_type -> syslet.v1.ListVolumesResponse
-	22, // 38: syslet.v1.SysletService.DeleteVolume:output_type -> syslet.v1.DeleteVolumeResponse
-	24, // 39: syslet.v1.SysletService.ApplyNetwork:output_type -> syslet.v1.ApplyNetworkResponse
-	26, // 40: syslet.v1.SysletService.GetNetwork:output_type -> syslet.v1.GetNetworkResponse
-	28, // 41: syslet.v1.SysletService.ListNetworks:output_type -> syslet.v1.ListNetworksResponse
-	30, // 42: syslet.v1.SysletService.DeleteNetwork:output_type -> syslet.v1.DeleteNetworkResponse
-	35, // 43: syslet.v1.SysletService.Logs:output_type -> syslet.v1.LogEntry
-	31, // [31:44] is the sub-list for method output_type
-	18, // [18:31] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	5,  // 5: syslet.v1.ApplyContainersRequest.specs:type_name -> syslet.v1.ContainerSpec
+	4,  // 6: syslet.v1.ApplyContainersResponse.results:type_name -> syslet.v1.ApplyResult
+	32, // 7: syslet.v1.GetContainerResponse.container:type_name -> syslet.v1.ContainerStatus
+	32, // 8: syslet.v1.ListContainersResponse.containers:type_name -> syslet.v1.ContainerStatus
+	6,  // 9: syslet.v1.ApplyVolumesRequest.specs:type_name -> syslet.v1.VolumeSpec
+	4,  // 10: syslet.v1.ApplyVolumesResponse.results:type_name -> syslet.v1.ApplyResult
+	33, // 11: syslet.v1.GetVolumeResponse.volume:type_name -> syslet.v1.VolumeStatus
+	33, // 12: syslet.v1.ListVolumesResponse.volumes:type_name -> syslet.v1.VolumeStatus
+	7,  // 13: syslet.v1.ApplyNetworksRequest.specs:type_name -> syslet.v1.NetworkSpec
+	4,  // 14: syslet.v1.ApplyNetworksResponse.results:type_name -> syslet.v1.ApplyResult
+	34, // 15: syslet.v1.GetNetworkResponse.network:type_name -> syslet.v1.NetworkStatus
+	34, // 16: syslet.v1.ListNetworksResponse.networks:type_name -> syslet.v1.NetworkStatus
+	0,  // 17: syslet.v1.ContainerStatus.desired_state:type_name -> syslet.v1.DesiredState
+	1,  // 18: syslet.v1.ContainerStatus.active_state:type_name -> syslet.v1.ActiveState
+	1,  // 19: syslet.v1.VolumeStatus.active_state:type_name -> syslet.v1.ActiveState
+	1,  // 20: syslet.v1.NetworkStatus.active_state:type_name -> syslet.v1.ActiveState
+	8,  // 21: syslet.v1.SysletService.ApplyContainers:input_type -> syslet.v1.ApplyContainersRequest
+	10, // 22: syslet.v1.SysletService.GetContainer:input_type -> syslet.v1.GetContainerRequest
+	12, // 23: syslet.v1.SysletService.ListContainers:input_type -> syslet.v1.ListContainersRequest
+	14, // 24: syslet.v1.SysletService.DeleteContainer:input_type -> syslet.v1.DeleteContainerRequest
+	16, // 25: syslet.v1.SysletService.ApplyVolumes:input_type -> syslet.v1.ApplyVolumesRequest
+	18, // 26: syslet.v1.SysletService.GetVolume:input_type -> syslet.v1.GetVolumeRequest
+	20, // 27: syslet.v1.SysletService.ListVolumes:input_type -> syslet.v1.ListVolumesRequest
+	22, // 28: syslet.v1.SysletService.DeleteVolume:input_type -> syslet.v1.DeleteVolumeRequest
+	24, // 29: syslet.v1.SysletService.ApplyNetworks:input_type -> syslet.v1.ApplyNetworksRequest
+	26, // 30: syslet.v1.SysletService.GetNetwork:input_type -> syslet.v1.GetNetworkRequest
+	28, // 31: syslet.v1.SysletService.ListNetworks:input_type -> syslet.v1.ListNetworksRequest
+	30, // 32: syslet.v1.SysletService.DeleteNetwork:input_type -> syslet.v1.DeleteNetworkRequest
+	35, // 33: syslet.v1.SysletService.Logs:input_type -> syslet.v1.LogsRequest
+	9,  // 34: syslet.v1.SysletService.ApplyContainers:output_type -> syslet.v1.ApplyContainersResponse
+	11, // 35: syslet.v1.SysletService.GetContainer:output_type -> syslet.v1.GetContainerResponse
+	13, // 36: syslet.v1.SysletService.ListContainers:output_type -> syslet.v1.ListContainersResponse
+	15, // 37: syslet.v1.SysletService.DeleteContainer:output_type -> syslet.v1.DeleteContainerResponse
+	17, // 38: syslet.v1.SysletService.ApplyVolumes:output_type -> syslet.v1.ApplyVolumesResponse
+	19, // 39: syslet.v1.SysletService.GetVolume:output_type -> syslet.v1.GetVolumeResponse
+	21, // 40: syslet.v1.SysletService.ListVolumes:output_type -> syslet.v1.ListVolumesResponse
+	23, // 41: syslet.v1.SysletService.DeleteVolume:output_type -> syslet.v1.DeleteVolumeResponse
+	25, // 42: syslet.v1.SysletService.ApplyNetworks:output_type -> syslet.v1.ApplyNetworksResponse
+	27, // 43: syslet.v1.SysletService.GetNetwork:output_type -> syslet.v1.GetNetworkResponse
+	29, // 44: syslet.v1.SysletService.ListNetworks:output_type -> syslet.v1.ListNetworksResponse
+	31, // 45: syslet.v1.SysletService.DeleteNetwork:output_type -> syslet.v1.DeleteNetworkResponse
+	36, // 46: syslet.v1.SysletService.Logs:output_type -> syslet.v1.LogEntry
+	34, // [34:47] is the sub-list for method output_type
+	21, // [21:34] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_proto_syslet_proto_init() }
@@ -2107,7 +2122,7 @@ func file_proto_syslet_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_syslet_proto_rawDesc), len(file_proto_syslet_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   34,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
