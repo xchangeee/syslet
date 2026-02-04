@@ -11,28 +11,28 @@ import (
 )
 
 const (
-	ContainerConfigBase = "/var/syslet/config"
+	DefaultContainerConfigDirectory = "/var/syslet/containers/config"
 )
 
 // ConfigFileManager handles config file operations.
 type ConfigFileManager struct {
-	fs                  afero.Fs
-	containerConfigBase string
+	fs                       afero.Fs
+	containerConfigDirectory string
 }
 
 // NewConfigFileManager creates a config manager with provided dependencies.
 func NewConfigFileManager(fs afero.Fs) *ConfigFileManager {
 	return &ConfigFileManager{
-		fs:                  fs,
-		containerConfigBase: ContainerConfigBase,
+		fs:                       fs,
+		containerConfigDirectory: DefaultContainerConfigDirectory,
 	}
 }
 
 // NewConfigFileManagerWithPaths creates a config manager with a custom base path (for testing).
-func NewConfigFileManagerWithPaths(fs afero.Fs, containerBase string) *ConfigFileManager {
+func NewConfigFileManagerWithPaths(fs afero.Fs, containerConfigDirectory string) *ConfigFileManager {
 	return &ConfigFileManager{
-		fs:                  fs,
-		containerConfigBase: containerBase,
+		fs:                       fs,
+		containerConfigDirectory: containerConfigDirectory,
 	}
 }
 
@@ -40,7 +40,7 @@ func NewConfigFileManagerWithPaths(fs afero.Fs, containerBase string) *ConfigFil
 func (m *ConfigFileManager) configDir(fullUnitName string) string {
 	ext := filepath.Ext(fullUnitName)
 	unitName := fullUnitName[:len(fullUnitName)-len(ext)]
-	return filepath.Join(m.containerConfigBase, unitName)
+	return filepath.Join(m.containerConfigDirectory, unitName)
 }
 
 // ListFiles returns all config filenames for a unit.
@@ -64,7 +64,8 @@ func (m *ConfigFileManager) ListFiles(fullUnitName string) ([]string, error) {
 
 // IsChanged checks if a config file differs from what's deployed.
 func (m *ConfigFileManager) IsChanged(fullUnitName string, filename, content string) (bool, error) {
-	path := filepath.Join(m.configDir(fullUnitName), filename)
+	dir := m.configDir(fullUnitName)
+	path := filepath.Join(dir, filename)
 	existing, err := afero.ReadFile(m.fs, path)
 	if os.IsNotExist(err) {
 		return true, nil

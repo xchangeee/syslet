@@ -16,27 +16,27 @@ import (
 )
 
 const (
-	DefaultReconcilationInterval    = 10 * time.Second
-	DefaultContainerConfigDirectory = "/etc/containers/config"
+	DefaultReconcilationInterval  = 10 * time.Second
+	DefaultContainerUnitDirectory = "/etc/containers/config"
 )
 
 // Daemon is the main syslet daemon.
 type Daemon struct {
-	clock                   quartz.Clock
-	logger                  *slog.Logger
-	systemd                 *systemd.Client
-	store                   *store.Store
-	config                  *ConfigFileManager
-	reconciler              *Reconciler
-	containeConfigDirectory string
-	reconcilationInterval   time.Duration
+	clock                  quartz.Clock
+	logger                 *slog.Logger
+	systemd                *systemd.Client
+	store                  *store.Store
+	config                 *ConfigFileManager
+	reconciler             *Reconciler
+	containerUnitDirectory string
+	reconcilationInterval  time.Duration
 }
 
 // Config holds daemon configuration.
 type Config struct {
-	Clock                    quartz.Clock
-	ContainerConfigDirectory string
-	ReconcilationInterval    time.Duration
+	Clock                  quartz.Clock
+	ContainerUnitDirectory string
+	ReconcilationInterval  time.Duration
 }
 
 // New creates a new daemon.
@@ -44,22 +44,22 @@ func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, st *store.Store, 
 	if dcfg.Clock == nil {
 		dcfg.Clock = quartz.NewReal()
 	}
-	if dcfg.ContainerConfigDirectory == "" {
-		dcfg.ContainerConfigDirectory = DefaultContainerConfigDirectory
+	if dcfg.ContainerUnitDirectory == "" {
+		dcfg.ContainerUnitDirectory = DefaultContainerUnitDirectory
 	}
 	if dcfg.ReconcilationInterval == 0 {
 		dcfg.ReconcilationInterval = DefaultReconcilationInterval
 	}
 	cfg := NewConfigFileManager(fs)
 	return &Daemon{
-		clock:                   dcfg.Clock,
-		logger:                  logger,
-		store:                   st,
-		config:                  cfg,
-		systemd:                 sd,
-		reconciler:              NewReconciler(sd, cfg, logger),
-		containeConfigDirectory: dcfg.ContainerConfigDirectory,
-		reconcilationInterval:   dcfg.ReconcilationInterval,
+		clock:                  dcfg.Clock,
+		logger:                 logger,
+		store:                  st,
+		config:                 cfg,
+		systemd:                sd,
+		reconciler:             NewReconciler(sd, cfg, logger),
+		containerUnitDirectory: dcfg.ContainerUnitDirectory,
+		reconcilationInterval:  dcfg.ReconcilationInterval,
 	}
 }
 
@@ -273,7 +273,7 @@ func (d *Daemon) loadUnitFromStore(unitName string, unitType pb.UnitType) (*Reso
 	if err != nil {
 		return nil, err
 	}
-	return resolveSpec(spec, d.containeConfigDirectory)
+	return resolveSpec(spec, d.containerUnitDirectory)
 }
 
 func (d *Daemon) loadUnitsFromStore() ([]ResolvedUnit, error) {
@@ -284,7 +284,7 @@ func (d *Daemon) loadUnitsFromStore() ([]ResolvedUnit, error) {
 
 	var units []ResolvedUnit
 	for _, spec := range specs {
-		ru, err := resolveSpec(spec, d.containeConfigDirectory)
+		ru, err := resolveSpec(spec, d.containerUnitDirectory)
 		if err != nil {
 			return nil, err
 		}
