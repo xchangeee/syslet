@@ -121,7 +121,7 @@ func (d *Daemon) ApplyContainers(ctx context.Context, specs []*pb.ContainerSpec)
 			continue
 		}
 		d.logger.Info("stopping container", "name", c.fullName)
-		if err := d.systemd.Container().Stop(ctx, c.fullName); err != nil {
+		if err := d.systemd.Container.Stop(ctx, c.fullName); err != nil {
 			d.logger.Error("failed to stop container", "name", c.fullName, "error", err)
 			c.errored = true
 			c.message = fmt.Sprintf("failed to stop: %v", err)
@@ -148,7 +148,7 @@ func (d *Daemon) ApplyContainers(ctx context.Context, specs []*pb.ContainerSpec)
 			continue
 		}
 		d.logger.Info("installing unit file", "container", c.fullName)
-		if err := d.systemd.Container().InstallUnitFile(c.fullName, strings.NewReader(c.newContent)); err != nil {
+		if err := d.systemd.Container.InstallUnitFile(c.fullName, strings.NewReader(c.newContent)); err != nil {
 			d.logger.Error("failed to install unit file", "container", c.fullName, "error", err)
 			c.errored = true
 			c.message = fmt.Sprintf("failed to install unit file: %v", err)
@@ -171,7 +171,7 @@ func (d *Daemon) ApplyContainers(ctx context.Context, specs []*pb.ContainerSpec)
 			continue
 		}
 		d.logger.Info("starting container", "name", c.fullName)
-		if err := d.systemd.Container().Start(ctx, c.fullName); err != nil {
+		if err := d.systemd.Container.Start(ctx, c.fullName); err != nil {
 			d.logger.Error("failed to start container", "name", c.fullName, "error", err)
 			c.errored = true
 			c.message = fmt.Sprintf("failed to start: %v", err)
@@ -228,7 +228,7 @@ func (d *Daemon) diffContainer(ctx context.Context, spec *pb.ContainerSpec) (*co
 		newContent: newContent,
 	}
 
-	installed, err := d.systemd.Container().UnitFileExists(fullName)
+	installed, err := d.systemd.Container.UnitFileExists(fullName)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (d *Daemon) diffContainer(ctx context.Context, spec *pb.ContainerSpec) (*co
 	c.unitChanged = unitChanged
 	c.configChanged = d.configsChanged(fullName, cfgs)
 
-	state, err := d.systemd.Container().RuntimeState(ctx, fullName)
+	state, err := d.systemd.Container.RuntimeState(ctx, fullName)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +307,7 @@ func (d *Daemon) GetContainer(ctx context.Context, name string) (*pb.ContainerSt
 	}
 	fullName := spec.Name + ".container"
 
-	state, err := d.systemd.Container().RuntimeState(ctx, fullName)
+	state, err := d.systemd.Container.RuntimeState(ctx, fullName)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +335,7 @@ func (d *Daemon) ListContainers(ctx context.Context) ([]*pb.ContainerStatus, err
 	var result []*pb.ContainerStatus
 	for _, row := range rows {
 		fullName := row.Spec.Name + ".container"
-		state, err := d.systemd.Container().RuntimeState(ctx, fullName)
+		state, err := d.systemd.Container.RuntimeState(ctx, fullName)
 		if err != nil {
 			d.logger.Error("status error", "container", row.Spec.Name, "error", err)
 			continue
@@ -360,10 +360,10 @@ func (d *Daemon) ListContainers(ctx context.Context) ([]*pb.ContainerStatus, err
 func (d *Daemon) DeleteContainer(ctx context.Context, name string) error {
 	fullName := name + ".container"
 
-	if err := d.systemd.Container().Stop(ctx, fullName); err != nil {
+	if err := d.systemd.Container.Stop(ctx, fullName); err != nil {
 		d.logger.Warn("stop failed during delete", "container", name, "error", err)
 	}
-	if err := d.systemd.Container().RemoveUnitFile(fullName); err != nil {
+	if err := d.systemd.Container.RemoveUnitFile(fullName); err != nil {
 		return fmt.Errorf("removing unit file: %w", err)
 	}
 	if err := d.config.RemoveAll(fullName); err != nil {
@@ -393,13 +393,13 @@ func (d *Daemon) ApplyVolumes(ctx context.Context, specs []*pb.VolumeSpec) ([]*p
 		opts := d.renderSimpleSpec(spec.Options)
 		newContent := unitContent(opts)
 
-		installed, err := d.systemd.Volume().UnitFileExists(fullName)
+		installed, err := d.systemd.Volume.UnitFileExists(fullName)
 		if err != nil {
 			return nil, fmt.Errorf("checking %s: %w", spec.Name, err)
 		}
 
 		if !installed {
-			if err := d.systemd.Volume().InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
+			if err := d.systemd.Volume.InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
 				return nil, fmt.Errorf("installing %s: %w", fullName, err)
 			}
 			needReload = true
@@ -443,7 +443,7 @@ func (d *Daemon) GetVolume(ctx context.Context, name string) (*pb.VolumeStatus, 
 	}
 	fullName := name + ".volume"
 
-	state, err := d.systemd.Volume().RuntimeState(ctx, fullName)
+	state, err := d.systemd.Volume.RuntimeState(ctx, fullName)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +469,7 @@ func (d *Daemon) ListVolumes(ctx context.Context) ([]*pb.VolumeStatus, error) {
 	var result []*pb.VolumeStatus
 	for _, row := range rows {
 		fullName := row.Spec.Name + ".volume"
-		state, err := d.systemd.Volume().RuntimeState(ctx, fullName)
+		state, err := d.systemd.Volume.RuntimeState(ctx, fullName)
 		if err != nil {
 			d.logger.Error("status error", "volume", row.Spec.Name, "error", err)
 			continue
@@ -491,7 +491,7 @@ func (d *Daemon) ListVolumes(ctx context.Context) ([]*pb.VolumeStatus, error) {
 // DeleteVolume removes a volume unit file and its store entry.
 func (d *Daemon) DeleteVolume(ctx context.Context, name string) error {
 	fullName := name + ".volume"
-	if err := d.systemd.Volume().RemoveUnitFile(fullName); err != nil {
+	if err := d.systemd.Volume.RemoveUnitFile(fullName); err != nil {
 		return fmt.Errorf("removing unit file: %w", err)
 	}
 	if err := d.systemd.DaemonReload(ctx); err != nil {
@@ -518,13 +518,13 @@ func (d *Daemon) ApplyNetworks(ctx context.Context, specs []*pb.NetworkSpec) ([]
 		opts := d.renderSimpleSpec(spec.Options)
 		newContent := unitContent(opts)
 
-		installed, err := d.systemd.Network().UnitFileExists(fullName)
+		installed, err := d.systemd.Network.UnitFileExists(fullName)
 		if err != nil {
 			return nil, fmt.Errorf("checking %s: %w", spec.Name, err)
 		}
 
 		if !installed {
-			if err := d.systemd.Network().InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
+			if err := d.systemd.Network.InstallUnitFile(fullName, strings.NewReader(newContent)); err != nil {
 				return nil, fmt.Errorf("installing %s: %w", fullName, err)
 			}
 			needReload = true
@@ -568,7 +568,7 @@ func (d *Daemon) GetNetwork(ctx context.Context, name string) (*pb.NetworkStatus
 	}
 	fullName := name + ".network"
 
-	state, err := d.systemd.Network().RuntimeState(ctx, fullName)
+	state, err := d.systemd.Network.RuntimeState(ctx, fullName)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +594,7 @@ func (d *Daemon) ListNetworks(ctx context.Context) ([]*pb.NetworkStatus, error) 
 	var result []*pb.NetworkStatus
 	for _, row := range rows {
 		fullName := row.Spec.Name + ".network"
-		state, err := d.systemd.Network().RuntimeState(ctx, fullName)
+		state, err := d.systemd.Network.RuntimeState(ctx, fullName)
 		if err != nil {
 			d.logger.Error("status error", "network", row.Spec.Name, "error", err)
 			continue
@@ -616,7 +616,7 @@ func (d *Daemon) ListNetworks(ctx context.Context) ([]*pb.NetworkStatus, error) 
 // DeleteNetwork removes a network unit file and its store entry.
 func (d *Daemon) DeleteNetwork(ctx context.Context, name string) error {
 	fullName := name + ".network"
-	if err := d.systemd.Network().RemoveUnitFile(fullName); err != nil {
+	if err := d.systemd.Network.RemoveUnitFile(fullName); err != nil {
 		return fmt.Errorf("removing unit file: %w", err)
 	}
 	if err := d.systemd.DaemonReload(ctx); err != nil {
@@ -696,7 +696,7 @@ func (d *Daemon) renderSimpleSpec(pbOpts []*pb.UnitOption) []*unit.UnitOption {
 // ---------------------------------------------------------------------------
 
 func (d *Daemon) unitFileChanged(fullName string, newContent string) (bool, error) {
-	existing, err := d.systemd.Container().ReadInstalledUnit(fullName)
+	existing, err := d.systemd.Container.ReadInstalledUnit(fullName)
 	if os.IsNotExist(err) {
 		return true, nil
 	}
@@ -707,7 +707,7 @@ func (d *Daemon) unitFileChanged(fullName string, newContent string) (bool, erro
 }
 
 func (d *Daemon) unitFileChangedVolume(fullName string, newContent string) (bool, error) {
-	existing, err := d.systemd.Volume().ReadInstalledUnit(fullName)
+	existing, err := d.systemd.Volume.ReadInstalledUnit(fullName)
 	if os.IsNotExist(err) {
 		return true, nil
 	}
@@ -718,7 +718,7 @@ func (d *Daemon) unitFileChangedVolume(fullName string, newContent string) (bool
 }
 
 func (d *Daemon) unitFileChangedNetwork(fullName string, newContent string) (bool, error) {
-	existing, err := d.systemd.Network().ReadInstalledUnit(fullName)
+	existing, err := d.systemd.Network.ReadInstalledUnit(fullName)
 	if os.IsNotExist(err) {
 		return true, nil
 	}

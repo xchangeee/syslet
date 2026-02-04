@@ -30,6 +30,10 @@ type Client struct {
 	conn           DBusConn
 	fs             afero.Fs
 	quadletUnitDir string
+
+	Container *ContainerUnit
+	Network   *NetworkUnit
+	Volume    *VolumeUnit
 }
 
 // UnitState holds the runtime state of a unit.
@@ -46,11 +50,16 @@ func NewDBusConnection(ctx context.Context) (DBusConn, error) {
 
 // NewClient creates a new systemd client with provided dependencies.
 func NewClient(conn DBusConn, fs afero.Fs) *Client {
-	return &Client{
+	c := &Client{
 		conn:           conn,
 		fs:             fs,
 		quadletUnitDir: QuadletUnitDir,
 	}
+
+	c.Container = &ContainerUnit{client: c}
+	c.Network = &NetworkUnit{client: c}
+	c.Volume = &VolumeUnit{client: c}
+	return c
 }
 
 // NewClientWithPaths creates a client with a custom quadlet directory (for testing).
@@ -70,21 +79,6 @@ func (c *Client) Close() {
 // DaemonReload calls systemctl daemon-reload.
 func (c *Client) DaemonReload(ctx context.Context) error {
 	return c.conn.ReloadContext(ctx)
-}
-
-// Container returns a ContainerUnit resource for container-specific operations.
-func (c *Client) Container() *ContainerUnit {
-	return &ContainerUnit{client: c}
-}
-
-// Volume returns a VolumeUnit resource for volume-specific operations.
-func (c *Client) Volume() *VolumeUnit {
-	return &VolumeUnit{client: c}
-}
-
-// Network returns a NetworkUnit resource for network-specific operations.
-func (c *Client) Network() *NetworkUnit {
-	return &NetworkUnit{client: c}
 }
 
 // installedPath returns the full path where a unit file is installed.
