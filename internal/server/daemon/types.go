@@ -9,21 +9,48 @@ import (
 	"github.com/coreos/go-systemd/v22/unit"
 )
 
+// ChangePlan is the result of diffing all units.
+type ChangePlan struct {
+	Changes    []*UnitChange
+	NeedReload bool // at least one unit file changed
+}
+
 // UnitChange captures the diff for a single unit and, when changes are
 // detected, carries the rendered systemd options and config files needed
 // to apply those changes.
 type UnitChange struct {
-	Spec    *pb.UnitSpec
-	Options []*unit.UnitOption // rendered systemd unit options
-	Configs []ConfigFile       // config files to deploy
+	// The spec
+	Spec *pb.UnitSpec
 
-	UnitChanged   bool
+	// rendered systemd unit options
+	Options []*unit.UnitOption
+
+	// config files to deploy
+	Configs []ConfigFile
+
+	// unit doesn't exist yet
+	IsNew bool
+	// immutable unit changed
+	Rejected     bool
+	RejectReason string
+	//
+	UnitChanged bool
+	//
 	ConfigChanged bool
-	NeedsStop     bool // stop before update (unit or config changed)
-	NeedsStart    bool // start after update
-	IsNew         bool // unit doesn't exist yet
-	Rejected      bool // immutable unit changed
-	RejectReason  string
+
+	// stop before update (unit or config changed)
+	NeedsStop bool
+	// start after update
+	NeedsStart bool
+}
+
+// ConfigFile represents a config file to deploy.
+type ConfigFile struct {
+	// e.g. "myapp" (without extension)
+	UnitName string
+	// e.g. "config.yaml"
+	Filename string
+	Content  string
 }
 
 // FullName returns the full unit name (e.g. "webapp.container").
@@ -37,12 +64,6 @@ func (c *UnitChange) SystemdContent() io.Reader {
 	return unit.Serialize(c.Options)
 }
 
-// ChangePlan is the result of diffing all units.
-type ChangePlan struct {
-	Changes    []*UnitChange
-	NeedReload bool // at least one unit file changed
-}
-
 // UnitResult is the outcome of reconciling one unit.
 type UnitResult struct {
 	FullName string
@@ -50,13 +71,6 @@ type UnitResult struct {
 	Changed  bool
 	Message  string
 	Error    bool
-}
-
-// ConfigFile represents a config file to deploy.
-type ConfigFile struct {
-	UnitName string // e.g. "myapp" (without extension)
-	Filename string // e.g. "config.yaml"
-	Content  string
 }
 
 func sha256sum(data []byte) string {

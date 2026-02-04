@@ -52,9 +52,6 @@ func (r *Reconciler) Diff(ctx context.Context, specs []*pb.UnitSpec) (*ChangePla
 		if err != nil {
 			return nil, fmt.Errorf("diffing %s: %w", pb.FullUnitName(spec.Name, spec.Type), err)
 		}
-		if change.UnitChanged {
-			plan.NeedReload = true
-		}
 		plan.Changes = append(plan.Changes, change)
 	}
 
