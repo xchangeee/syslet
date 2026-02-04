@@ -38,6 +38,11 @@ func (u *ContainerUnit) serviceName(fullUnitName string) string {
 	return pb.UnitName(fullUnitName) + ".service"
 }
 
+// ListUnitFiles returns the basenames of all installed container unit files.
+func (u *ContainerUnit) ListUnitFiles() ([]string, error) {
+	return u.client.listUnitFiles(containerExt)
+}
+
 // UnitFileExists checks if a container unit file is installed.
 func (u *ContainerUnit) UnitFileExists(name string) (bool, error) {
 	full, err := u.qualifyName(name)

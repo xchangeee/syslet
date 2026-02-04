@@ -27,6 +27,11 @@ func (u *VolumeUnit) qualifyName(name string) (string, error) {
 	return name, nil
 }
 
+// ListUnitFiles returns the basenames of all installed volume unit files.
+func (u *VolumeUnit) ListUnitFiles() ([]string, error) {
+	return u.client.listUnitFiles(volumeExt)
+}
+
 // UnitFileExists checks if a volume unit file is installed.
 func (u *VolumeUnit) UnitFileExists(name string) (bool, error) {
 	full, err := u.qualifyName(name)

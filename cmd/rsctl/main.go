@@ -568,11 +568,10 @@ func listContainersCmd() *cobra.Command {
 				return fmt.Errorf("list containers: %w", err)
 			}
 
-			fmt.Printf("%-30s %-12s %-10s %-8s\n", "NAME", "DESIRED", "ACTIVE", "ENABLED")
+			fmt.Printf("%-30s %-10s %-8s\n", "NAME", "ACTIVE", "ENABLED")
 			for _, c := range resp.Containers {
-				fmt.Printf("%-30s %-12s %-10s %-8v\n",
+				fmt.Printf("%-30s %-10s %-8v\n",
 					c.Name,
-					strings.TrimPrefix(c.DesiredState.String(), "DESIRED_STATE_"),
 					strings.TrimPrefix(c.ActiveState.String(), "ACTIVE_STATE_"),
 					c.Enabled,
 				)
@@ -777,17 +776,10 @@ func logsCmd() *cobra.Command {
 
 func printContainerStatus(c *pb.ContainerStatus) {
 	fmt.Printf("● %s\n", c.Name)
-	fmt.Printf("  Desired:  %s\n", strings.TrimPrefix(c.DesiredState.String(), "DESIRED_STATE_"))
 	fmt.Printf("  Active:   %s\n", strings.TrimPrefix(c.ActiveState.String(), "ACTIVE_STATE_"))
 	fmt.Printf("  Enabled:  %v\n", c.Enabled)
 	if len(c.ConfigFiles) > 0 {
 		fmt.Printf("  Configs:  %s\n", strings.Join(c.ConfigFiles, ", "))
-	}
-	if c.LastApplied != "" {
-		fmt.Printf("  Applied:  %s\n", c.LastApplied)
-	}
-	if c.LastError != "" {
-		fmt.Printf("  Error:    %s\n", c.LastError)
 	}
 	fmt.Println()
 }
@@ -796,12 +788,6 @@ func printVolumeStatus(v *pb.VolumeStatus) {
 	fmt.Printf("● %s\n", v.Name)
 	fmt.Printf("  Active:   %s\n", strings.TrimPrefix(v.ActiveState.String(), "ACTIVE_STATE_"))
 	fmt.Printf("  Enabled:  %v\n", v.Enabled)
-	if v.LastApplied != "" {
-		fmt.Printf("  Applied:  %s\n", v.LastApplied)
-	}
-	if v.LastError != "" {
-		fmt.Printf("  Error:    %s\n", v.LastError)
-	}
 	fmt.Println()
 }
 
@@ -809,11 +795,5 @@ func printNetworkStatus(n *pb.NetworkStatus) {
 	fmt.Printf("● %s\n", n.Name)
 	fmt.Printf("  Active:   %s\n", strings.TrimPrefix(n.ActiveState.String(), "ACTIVE_STATE_"))
 	fmt.Printf("  Enabled:  %v\n", n.Enabled)
-	if n.LastApplied != "" {
-		fmt.Printf("  Applied:  %s\n", n.LastApplied)
-	}
-	if n.LastError != "" {
-		fmt.Printf("  Error:    %s\n", n.LastError)
-	}
 	fmt.Println()
 }

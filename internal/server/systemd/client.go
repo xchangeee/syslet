@@ -125,6 +125,25 @@ func (c *Client) removeUnitFile(fullUnitName string) error {
 	return err
 }
 
+// listUnitFiles returns the basenames of all files in the quadlet directory
+// matching the given extension (e.g. ".container").
+func (c *Client) listUnitFiles(ext string) ([]string, error) {
+	entries, err := afero.ReadDir(c.fs, c.quadletUnitDir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", c.quadletUnitDir, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ext {
+			names = append(names, e.Name())
+		}
+	}
+	return names, nil
+}
+
 // isNotExist checks if an error indicates a file does not exist.
 func isNotExist(err error) bool {
 	return os.IsNotExist(err)

@@ -10,7 +10,6 @@ import (
 
 	"codeberg.org/xchangeee/syslet/internal/server/api"
 	"codeberg.org/xchangeee/syslet/internal/server/daemon"
-	"codeberg.org/xchangeee/syslet/internal/server/store"
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 	pb "codeberg.org/xchangeee/syslet/proto"
 
@@ -38,19 +37,7 @@ func main() {
 	// Create systemd client with injected dependencies
 	sd := systemd.NewClient(dbusConn, fs)
 
-	dbPath := store.DefaultDBPath
-	if p := os.Getenv("SYSLET_DB"); p != "" {
-		dbPath = p
-	}
-
-	st, err := store.New(fs, dbPath)
-	if err != nil {
-		logger.Error("failed to open store", "path", dbPath, "error", err)
-		os.Exit(1)
-	}
-	defer st.Close()
-
-	d := daemon.New(fs, logger, sd, st, daemon.Config{})
+	d := daemon.New(fs, logger, sd, daemon.Config{})
 
 	// Start gRPC server
 	listenAddr := ":7233"

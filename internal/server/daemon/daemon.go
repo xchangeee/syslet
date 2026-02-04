@@ -1,7 +1,7 @@
 // Package daemon implements the syslet daemon, which provides synchronous
 // CRUD operations for containers, volumes, and networks backed by systemd
-// quadlet files. Each Apply* method stores the specs, computes a diff against
-// the installed state, and executes changes in the strict global order:
+// quadlet files. Each Apply* method computes a diff against the installed
+// state, and executes changes in the strict global order:
 // stop all changed → write configs → write unit files → single daemon-reload →
 // start all that need starting.
 package daemon
@@ -14,12 +14,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"codeberg.org/xchangeee/syslet/internal/server/store"
 	"codeberg.org/xchangeee/syslet/internal/server/systemd"
 	pb "codeberg.org/xchangeee/syslet/proto"
-	"github.com/coder/quartz"
 	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/spf13/afero"
 )
@@ -31,10 +28,8 @@ const (
 // Daemon is the main syslet daemon. It holds shared dependencies and exposes
 // synchronous per-type CRUD methods for containers, volumes, and networks.
 type Daemon struct {
-	clock   quartz.Clock
 	logger  *slog.Logger
 	systemd *systemd.Client
-	store   *store.Store
 	config  *ConfigFileManager
 
 	// Host directory referenced in Volume= entries for config mounts
@@ -43,17 +38,12 @@ type Daemon struct {
 
 // Config holds daemon configuration.
 type Config struct {
-	Clock quartz.Clock
-
 	// Directory where bind-mounted container config files are stored
 	ContainerConfigDirectory string
 }
 
 // New creates a new daemon.
-func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, st *store.Store, dcfg Config) *Daemon {
-	if dcfg.Clock == nil {
-		dcfg.Clock = quartz.NewReal()
-	}
+func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, dcfg Config) *Daemon {
 	if dcfg.ContainerConfigDirectory == "" {
 		dcfg.ContainerConfigDirectory = DefaultContainerConfigDirectory
 	}
@@ -62,9 +52,7 @@ func New(fs afero.Fs, logger *slog.Logger, sd *systemd.Client, st *store.Store, 
 		dcfg.ContainerConfigDirectory,
 	)
 	return &Daemon{
-		clock:                    dcfg.Clock,
 		logger:                   logger,
-		store:                    st,
 		config:                   cfg,
 		systemd:                  sd,
 		containerConfigDirectory: dcfg.ContainerConfigDirectory,
@@ -178,26 +166,13 @@ func (d *Daemon) ApplyContainers(ctx context.Context, specs []*pb.ContainerSpec)
 		}
 	}
 
-	// Phase 3: Persist specs and build results.
-	now := d.clock.Now()
+	// Build results.
 	var results []*pb.ApplyResult
 	for _, c := range changes {
 		changed := c.unitChanged || c.configChanged || c.needsStart || c.needsStop
 		msg := c.message
 		if !c.errored && msg == "" {
 			msg = d.containerResultMessage(c)
-		}
-
-		if err := d.store.PutContainer(c.spec); err != nil {
-			d.logger.Error("failed to store spec", "name", c.spec.Name, "error", err)
-		}
-
-		errStr := ""
-		if c.errored {
-			errStr = c.message
-		}
-		if err := d.store.UpdateContainerStatus(c.spec.Name, errStr, now); err != nil {
-			d.logger.Error("failed to update status", "name", c.spec.Name, "error", err)
 		}
 
 		results = append(results, &pb.ApplyResult{
@@ -301,11 +276,15 @@ func (d *Daemon) containerResultMessage(c *containerChange) string {
 
 // GetContainer returns the status of a single container.
 func (d *Daemon) GetContainer(ctx context.Context, name string) (*pb.ContainerStatus, error) {
-	spec, opStatus, err := d.store.GetContainer(name)
+	fullName := name + ".container"
+
+	installed, err := d.systemd.Container.UnitFileExists(fullName)
 	if err != nil {
 		return nil, err
 	}
-	fullName := spec.Name + ".container"
+	if !installed {
+		return nil, fmt.Errorf("container %q not found", name)
+	}
 
 	state, err := d.systemd.Container.RuntimeState(ctx, fullName)
 	if err != nil {
@@ -313,14 +292,9 @@ func (d *Daemon) GetContainer(ctx context.Context, name string) (*pb.ContainerSt
 	}
 
 	cs := &pb.ContainerStatus{
-		Name:         spec.Name,
-		DesiredState: spec.DesiredState,
-		ActiveState:  pbActiveState(state.ActiveState),
-		Enabled:      state.Enabled,
-		LastError:    opStatus.LastError,
-	}
-	if !opStatus.LastApplied.IsZero() {
-		cs.LastApplied = opStatus.LastApplied.Format(time.RFC3339)
+		Name:        name,
+		ActiveState: pbActiveState(state.ActiveState),
+		Enabled:     state.Enabled,
 	}
 	cs.ConfigFiles, _ = d.config.ListFiles(fullName)
 	return cs, nil
@@ -328,27 +302,22 @@ func (d *Daemon) GetContainer(ctx context.Context, name string) (*pb.ContainerSt
 
 // ListContainers returns the status of all managed containers.
 func (d *Daemon) ListContainers(ctx context.Context) ([]*pb.ContainerStatus, error) {
-	rows, err := d.store.ListContainers()
+	files, err := d.systemd.Container.ListUnitFiles()
 	if err != nil {
 		return nil, err
 	}
 	var result []*pb.ContainerStatus
-	for _, row := range rows {
-		fullName := row.Spec.Name + ".container"
+	for _, fullName := range files {
+		name := pb.UnitName(fullName)
 		state, err := d.systemd.Container.RuntimeState(ctx, fullName)
 		if err != nil {
-			d.logger.Error("status error", "container", row.Spec.Name, "error", err)
+			d.logger.Error("status error", "container", name, "error", err)
 			continue
 		}
 		cs := &pb.ContainerStatus{
-			Name:         row.Spec.Name,
-			DesiredState: row.Spec.DesiredState,
-			ActiveState:  pbActiveState(state.ActiveState),
-			Enabled:      state.Enabled,
-			LastError:    row.Status.LastError,
-		}
-		if !row.Status.LastApplied.IsZero() {
-			cs.LastApplied = row.Status.LastApplied.Format(time.RFC3339)
+			Name:        name,
+			ActiveState: pbActiveState(state.ActiveState),
+			Enabled:     state.Enabled,
 		}
 		cs.ConfigFiles, _ = d.config.ListFiles(fullName)
 		result = append(result, cs)
@@ -372,7 +341,7 @@ func (d *Daemon) DeleteContainer(ctx context.Context, name string) error {
 	if err := d.systemd.DaemonReload(ctx); err != nil {
 		d.logger.Warn("daemon-reload failed during delete", "error", err)
 	}
-	return d.store.DeleteContainer(name)
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +354,6 @@ func (d *Daemon) DeleteContainer(ctx context.Context, name string) error {
 // were created.
 func (d *Daemon) ApplyVolumes(ctx context.Context, specs []*pb.VolumeSpec) ([]*pb.ApplyResult, error) {
 	needReload := false
-	now := d.clock.Now()
 	var results []*pb.ApplyResult
 
 	for _, spec := range specs {
@@ -403,10 +371,6 @@ func (d *Daemon) ApplyVolumes(ctx context.Context, specs []*pb.VolumeSpec) ([]*p
 				return nil, fmt.Errorf("installing %s: %w", fullName, err)
 			}
 			needReload = true
-			if err := d.store.PutVolume(spec); err != nil {
-				return nil, fmt.Errorf("storing spec %s: %w", spec.Name, err)
-			}
-			d.store.UpdateVolumeStatus(spec.Name, "", now) //nolint:errcheck
 			results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: true, Message: "created"})
 			continue
 		}
@@ -418,7 +382,6 @@ func (d *Daemon) ApplyVolumes(ctx context.Context, specs []*pb.VolumeSpec) ([]*p
 		}
 		if changed {
 			msg := fmt.Sprintf("immutable volume %q cannot be modified after creation", spec.Name)
-			d.store.UpdateVolumeStatus(spec.Name, msg, now) //nolint:errcheck
 			results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: false, Message: msg})
 			continue
 		}
@@ -437,58 +400,52 @@ func (d *Daemon) ApplyVolumes(ctx context.Context, specs []*pb.VolumeSpec) ([]*p
 
 // GetVolume returns the status of a single volume.
 func (d *Daemon) GetVolume(ctx context.Context, name string) (*pb.VolumeStatus, error) {
-	_, opStatus, err := d.store.GetVolume(name)
+	fullName := name + ".volume"
+
+	installed, err := d.systemd.Volume.UnitFileExists(fullName)
 	if err != nil {
 		return nil, err
 	}
-	fullName := name + ".volume"
+	if !installed {
+		return nil, fmt.Errorf("volume %q not found", name)
+	}
 
 	state, err := d.systemd.Volume.RuntimeState(ctx, fullName)
 	if err != nil {
 		return nil, err
 	}
 
-	vs := &pb.VolumeStatus{
+	return &pb.VolumeStatus{
 		Name:        name,
 		ActiveState: pbActiveState(state.ActiveState),
 		Enabled:     state.Enabled,
-		LastError:   opStatus.LastError,
-	}
-	if !opStatus.LastApplied.IsZero() {
-		vs.LastApplied = opStatus.LastApplied.Format(time.RFC3339)
-	}
-	return vs, nil
+	}, nil
 }
 
 // ListVolumes returns the status of all managed volumes.
 func (d *Daemon) ListVolumes(ctx context.Context) ([]*pb.VolumeStatus, error) {
-	rows, err := d.store.ListVolumes()
+	files, err := d.systemd.Volume.ListUnitFiles()
 	if err != nil {
 		return nil, err
 	}
 	var result []*pb.VolumeStatus
-	for _, row := range rows {
-		fullName := row.Spec.Name + ".volume"
+	for _, fullName := range files {
+		name := pb.UnitName(fullName)
 		state, err := d.systemd.Volume.RuntimeState(ctx, fullName)
 		if err != nil {
-			d.logger.Error("status error", "volume", row.Spec.Name, "error", err)
+			d.logger.Error("status error", "volume", name, "error", err)
 			continue
 		}
-		vs := &pb.VolumeStatus{
-			Name:        row.Spec.Name,
+		result = append(result, &pb.VolumeStatus{
+			Name:        name,
 			ActiveState: pbActiveState(state.ActiveState),
 			Enabled:     state.Enabled,
-			LastError:   row.Status.LastError,
-		}
-		if !row.Status.LastApplied.IsZero() {
-			vs.LastApplied = row.Status.LastApplied.Format(time.RFC3339)
-		}
-		result = append(result, vs)
+		})
 	}
 	return result, nil
 }
 
-// DeleteVolume removes a volume unit file and its store entry.
+// DeleteVolume removes a volume unit file.
 func (d *Daemon) DeleteVolume(ctx context.Context, name string) error {
 	fullName := name + ".volume"
 	if err := d.systemd.Volume.RemoveUnitFile(fullName); err != nil {
@@ -497,7 +454,7 @@ func (d *Daemon) DeleteVolume(ctx context.Context, name string) error {
 	if err := d.systemd.DaemonReload(ctx); err != nil {
 		d.logger.Warn("daemon-reload failed during delete", "error", err)
 	}
-	return d.store.DeleteVolume(name)
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -510,7 +467,6 @@ func (d *Daemon) DeleteVolume(ctx context.Context, name string) error {
 // were created.
 func (d *Daemon) ApplyNetworks(ctx context.Context, specs []*pb.NetworkSpec) ([]*pb.ApplyResult, error) {
 	needReload := false
-	now := d.clock.Now()
 	var results []*pb.ApplyResult
 
 	for _, spec := range specs {
@@ -528,10 +484,6 @@ func (d *Daemon) ApplyNetworks(ctx context.Context, specs []*pb.NetworkSpec) ([]
 				return nil, fmt.Errorf("installing %s: %w", fullName, err)
 			}
 			needReload = true
-			if err := d.store.PutNetwork(spec); err != nil {
-				return nil, fmt.Errorf("storing spec %s: %w", spec.Name, err)
-			}
-			d.store.UpdateNetworkStatus(spec.Name, "", now) //nolint:errcheck
 			results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: true, Message: "created"})
 			continue
 		}
@@ -543,7 +495,6 @@ func (d *Daemon) ApplyNetworks(ctx context.Context, specs []*pb.NetworkSpec) ([]
 		}
 		if changed {
 			msg := fmt.Sprintf("immutable network %q cannot be modified after creation", spec.Name)
-			d.store.UpdateNetworkStatus(spec.Name, msg, now) //nolint:errcheck
 			results = append(results, &pb.ApplyResult{Name: spec.Name, Changed: false, Message: msg})
 			continue
 		}
@@ -562,58 +513,52 @@ func (d *Daemon) ApplyNetworks(ctx context.Context, specs []*pb.NetworkSpec) ([]
 
 // GetNetwork returns the status of a single network.
 func (d *Daemon) GetNetwork(ctx context.Context, name string) (*pb.NetworkStatus, error) {
-	_, opStatus, err := d.store.GetNetwork(name)
+	fullName := name + ".network"
+
+	installed, err := d.systemd.Network.UnitFileExists(fullName)
 	if err != nil {
 		return nil, err
 	}
-	fullName := name + ".network"
+	if !installed {
+		return nil, fmt.Errorf("network %q not found", name)
+	}
 
 	state, err := d.systemd.Network.RuntimeState(ctx, fullName)
 	if err != nil {
 		return nil, err
 	}
 
-	ns := &pb.NetworkStatus{
+	return &pb.NetworkStatus{
 		Name:        name,
 		ActiveState: pbActiveState(state.ActiveState),
 		Enabled:     state.Enabled,
-		LastError:   opStatus.LastError,
-	}
-	if !opStatus.LastApplied.IsZero() {
-		ns.LastApplied = opStatus.LastApplied.Format(time.RFC3339)
-	}
-	return ns, nil
+	}, nil
 }
 
 // ListNetworks returns the status of all managed networks.
 func (d *Daemon) ListNetworks(ctx context.Context) ([]*pb.NetworkStatus, error) {
-	rows, err := d.store.ListNetworks()
+	files, err := d.systemd.Network.ListUnitFiles()
 	if err != nil {
 		return nil, err
 	}
 	var result []*pb.NetworkStatus
-	for _, row := range rows {
-		fullName := row.Spec.Name + ".network"
+	for _, fullName := range files {
+		name := pb.UnitName(fullName)
 		state, err := d.systemd.Network.RuntimeState(ctx, fullName)
 		if err != nil {
-			d.logger.Error("status error", "network", row.Spec.Name, "error", err)
+			d.logger.Error("status error", "network", name, "error", err)
 			continue
 		}
-		ns := &pb.NetworkStatus{
-			Name:        row.Spec.Name,
+		result = append(result, &pb.NetworkStatus{
+			Name:        name,
 			ActiveState: pbActiveState(state.ActiveState),
 			Enabled:     state.Enabled,
-			LastError:   row.Status.LastError,
-		}
-		if !row.Status.LastApplied.IsZero() {
-			ns.LastApplied = row.Status.LastApplied.Format(time.RFC3339)
-		}
-		result = append(result, ns)
+		})
 	}
 	return result, nil
 }
 
-// DeleteNetwork removes a network unit file and its store entry.
+// DeleteNetwork removes a network unit file.
 func (d *Daemon) DeleteNetwork(ctx context.Context, name string) error {
 	fullName := name + ".network"
 	if err := d.systemd.Network.RemoveUnitFile(fullName); err != nil {
@@ -622,7 +567,7 @@ func (d *Daemon) DeleteNetwork(ctx context.Context, name string) error {
 	if err := d.systemd.DaemonReload(ctx); err != nil {
 		d.logger.Warn("daemon-reload failed during delete", "error", err)
 	}
-	return d.store.DeleteNetwork(name)
+	return nil
 }
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,11 @@ func (u *NetworkUnit) qualifyName(name string) (string, error) {
 	return name, nil
 }
 
+// ListUnitFiles returns the basenames of all installed network unit files.
+func (u *NetworkUnit) ListUnitFiles() ([]string, error) {
+	return u.client.listUnitFiles(networkExt)
+}
+
 // UnitFileExists checks if a network unit file is installed.
 func (u *NetworkUnit) UnitFileExists(name string) (bool, error) {
 	full, err := u.qualifyName(name)

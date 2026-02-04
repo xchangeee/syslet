@@ -1508,12 +1508,9 @@ func (x *DeleteNetworkResponse) GetMessage() string {
 type ContainerStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	DesiredState  DesiredState           `protobuf:"varint,2,opt,name=desired_state,json=desiredState,proto3,enum=syslet.v1.DesiredState" json:"desired_state,omitempty"`
 	ActiveState   ActiveState            `protobuf:"varint,3,opt,name=active_state,json=activeState,proto3,enum=syslet.v1.ActiveState" json:"active_state,omitempty"`
 	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	ConfigFiles   []string               `protobuf:"bytes,5,rep,name=config_files,json=configFiles,proto3" json:"config_files,omitempty"`
-	LastApplied   string                 `protobuf:"bytes,6,opt,name=last_applied,json=lastApplied,proto3" json:"last_applied,omitempty"`
-	LastError     string                 `protobuf:"bytes,7,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1555,13 +1552,6 @@ func (x *ContainerStatus) GetName() string {
 	return ""
 }
 
-func (x *ContainerStatus) GetDesiredState() DesiredState {
-	if x != nil {
-		return x.DesiredState
-	}
-	return DesiredState_DESIRED_STATE_UNSPECIFIED
-}
-
 func (x *ContainerStatus) GetActiveState() ActiveState {
 	if x != nil {
 		return x.ActiveState
@@ -1583,27 +1573,11 @@ func (x *ContainerStatus) GetConfigFiles() []string {
 	return nil
 }
 
-func (x *ContainerStatus) GetLastApplied() string {
-	if x != nil {
-		return x.LastApplied
-	}
-	return ""
-}
-
-func (x *ContainerStatus) GetLastError() string {
-	if x != nil {
-		return x.LastError
-	}
-	return ""
-}
-
 type VolumeStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	ActiveState   ActiveState            `protobuf:"varint,2,opt,name=active_state,json=activeState,proto3,enum=syslet.v1.ActiveState" json:"active_state,omitempty"`
 	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	LastApplied   string                 `protobuf:"bytes,4,opt,name=last_applied,json=lastApplied,proto3" json:"last_applied,omitempty"`
-	LastError     string                 `protobuf:"bytes,5,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1659,27 +1633,11 @@ func (x *VolumeStatus) GetEnabled() bool {
 	return false
 }
 
-func (x *VolumeStatus) GetLastApplied() string {
-	if x != nil {
-		return x.LastApplied
-	}
-	return ""
-}
-
-func (x *VolumeStatus) GetLastError() string {
-	if x != nil {
-		return x.LastError
-	}
-	return ""
-}
-
 type NetworkStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	ActiveState   ActiveState            `protobuf:"varint,2,opt,name=active_state,json=activeState,proto3,enum=syslet.v1.ActiveState" json:"active_state,omitempty"`
 	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	LastApplied   string                 `protobuf:"bytes,4,opt,name=last_applied,json=lastApplied,proto3" json:"last_applied,omitempty"`
-	LastError     string                 `protobuf:"bytes,5,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1733,20 +1691,6 @@ func (x *NetworkStatus) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
-}
-
-func (x *NetworkStatus) GetLastApplied() string {
-	if x != nil {
-		return x.LastApplied
-	}
-	return ""
-}
-
-func (x *NetworkStatus) GetLastError() string {
-	if x != nil {
-		return x.LastError
-	}
-	return ""
 }
 
 type LogsRequest struct {
@@ -1944,30 +1888,20 @@ const file_proto_syslet_proto_rawDesc = "" +
 	"\x14DeleteNetworkRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"1\n" +
 	"\x15DeleteNetworkResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"\x9d\x02\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"\x9d\x01\n" +
 	"\x0fContainerStatus\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
-	"\rdesired_state\x18\x02 \x01(\x0e2\x17.syslet.v1.DesiredStateR\fdesiredState\x129\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
 	"\factive_state\x18\x03 \x01(\x0e2\x16.syslet.v1.ActiveStateR\vactiveState\x12\x18\n" +
 	"\aenabled\x18\x04 \x01(\bR\aenabled\x12!\n" +
-	"\fconfig_files\x18\x05 \x03(\tR\vconfigFiles\x12!\n" +
-	"\flast_applied\x18\x06 \x01(\tR\vlastApplied\x12\x1d\n" +
-	"\n" +
-	"last_error\x18\a \x01(\tR\tlastError\"\xb9\x01\n" +
+	"\fconfig_files\x18\x05 \x03(\tR\vconfigFiles\"w\n" +
 	"\fVolumeStatus\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
 	"\factive_state\x18\x02 \x01(\x0e2\x16.syslet.v1.ActiveStateR\vactiveState\x12\x18\n" +
-	"\aenabled\x18\x03 \x01(\bR\aenabled\x12!\n" +
-	"\flast_applied\x18\x04 \x01(\tR\vlastApplied\x12\x1d\n" +
-	"\n" +
-	"last_error\x18\x05 \x01(\tR\tlastError\"\xba\x01\n" +
+	"\aenabled\x18\x03 \x01(\bR\aenabled\"x\n" +
 	"\rNetworkStatus\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
 	"\factive_state\x18\x02 \x01(\x0e2\x16.syslet.v1.ActiveStateR\vactiveState\x12\x18\n" +
-	"\aenabled\x18\x03 \x01(\bR\aenabled\x12!\n" +
-	"\flast_applied\x18\x04 \x01(\tR\vlastApplied\x12\x1d\n" +
-	"\n" +
-	"last_error\x18\x05 \x01(\tR\tlastError\"X\n" +
+	"\aenabled\x18\x03 \x01(\bR\aenabled\"X\n" +
 	"\vLogsRequest\x12\x1b\n" +
 	"\tunit_name\x18\x01 \x01(\tR\bunitName\x12\x16\n" +
 	"\x06follow\x18\x02 \x01(\bR\x06follow\x12\x14\n" +
@@ -2074,41 +2008,40 @@ var file_proto_syslet_proto_depIdxs = []int32{
 	4,  // 14: syslet.v1.ApplyNetworksResponse.results:type_name -> syslet.v1.ApplyResult
 	34, // 15: syslet.v1.GetNetworkResponse.network:type_name -> syslet.v1.NetworkStatus
 	34, // 16: syslet.v1.ListNetworksResponse.networks:type_name -> syslet.v1.NetworkStatus
-	0,  // 17: syslet.v1.ContainerStatus.desired_state:type_name -> syslet.v1.DesiredState
-	1,  // 18: syslet.v1.ContainerStatus.active_state:type_name -> syslet.v1.ActiveState
-	1,  // 19: syslet.v1.VolumeStatus.active_state:type_name -> syslet.v1.ActiveState
-	1,  // 20: syslet.v1.NetworkStatus.active_state:type_name -> syslet.v1.ActiveState
-	8,  // 21: syslet.v1.SysletService.ApplyContainers:input_type -> syslet.v1.ApplyContainersRequest
-	10, // 22: syslet.v1.SysletService.GetContainer:input_type -> syslet.v1.GetContainerRequest
-	12, // 23: syslet.v1.SysletService.ListContainers:input_type -> syslet.v1.ListContainersRequest
-	14, // 24: syslet.v1.SysletService.DeleteContainer:input_type -> syslet.v1.DeleteContainerRequest
-	16, // 25: syslet.v1.SysletService.ApplyVolumes:input_type -> syslet.v1.ApplyVolumesRequest
-	18, // 26: syslet.v1.SysletService.GetVolume:input_type -> syslet.v1.GetVolumeRequest
-	20, // 27: syslet.v1.SysletService.ListVolumes:input_type -> syslet.v1.ListVolumesRequest
-	22, // 28: syslet.v1.SysletService.DeleteVolume:input_type -> syslet.v1.DeleteVolumeRequest
-	24, // 29: syslet.v1.SysletService.ApplyNetworks:input_type -> syslet.v1.ApplyNetworksRequest
-	26, // 30: syslet.v1.SysletService.GetNetwork:input_type -> syslet.v1.GetNetworkRequest
-	28, // 31: syslet.v1.SysletService.ListNetworks:input_type -> syslet.v1.ListNetworksRequest
-	30, // 32: syslet.v1.SysletService.DeleteNetwork:input_type -> syslet.v1.DeleteNetworkRequest
-	35, // 33: syslet.v1.SysletService.Logs:input_type -> syslet.v1.LogsRequest
-	9,  // 34: syslet.v1.SysletService.ApplyContainers:output_type -> syslet.v1.ApplyContainersResponse
-	11, // 35: syslet.v1.SysletService.GetContainer:output_type -> syslet.v1.GetContainerResponse
-	13, // 36: syslet.v1.SysletService.ListContainers:output_type -> syslet.v1.ListContainersResponse
-	15, // 37: syslet.v1.SysletService.DeleteContainer:output_type -> syslet.v1.DeleteContainerResponse
-	17, // 38: syslet.v1.SysletService.ApplyVolumes:output_type -> syslet.v1.ApplyVolumesResponse
-	19, // 39: syslet.v1.SysletService.GetVolume:output_type -> syslet.v1.GetVolumeResponse
-	21, // 40: syslet.v1.SysletService.ListVolumes:output_type -> syslet.v1.ListVolumesResponse
-	23, // 41: syslet.v1.SysletService.DeleteVolume:output_type -> syslet.v1.DeleteVolumeResponse
-	25, // 42: syslet.v1.SysletService.ApplyNetworks:output_type -> syslet.v1.ApplyNetworksResponse
-	27, // 43: syslet.v1.SysletService.GetNetwork:output_type -> syslet.v1.GetNetworkResponse
-	29, // 44: syslet.v1.SysletService.ListNetworks:output_type -> syslet.v1.ListNetworksResponse
-	31, // 45: syslet.v1.SysletService.DeleteNetwork:output_type -> syslet.v1.DeleteNetworkResponse
-	36, // 46: syslet.v1.SysletService.Logs:output_type -> syslet.v1.LogEntry
-	34, // [34:47] is the sub-list for method output_type
-	21, // [21:34] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	1,  // 17: syslet.v1.ContainerStatus.active_state:type_name -> syslet.v1.ActiveState
+	1,  // 18: syslet.v1.VolumeStatus.active_state:type_name -> syslet.v1.ActiveState
+	1,  // 19: syslet.v1.NetworkStatus.active_state:type_name -> syslet.v1.ActiveState
+	8,  // 20: syslet.v1.SysletService.ApplyContainers:input_type -> syslet.v1.ApplyContainersRequest
+	10, // 21: syslet.v1.SysletService.GetContainer:input_type -> syslet.v1.GetContainerRequest
+	12, // 22: syslet.v1.SysletService.ListContainers:input_type -> syslet.v1.ListContainersRequest
+	14, // 23: syslet.v1.SysletService.DeleteContainer:input_type -> syslet.v1.DeleteContainerRequest
+	16, // 24: syslet.v1.SysletService.ApplyVolumes:input_type -> syslet.v1.ApplyVolumesRequest
+	18, // 25: syslet.v1.SysletService.GetVolume:input_type -> syslet.v1.GetVolumeRequest
+	20, // 26: syslet.v1.SysletService.ListVolumes:input_type -> syslet.v1.ListVolumesRequest
+	22, // 27: syslet.v1.SysletService.DeleteVolume:input_type -> syslet.v1.DeleteVolumeRequest
+	24, // 28: syslet.v1.SysletService.ApplyNetworks:input_type -> syslet.v1.ApplyNetworksRequest
+	26, // 29: syslet.v1.SysletService.GetNetwork:input_type -> syslet.v1.GetNetworkRequest
+	28, // 30: syslet.v1.SysletService.ListNetworks:input_type -> syslet.v1.ListNetworksRequest
+	30, // 31: syslet.v1.SysletService.DeleteNetwork:input_type -> syslet.v1.DeleteNetworkRequest
+	35, // 32: syslet.v1.SysletService.Logs:input_type -> syslet.v1.LogsRequest
+	9,  // 33: syslet.v1.SysletService.ApplyContainers:output_type -> syslet.v1.ApplyContainersResponse
+	11, // 34: syslet.v1.SysletService.GetContainer:output_type -> syslet.v1.GetContainerResponse
+	13, // 35: syslet.v1.SysletService.ListContainers:output_type -> syslet.v1.ListContainersResponse
+	15, // 36: syslet.v1.SysletService.DeleteContainer:output_type -> syslet.v1.DeleteContainerResponse
+	17, // 37: syslet.v1.SysletService.ApplyVolumes:output_type -> syslet.v1.ApplyVolumesResponse
+	19, // 38: syslet.v1.SysletService.GetVolume:output_type -> syslet.v1.GetVolumeResponse
+	21, // 39: syslet.v1.SysletService.ListVolumes:output_type -> syslet.v1.ListVolumesResponse
+	23, // 40: syslet.v1.SysletService.DeleteVolume:output_type -> syslet.v1.DeleteVolumeResponse
+	25, // 41: syslet.v1.SysletService.ApplyNetworks:output_type -> syslet.v1.ApplyNetworksResponse
+	27, // 42: syslet.v1.SysletService.GetNetwork:output_type -> syslet.v1.GetNetworkResponse
+	29, // 43: syslet.v1.SysletService.ListNetworks:output_type -> syslet.v1.ListNetworksResponse
+	31, // 44: syslet.v1.SysletService.DeleteNetwork:output_type -> syslet.v1.DeleteNetworkResponse
+	36, // 45: syslet.v1.SysletService.Logs:output_type -> syslet.v1.LogEntry
+	33, // [33:46] is the sub-list for method output_type
+	20, // [20:33] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_proto_syslet_proto_init() }
