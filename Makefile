@@ -1,4 +1,4 @@
-.PHONY: build test clean build-linux-amd64 deploy
+.PHONY: build test clean build-linux-amd64
 
 # Build all packages
 build:
