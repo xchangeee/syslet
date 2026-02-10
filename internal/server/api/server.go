@@ -18,14 +18,18 @@ import (
 type Server struct {
 	pb.UnimplementedSysletServiceServer
 
-	daemon *daemon.Daemon
+	cd     *daemon.ContainerDaemon
+	nd     *daemon.NetworkDaemon
+	vd     *daemon.VolumeDaemon
 	logger *slog.Logger
 }
 
 // NewServer creates a new gRPC server.
-func NewServer(d *daemon.Daemon, logger *slog.Logger) *Server {
+func NewServer(cd *daemon.ContainerDaemon, nd *daemon.NetworkDaemon, vd *daemon.VolumeDaemon, logger *slog.Logger) *Server {
 	return &Server{
-		daemon: d,
+		cd:     cd,
+		nd:     nd,
+		vd:     vd,
 		logger: logger,
 	}
 }
@@ -38,7 +42,7 @@ func (s *Server) ApplyContainers(ctx context.Context, req *pb.ApplyContainersReq
 	if len(req.Specs) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "at least one spec is required")
 	}
-	results, err := s.daemon.ApplyContainers(ctx, req.Specs)
+	results, err := s.cd.ApplyContainers(ctx, req.Specs)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "apply containers: %v", err)
 	}
@@ -49,7 +53,7 @@ func (s *Server) GetContainer(ctx context.Context, req *pb.GetContainerRequest) 
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	cs, err := s.daemon.GetContainer(ctx, req.Name)
+	cs, err := s.cd.GetContainer(ctx, req.Name)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "container %s: %v", req.Name, err)
 	}
@@ -57,7 +61,7 @@ func (s *Server) GetContainer(ctx context.Context, req *pb.GetContainerRequest) 
 }
 
 func (s *Server) ListContainers(ctx context.Context, req *pb.ListContainersRequest) (*pb.ListContainersResponse, error) {
-	containers, err := s.daemon.ListContainers(ctx)
+	containers, err := s.cd.ListContainers(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "listing containers: %v", err)
 	}
@@ -68,7 +72,7 @@ func (s *Server) DeleteContainer(ctx context.Context, req *pb.DeleteContainerReq
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	if err := s.daemon.DeleteContainer(ctx, req.Name); err != nil {
+	if err := s.cd.DeleteContainer(ctx, req.Name); err != nil {
 		return nil, status.Errorf(codes.Internal, "delete container: %v", err)
 	}
 	return &pb.DeleteContainerResponse{Message: "deleted " + req.Name}, nil
@@ -82,7 +86,7 @@ func (s *Server) ApplyVolumes(ctx context.Context, req *pb.ApplyVolumesRequest) 
 	if len(req.Specs) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "at least one spec is required")
 	}
-	results, err := s.daemon.ApplyVolumes(ctx, req.Specs)
+	results, err := s.vd.ApplyVolumes(ctx, req.Specs)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "apply volumes: %v", err)
 	}
@@ -93,7 +97,7 @@ func (s *Server) GetVolume(ctx context.Context, req *pb.GetVolumeRequest) (*pb.G
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	vs, err := s.daemon.GetVolume(ctx, req.Name)
+	vs, err := s.vd.GetVolume(ctx, req.Name)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "volume %s: %v", req.Name, err)
 	}
@@ -101,7 +105,7 @@ func (s *Server) GetVolume(ctx context.Context, req *pb.GetVolumeRequest) (*pb.G
 }
 
 func (s *Server) ListVolumes(ctx context.Context, req *pb.ListVolumesRequest) (*pb.ListVolumesResponse, error) {
-	volumes, err := s.daemon.ListVolumes(ctx)
+	volumes, err := s.vd.ListVolumes(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "listing volumes: %v", err)
 	}
@@ -112,7 +116,7 @@ func (s *Server) DeleteVolume(ctx context.Context, req *pb.DeleteVolumeRequest) 
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	if err := s.daemon.DeleteVolume(ctx, req.Name); err != nil {
+	if err := s.vd.DeleteVolume(ctx, req.Name); err != nil {
 		return nil, status.Errorf(codes.Internal, "delete volume: %v", err)
 	}
 	return &pb.DeleteVolumeResponse{Message: "deleted " + req.Name}, nil
@@ -126,7 +130,7 @@ func (s *Server) ApplyNetworks(ctx context.Context, req *pb.ApplyNetworksRequest
 	if len(req.Specs) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "at least one spec is required")
 	}
-	results, err := s.daemon.ApplyNetworks(ctx, req.Specs)
+	results, err := s.nd.ApplyNetworks(ctx, req.Specs)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "apply networks: %v", err)
 	}
@@ -137,7 +141,7 @@ func (s *Server) GetNetwork(ctx context.Context, req *pb.GetNetworkRequest) (*pb
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	ns, err := s.daemon.GetNetwork(ctx, req.Name)
+	ns, err := s.nd.GetNetwork(ctx, req.Name)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "network %s: %v", req.Name, err)
 	}
@@ -145,7 +149,7 @@ func (s *Server) GetNetwork(ctx context.Context, req *pb.GetNetworkRequest) (*pb
 }
 
 func (s *Server) ListNetworks(ctx context.Context, req *pb.ListNetworksRequest) (*pb.ListNetworksResponse, error) {
-	networks, err := s.daemon.ListNetworks(ctx)
+	networks, err := s.nd.ListNetworks(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "listing networks: %v", err)
 	}
@@ -156,7 +160,7 @@ func (s *Server) DeleteNetwork(ctx context.Context, req *pb.DeleteNetworkRequest
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	if err := s.daemon.DeleteNetwork(ctx, req.Name); err != nil {
+	if err := s.nd.DeleteNetwork(ctx, req.Name); err != nil {
 		return nil, status.Errorf(codes.Internal, "delete network: %v", err)
 	}
 	return &pb.DeleteNetworkResponse{Message: "deleted " + req.Name}, nil

@@ -37,7 +37,9 @@ func main() {
 	// Create systemd client with injected dependencies
 	sd := systemd.NewClient(dbusConn, fs)
 
-	d := daemon.New(fs, logger, sd, daemon.Config{})
+	cd := daemon.NewContainerDaemon(fs, logger, sd, daemon.ContainerDaemonConfig{})
+	nd := daemon.NewNetworkDaemon(fs, logger, sd, daemon.NetworkDaemonConfig{})
+	vd := daemon.NewVolumeDaemon(fs, logger, sd, daemon.VolumeDaemonConfig{})
 
 	// Start gRPC server
 	listenAddr := ":7233"
@@ -52,7 +54,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterSysletServiceServer(grpcServer, api.NewServer(d, logger))
+	pb.RegisterSysletServiceServer(grpcServer, api.NewServer(cd, nd, vd, logger))
 
 	go func() {
 		logger.Info("gRPC server listening", "addr", listenAddr)
