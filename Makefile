@@ -8,13 +8,13 @@ build:
 build-bin:
 	mkdir -p build
 	go build -o ./build/syslet ./cmd/syslet
-	go build -o ./build/deploy ./cmd/deploy
+	go build -o ./build/syslet-push ./cmd/syslet-push
 
 # Build binaries for linux amd64
 build-linux-amd64:
 	mkdir -p build
 	GOOS=linux GOARCH=amd64 go build -o ./build/syslet-linux-amd64 ./cmd/syslet
-	GOOS=linux GOARCH=amd64 go build -o ./build/deploy-linux-amd64 ./cmd/deploy
+	GOOS=linux GOARCH=amd64 go build -o ./build/syslet-push-linux-amd64 ./cmd/syslet-push
 
 # Run tests
 test:

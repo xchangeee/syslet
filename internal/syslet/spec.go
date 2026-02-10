@@ -212,6 +212,20 @@ func unmarshalSpec(data []byte) (Spec, error) {
 	}
 }
 
+// ensureUnitOption adds a UnitOption if it doesn't already exist in the slice.
+// This is used to set default values that the user can override in their specs.
+func ensureUnitOption(opts *[]UnitOption, section, name, value string) {
+	// Check if the option already exists
+	for _, opt := range *opts {
+		if opt.Section == section && opt.Name == name {
+			// Option already exists, don't add it
+			return
+		}
+	}
+	// Option doesn't exist, prepend it to the beginning
+	*opts = append([]UnitOption{{Section: section, Name: name, Value: value}}, *opts...)
+}
+
 // renderContainer converts a ContainerSpec into a RenderedUnit with flattened UnitOptions.
 // It processes the JSON "unit" map, adds config bind-mounts, and conditionally adds the
 // [Install] section if desiredState is "running".
@@ -221,6 +235,10 @@ func renderContainer(s *ContainerSpec, containerConfigDir string) (RenderedUnit,
 	if err != nil {
 		return RenderedUnit{}, err
 	}
+
+	// Add ContainerName if not already specified in the spec.
+	// This ensures the container name matches the spec name for consistency.
+	ensureUnitOption(&opts, "Container", "ContainerName", s.Name)
 
 	// Add config bind-mount volumes.
 	for _, cfg := range s.Configs {
@@ -254,6 +272,11 @@ func renderVolume(s *VolumeSpec) (RenderedUnit, error) {
 	if err != nil {
 		return RenderedUnit{}, err
 	}
+
+	// Add VolumeName if not already specified in the spec.
+	// This ensures the volume name matches the spec name for consistency.
+	ensureUnitOption(&opts, "Volume", "VolumeName", s.Name)
+
 	// Prepend reclaim policy if set.
 	if s.ReclaimPolicy != "" {
 		opts = append([]UnitOption{{Section: "X-Syslet", Name: "ReclaimPolicy", Value: s.ReclaimPolicy}}, opts...)
@@ -269,6 +292,11 @@ func renderNetwork(s *NetworkSpec) (RenderedUnit, error) {
 	if err != nil {
 		return RenderedUnit{}, err
 	}
+
+	// Add NetworkName if not already specified in the spec.
+	// This ensures the network name matches the spec name for consistency.
+	ensureUnitOption(&opts, "Network", "NetworkName", s.Name)
+
 	// Prepend reclaim policy if set.
 	if s.ReclaimPolicy != "" {
 		opts = append([]UnitOption{{Section: "X-Syslet", Name: "ReclaimPolicy", Value: s.ReclaimPolicy}}, opts...)

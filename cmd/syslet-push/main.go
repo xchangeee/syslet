@@ -1,13 +1,13 @@
-// syslet-deploy deploys syslet specs to a remote host via SSH.
+// syslet-push deploys syslet specs to a remote host via SSH.
 //
 // Usage:
 //
-//	syslet-deploy [--directory <dir> | --stdin] <host>
+//	syslet-push [--directory <dir> | --stdin] <host>
 //
 // Examples:
 //
-//	syslet-deploy --directory hosts/web01/ web01
-//	cat specs.json | syslet-deploy --stdin web01
+//	syslet-push --directory hosts/web01/ web01
+//	cat specs.json | syslet-push --stdin web01
 package main
 
 import (
