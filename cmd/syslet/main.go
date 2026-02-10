@@ -18,6 +18,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"github.com/spf13/afero"
@@ -46,8 +47,9 @@ func main() {
 	defer dbusConn.Close()
 
 	sd := systemd.NewClient(dbusConn, fs)
+	pc := podman.New()
 
-	if err := syslet.Apply(ctx, logger, fs, sd, configPath); err != nil {
+	if err := syslet.Apply(ctx, logger, fs, sd, pc, configPath); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

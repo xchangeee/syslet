@@ -101,8 +101,7 @@ type ApplyPlan struct {
 //  5. Delete podman volumes and networks (if ReclaimPolicy is "Delete")
 //  6. Single daemon-reload
 //  7. Start containers that should be running
-func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, path string) error {
-	pc := podman.New()
+func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, pc podman.Interface, path string) error {
 	specs, err := api.LoadSpecsFS(fs, path)
 	if err != nil {
 		return err

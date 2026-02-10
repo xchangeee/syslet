@@ -9,6 +9,13 @@ import (
 	"os/exec"
 )
 
+// Interface defines the operations for managing podman resources.
+// This interface allows for mocking in tests.
+type Interface interface {
+	DeleteVolume(ctx context.Context, name string) error
+	DeleteNetwork(ctx context.Context, name string) error
+}
+
 // Client wraps podman CLI operations for managing volumes and networks.
 // Unlike quadlet units which are managed via systemd, volumes and networks
 // are created and managed by podman itself and require direct CLI interaction.

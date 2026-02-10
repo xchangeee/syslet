@@ -12,6 +12,7 @@ import (
 
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 
 	"github.com/spf13/afero"
@@ -77,6 +78,29 @@ func (m *mockDBusConn) setUnitState(serviceName string, activeState string) {
 		ActiveState: activeState,
 		Enabled:     true,
 	}
+}
+
+// mockPodmanClient implements podman.Interface for testing.
+type mockPodmanClient struct {
+	deletedVolumes  []string
+	deletedNetworks []string
+}
+
+func newMockPodmanClient() *mockPodmanClient {
+	return &mockPodmanClient{
+		deletedVolumes:  []string{},
+		deletedNetworks: []string{},
+	}
+}
+
+func (m *mockPodmanClient) DeleteVolume(ctx context.Context, name string) error {
+	m.deletedVolumes = append(m.deletedVolumes, name)
+	return nil
+}
+
+func (m *mockPodmanClient) DeleteNetwork(ctx context.Context, name string) error {
+	m.deletedNetworks = append(m.deletedNetworks, name)
+	return nil
 }
 
 // testFixture helps build test scenarios with specs and existing state.
@@ -152,10 +176,11 @@ func createZipFromSpecs(fs afero.Fs, specs []api.Spec) (string, error) {
 }
 
 // setupTest creates a test environment with mock filesystem, systemd client, and fixtures.
-func setupTest(t *testing.T, fixture testFixture) (context.Context, afero.Fs, *systemd.Client, *mockDBusConn, string) {
+func setupTest(t *testing.T, fixture testFixture) (context.Context, afero.Fs, *systemd.Client, *mockDBusConn, podman.Interface, string) {
 	ctx := context.Background()
 	fs := afero.NewMemMapFs()
 	mockConn := newMockDBusConn()
+	mockPodman := newMockPodmanClient()
 
 	quadletDir := "/etc/containers/systemd"
 	sd := systemd.NewClientWithPaths(mockConn, fs, quadletDir)
@@ -182,7 +207,7 @@ func setupTest(t *testing.T, fixture testFixture) (context.Context, afero.Fs, *s
 		sd.Close()
 	})
 
-	return ctx, fs, sd, mockConn, zipPath
+	return ctx, fs, sd, mockConn, mockPodman, zipPath
 }
 
 func TestApply_NewContainer_DesiredStateRunning(t *testing.T) {
@@ -198,9 +223,9 @@ func TestApply_NewContainer_DesiredStateRunning(t *testing.T) {
 		},
 	}
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{specs: specs})
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -238,9 +263,9 @@ func TestApply_NewContainer_DesiredStateStopped(t *testing.T) {
 		},
 	}
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{specs: specs})
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -283,7 +308,7 @@ func TestApply_UnchangedContainer_NoRestart(t *testing.T) {
 		t.Fatalf("failed to serialize unit: %v", err)
 	}
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": content,
@@ -293,7 +318,7 @@ func TestApply_UnchangedContainer_NoRestart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -343,7 +368,7 @@ func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
 		t.Fatalf("failed to serialize old unit: %v", err)
 	}
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": oldContent,
@@ -353,7 +378,7 @@ func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -409,7 +434,7 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 		t.Fatalf("failed to serialize old unit: %v", err)
 	}
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": oldContent,
@@ -419,7 +444,7 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -482,7 +507,7 @@ func TestApply_MinimalRestarts_MultipleContainers(t *testing.T) {
 	changedRendered, _ := changedOldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	changedContent, _ := changedRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"unchanged.container": unchangedContent,
@@ -494,7 +519,7 @@ func TestApply_MinimalRestarts_MultipleContainers(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -541,7 +566,7 @@ func TestApply_StaleUnitRemoval(t *testing.T) {
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	oldContent, _ := oldRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": webappContent,
@@ -553,7 +578,7 @@ func TestApply_StaleUnitRemoval(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -604,7 +629,7 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	oldContent, _ := oldRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": oldContent,
@@ -619,7 +644,7 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 	cfg.Write("webapp", "existing.conf", "existing content")
 	cfg.Write("webapp", "old.conf", "old content")
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -692,7 +717,7 @@ func TestApply_VolumeAndNetworkChanges_NoContainerRestart(t *testing.T) {
 	networkRendered, _ := specs[2].(*api.NetworkSpec).Render()
 	networkContent, _ := networkRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": webappContent,
@@ -704,7 +729,7 @@ func TestApply_VolumeAndNetworkChanges_NoContainerRestart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -751,7 +776,7 @@ func TestApply_DesiredStateStopped_StopsRunningContainer(t *testing.T) {
 	}).Render(containerconfig.DefaultContainerConfigDir)
 	webappContent, _ := webappRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": webappContent,
@@ -761,7 +786,7 @@ func TestApply_DesiredStateStopped_StopsRunningContainer(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -801,7 +826,7 @@ func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	oldContent, _ := oldRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": oldContent,
@@ -811,7 +836,7 @@ func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -849,13 +874,13 @@ func TestApply_NewVolumeAndNetwork(t *testing.T) {
 	}
 
 	// No existing units - this is a fresh install
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs:         specs,
 		existingUnits: map[string]string{},
 		existingState: map[string]string{},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -919,7 +944,7 @@ func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
 	staleNetworkRendered, _ := staleNetworkSpec.Render()
 	staleNetworkContent, _ := staleNetworkRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": webappContent,
@@ -931,7 +956,7 @@ func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -992,7 +1017,7 @@ func TestApply_StaleVolumeWithReclaimPolicyDelete(t *testing.T) {
 	staleVolumeRendered, _ := staleVolumeSpec.Render()
 	staleVolumeContent, _ := staleVolumeRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, _, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, _, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": webappContent,
@@ -1003,7 +1028,7 @@ func TestApply_StaleVolumeWithReclaimPolicyDelete(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -1012,10 +1037,11 @@ func TestApply_StaleVolumeWithReclaimPolicyDelete(t *testing.T) {
 		t.Error("stale volume unit file was not removed")
 	}
 
-	// Note: We can't directly test that podman.DeleteVolume was called since
-	// we don't mock the podman client. The test verifies that Apply succeeds
-	// and the unit file is removed. In a real scenario, podman would be called
-	// to delete the volume resource based on the ReclaimPolicy.
+	// Verify podman.DeleteVolume was called
+	mockPc := mockPodman.(*mockPodmanClient)
+	if len(mockPc.deletedVolumes) != 1 || mockPc.deletedVolumes[0] != "olddata" {
+		t.Errorf("expected DeleteVolume to be called with 'olddata', got: %v", mockPc.deletedVolumes)
+	}
 }
 
 func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
@@ -1044,7 +1070,7 @@ func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
 	staleNetworkRendered, _ := staleNetworkSpec.Render()
 	staleNetworkContent, _ := staleNetworkRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, _, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, _, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": webappContent,
@@ -1055,7 +1081,7 @@ func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -1064,10 +1090,11 @@ func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
 		t.Error("stale network unit file was not removed")
 	}
 
-	// Note: We can't directly test that podman.DeleteNetwork was called since
-	// we don't mock the podman client. The test verifies that Apply succeeds
-	// and the unit file is removed. In a real scenario, podman would be called
-	// to delete the network resource based on the ReclaimPolicy.
+	// Verify podman.DeleteNetwork was called
+	mockPc := mockPodman.(*mockPodmanClient)
+	if len(mockPc.deletedNetworks) != 1 || mockPc.deletedNetworks[0] != "oldnet" {
+		t.Errorf("expected DeleteNetwork to be called with 'oldnet', got: %v", mockPc.deletedNetworks)
+	}
 }
 
 func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
@@ -1102,7 +1129,7 @@ func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	oldContent, _ := oldRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": oldContent,
@@ -1121,7 +1148,7 @@ func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
 		t.Fatalf("failed to write test config: %v", err)
 	}
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -1180,7 +1207,7 @@ func TestApply_AllConfigsRemoved_DeletesConfigDirectory(t *testing.T) {
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	oldContent, _ := oldRendered.SerializeUnitOptions()
 
-	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
 		specs: specs,
 		existingUnits: map[string]string{
 			"webapp.container": oldContent,
@@ -1208,7 +1235,7 @@ func TestApply_AllConfigsRemoved_DeletesConfigDirectory(t *testing.T) {
 		t.Fatalf("expected 2 config files before apply, got %d", len(files))
 	}
 
-	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
