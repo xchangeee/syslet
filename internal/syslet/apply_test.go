@@ -86,16 +86,11 @@ type testFixture struct {
 	existingState map[string]string // service name -> "active"|"inactive"
 }
 
-// createZipFromSpecs marshals specs to JSON and creates a zip in memory.
-func createZipFromSpecs(specs []api.Spec) (string, error) {
-	// Create a temp file for the zip
-	tmpFile, err := os.CreateTemp("", "syslet-test-*.zip")
-	if err != nil {
-		return "", err
-	}
-	defer tmpFile.Close()
-
-	w := zip.NewWriter(tmpFile)
+// createZipFromSpecs marshals specs to JSON and creates a zip in the provided filesystem.
+func createZipFromSpecs(fs afero.Fs, specs []api.Spec) (string, error) {
+	// Create zip in memory
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
 
 	for i, spec := range specs {
 		// Marshal spec to JSON
@@ -106,7 +101,6 @@ func createZipFromSpecs(specs []api.Spec) (string, error) {
 		})
 		if err != nil {
 			w.Close()
-			os.Remove(tmpFile.Name())
 			return "", err
 		}
 
@@ -127,7 +121,6 @@ func createZipFromSpecs(specs []api.Spec) (string, error) {
 			data, err = json.Marshal(fullData)
 			if err != nil {
 				w.Close()
-				os.Remove(tmpFile.Name())
 				return "", err
 			}
 		}
@@ -137,22 +130,25 @@ func createZipFromSpecs(specs []api.Spec) (string, error) {
 		f, err := w.Create(filename)
 		if err != nil {
 			w.Close()
-			os.Remove(tmpFile.Name())
 			return "", err
 		}
 		if _, err := f.Write(data); err != nil {
 			w.Close()
-			os.Remove(tmpFile.Name())
 			return "", err
 		}
 	}
 
 	if err := w.Close(); err != nil {
-		os.Remove(tmpFile.Name())
 		return "", err
 	}
 
-	return tmpFile.Name(), nil
+	// Write zip to filesystem
+	zipPath := "/tmp/test-specs.zip"
+	if err := afero.WriteFile(fs, zipPath, buf.Bytes(), 0644); err != nil {
+		return "", err
+	}
+
+	return zipPath, nil
 }
 
 // setupTest creates a test environment with mock filesystem, systemd client, and fixtures.
@@ -177,13 +173,12 @@ func setupTest(t *testing.T, fixture testFixture) (context.Context, afero.Fs, *s
 	}
 
 	// Create zip from specs
-	zipPath, err := createZipFromSpecs(fixture.specs)
+	zipPath, err := createZipFromSpecs(fs, fixture.specs)
 	if err != nil {
 		t.Fatalf("failed to create zip: %v", err)
 	}
 
 	t.Cleanup(func() {
-		os.Remove(zipPath)
 		sd.Close()
 	})
 

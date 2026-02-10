@@ -2,13 +2,15 @@ package api
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/spf13/afero"
 )
 
 // SpecType identifies the kind of systemd quadlet unit.
@@ -29,17 +31,17 @@ type Spec interface {
 	FullUnitName() string
 }
 
-// LoadSpecs reads specs from either a directory or a zip file.
+// LoadSpecsFS reads specs from either a directory or a zip file using the provided filesystem.
 // It auto-detects the type based on whether the path is a directory or file.
-func LoadSpecs(path string) ([]Spec, error) {
+func LoadSpecsFS(fs afero.Fs, path string) ([]Spec, error) {
 	// Try to open as a zip first
-	specs, err := LoadSpecsFromZip(path)
+	specs, err := LoadSpecsFromZipFS(fs, path)
 	if err == nil {
 		return specs, nil
 	}
 
 	// If zip open failed, try as directory
-	specs, dirErr := LoadSpecsFromDirectory(path)
+	specs, dirErr := LoadSpecsFromDirectoryFS(fs, path)
 	if dirErr == nil {
 		return specs, nil
 	}
@@ -48,44 +50,56 @@ func LoadSpecs(path string) ([]Spec, error) {
 	return nil, fmt.Errorf("failed to load specs from %s: not a valid zip file (%v) or directory (%v)", path, err, dirErr)
 }
 
-// LoadSpecsFromDirectory reads all .json files from a directory.
+// LoadSpecsFromDirectoryFS reads all .json files from a directory using the provided filesystem.
 // This is useful for webhookd scenarios where specs are in a git repository.
-func LoadSpecsFromDirectory(dirPath string) ([]Spec, error) {
-	pattern := filepath.Join(dirPath, "*.json")
-	matches, err := filepath.Glob(pattern)
+func LoadSpecsFromDirectoryFS(fs afero.Fs, dirPath string) ([]Spec, error) {
+	// Read directory entries
+	entries, err := afero.ReadDir(fs, dirPath)
 	if err != nil {
-		return nil, fmt.Errorf("globbing %s: %w", pattern, err)
-	}
-
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("no .json spec files found in directory %s", dirPath)
+		return nil, fmt.Errorf("reading directory %s: %w", dirPath, err)
 	}
 
 	var specs []Spec
-	for _, path := range matches {
-		data, err := os.ReadFile(path)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+
+		path := filepath.Join(dirPath, entry.Name())
+		data, err := afero.ReadFile(fs, path)
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", path, err)
 		}
 
 		spec, err := unmarshalSpec(data)
 		if err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", filepath.Base(path), err)
+			return nil, fmt.Errorf("parsing %s: %w", entry.Name(), err)
 		}
 		specs = append(specs, spec)
+	}
+
+	if len(specs) == 0 {
+		return nil, fmt.Errorf("no .json spec files found in directory %s", dirPath)
 	}
 
 	return specs, nil
 }
 
-// LoadSpecsFromZip opens a zip file and reads all .json entries as specs.
+// LoadSpecsFromZipFS opens a zip file from the provided filesystem and reads all .json entries as specs.
 // Files are read entirely in memory; the zip is not extracted to disk.
-func LoadSpecsFromZip(zipPath string) ([]Spec, error) {
-	r, err := zip.OpenReader(zipPath)
+func LoadSpecsFromZipFS(fs afero.Fs, zipPath string) ([]Spec, error) {
+	// Read the entire zip file into memory
+	data, err := afero.ReadFile(fs, zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading zip file %s: %w", zipPath, err)
+	}
+
+	// Create a reader from the byte slice
+	readerAt := bytes.NewReader(data)
+	r, err := zip.NewReader(readerAt, int64(len(data)))
 	if err != nil {
 		return nil, fmt.Errorf("opening zip %s: %w", zipPath, err)
 	}
-	defer r.Close()
 
 	var specs []Spec
 	for _, f := range r.File {
@@ -96,13 +110,13 @@ func LoadSpecsFromZip(zipPath string) ([]Spec, error) {
 		if err != nil {
 			return nil, fmt.Errorf("opening %s in zip: %w", f.Name, err)
 		}
-		data, err := io.ReadAll(rc)
+		fileData, err := io.ReadAll(rc)
 		rc.Close()
 		if err != nil {
 			return nil, fmt.Errorf("reading %s from zip: %w", f.Name, err)
 		}
 
-		spec, err := unmarshalSpec(data)
+		spec, err := unmarshalSpec(fileData)
 		if err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", f.Name, err)
 		}

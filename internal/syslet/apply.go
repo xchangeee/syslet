@@ -103,7 +103,7 @@ type ApplyPlan struct {
 //  7. Start containers that should be running
 func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, path string) error {
 	pc := podman.New()
-	specs, err := api.LoadSpecs(path)
+	specs, err := api.LoadSpecsFS(fs, path)
 	if err != nil {
 		return err
 	}

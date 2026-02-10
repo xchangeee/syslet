@@ -1,4 +1,4 @@
-.PHONY: build test clean build-linux-amd64
+.PHONY: build test clean build-linux-amd64 coverage
 
 # Build all packages
 build:
@@ -19,6 +19,12 @@ build-linux-amd64:
 # Run tests
 test:
 	go test ./...
+
+# Generate test coverage report
+coverage:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
 
 
 fmt:
