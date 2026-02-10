@@ -1,12 +1,13 @@
-// syslet reads a zip file containing JSON spec files, validates them,
+// syslet reads a zip file or directory containing JSON spec files, validates them,
 // generates Podman quadlet unit files and container config files, prunes
 // outdated files, and restarts systemd units as needed.
 //
 // Usage:
 //
-//	syslet [config.zip]
+//	syslet [config.zip|config-dir/]
 //
 // If no path is given, defaults to /etc/syslet/config.zip.
+// The path can be either a zip file or a directory containing .json spec files.
 package main
 
 import (
@@ -22,14 +23,14 @@ import (
 	"github.com/spf13/afero"
 )
 
-const defaultZipPath = "/etc/syslet/config.zip"
+const defaultConfigPath = "/etc/syslet/config.zip"
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	zipPath := defaultZipPath
+	configPath := defaultConfigPath
 	if len(os.Args) > 1 {
-		zipPath = os.Args[1]
+		configPath = os.Args[1]
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -46,7 +47,7 @@ func main() {
 
 	sd := systemd.NewClient(dbusConn, fs)
 
-	if err := syslet.Apply(ctx, logger, fs, sd, zipPath); err != nil {
+	if err := syslet.Apply(ctx, logger, fs, sd, configPath); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

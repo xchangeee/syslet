@@ -92,7 +92,7 @@ type ApplyPlan struct {
 	Results     []ApplyResult // final summary for reporting
 }
 
-// Apply reads specs from a zip file, validates them, diffs against the
+// Apply reads specs from a zip file or directory, validates them, diffs against the
 // installed state, and executes changes in coordinated order:
 //  1. Stop containers that changed or are being pruned
 //  2. Write config files
@@ -101,8 +101,8 @@ type ApplyPlan struct {
 //  5. Delete podman volumes and networks (if ReclaimPolicy is "Delete")
 //  6. Single daemon-reload
 //  7. Start containers that should be running
-func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, zipPath string) error {
-	specs, err := LoadSpecsFromZip(zipPath)
+func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, path string) error {
+	specs, err := LoadSpecs(path)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -90,6 +91,55 @@ func (s *NetworkSpec) GetName() string                    { return s.Name }
 func (s *NetworkSpec) GetType() SpecType                  { return SpecTypeNetwork }
 func (s *NetworkSpec) GetUnit() map[string]map[string]any { return s.Unit }
 
+// LoadSpecs reads specs from either a directory or a zip file.
+// It auto-detects the type based on whether the path is a directory or file.
+func LoadSpecs(path string) ([]Spec, error) {
+	// Try to open as a zip first
+	specs, err := LoadSpecsFromZip(path)
+	if err == nil {
+		return specs, nil
+	}
+
+	// If zip open failed, try as directory
+	specs, dirErr := LoadSpecsFromDirectory(path)
+	if dirErr == nil {
+		return specs, nil
+	}
+
+	// Both failed - return most informative error
+	return nil, fmt.Errorf("failed to load specs from %s: not a valid zip file (%v) or directory (%v)", path, err, dirErr)
+}
+
+// LoadSpecsFromDirectory reads all .json files from a directory.
+// This is useful for webhookd scenarios where specs are in a git repository.
+func LoadSpecsFromDirectory(dirPath string) ([]Spec, error) {
+	pattern := filepath.Join(dirPath, "*.json")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("globbing %s: %w", pattern, err)
+	}
+
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no .json spec files found in directory %s", dirPath)
+	}
+
+	var specs []Spec
+	for _, path := range matches {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", path, err)
+		}
+
+		spec, err := unmarshalSpec(data)
+		if err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", filepath.Base(path), err)
+		}
+		specs = append(specs, spec)
+	}
+
+	return specs, nil
+}
+
 // LoadSpecsFromZip opens a zip file and reads all .json entries as specs.
 // Files are read entirely in memory; the zip is not extracted to disk.
 func LoadSpecsFromZip(zipPath string) ([]Spec, error) {
@@ -163,7 +213,8 @@ func unmarshalSpec(data []byte) (Spec, error) {
 }
 
 // renderContainer converts a ContainerSpec into a RenderedUnit with flattened UnitOptions.
-// It processes the JSON "unit" map, adds config bind-mounts, and the [Install] section.
+// It processes the JSON "unit" map, adds config bind-mounts, and conditionally adds the
+// [Install] section if desiredState is "running".
 // Sections and keys are sorted alphabetically for deterministic output.
 func renderContainer(s *ContainerSpec, containerConfigDir string) (RenderedUnit, error) {
 	opts, err := flattenUnitMap(s.GetUnit())
@@ -182,12 +233,15 @@ func renderContainer(s *ContainerSpec, containerConfigDir string) (RenderedUnit,
 		})
 	}
 
-	// Add [Install] section.
-	opts = append(opts, UnitOption{
-		Section: "Install",
-		Name:    "WantedBy",
-		Value:   "multi-user.target default.target",
-	})
+	// Add [Install] section only when desiredState is "running".
+	// This ensures containers with desiredState "stopped" won't auto-start on boot.
+	if s.DesiredState == "running" {
+		opts = append(opts, UnitOption{
+			Section: "Install",
+			Name:    "WantedBy",
+			Value:   "multi-user.target default.target",
+		})
+	}
 
 	return RenderedUnit{Spec: s, UnitOptions: opts}, nil
 }
