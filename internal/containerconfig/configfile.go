@@ -35,27 +35,22 @@ func (m *ConfigFileManager) configDir(containerName string) string {
 	return filepath.Join(m.baseDir, containerName)
 }
 
-// Write writes a config file for a container.
-func (m *ConfigFileManager) Write(containerName, filename, content string) error {
-	dir := m.configDir(containerName)
-	if err := m.fs.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("creating config dir %s: %w", dir, err)
-	}
-	path := filepath.Join(dir, filename)
-	return afero.WriteFile(m.fs, path, []byte(content), 0644)
-}
-
-// IsChanged checks if a config file differs from what's deployed.
-func (m *ConfigFileManager) IsChanged(containerName, filename, content string) (bool, error) {
-	path := filepath.Join(m.configDir(containerName), filename)
-	existing, err := afero.ReadFile(m.fs, path)
+// ListContainers returns the names of all container config directories.
+func (m *ConfigFileManager) ListContainers() ([]string, error) {
+	entries, err := afero.ReadDir(m.fs, m.baseDir)
 	if os.IsNotExist(err) {
-		return true, nil
+		return nil, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("reading %s: %w", path, err)
+		return nil, err
 	}
-	return util.Sha256hex([]byte(content)) != util.Sha256hex(existing), nil
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	return names, nil
 }
 
 // ListFiles returns all config filenames for a container.
@@ -77,6 +72,29 @@ func (m *ConfigFileManager) ListFiles(containerName string) ([]string, error) {
 	return files, nil
 }
 
+// IsChanged checks if a config file differs from what's deployed.
+func (m *ConfigFileManager) IsChanged(containerName, filename, content string) (bool, error) {
+	path := filepath.Join(m.configDir(containerName), filename)
+	existing, err := afero.ReadFile(m.fs, path)
+	if os.IsNotExist(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return util.Sha256hex([]byte(content)) != util.Sha256hex(existing), nil
+}
+
+// Write writes a config file for a container.
+func (m *ConfigFileManager) Write(containerName, filename, content string) error {
+	dir := m.configDir(containerName)
+	if err := m.fs.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("creating config dir %s: %w", dir, err)
+	}
+	path := filepath.Join(dir, filename)
+	return afero.WriteFile(m.fs, path, []byte(content), 0644)
+}
+
 // RemoveFile removes a single config file for a container.
 func (m *ConfigFileManager) RemoveFile(containerName, filename string) error {
 	path := filepath.Join(m.configDir(containerName), filename)
@@ -95,22 +113,4 @@ func (m *ConfigFileManager) RemoveAll(containerName string) error {
 		return nil
 	}
 	return err
-}
-
-// ListContainers returns the names of all container config directories.
-func (m *ConfigFileManager) ListContainers() ([]string, error) {
-	entries, err := afero.ReadDir(m.fs, m.baseDir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, e := range entries {
-		if e.IsDir() {
-			names = append(names, e.Name())
-		}
-	}
-	return names, nil
 }
