@@ -1,18 +1,15 @@
 package syslet
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 
+	"codeberg.org/xchangeee/syslet/internal/api"
+	"codeberg.org/xchangeee/syslet/internal/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 
-	gounit "github.com/coreos/go-systemd/v22/unit"
 	"github.com/spf13/afero"
 )
 
@@ -88,8 +85,11 @@ type ApplyPlan struct {
 	DeleteNetworks   []NetworkDeleteOp
 	StartContainers  []StartOp
 
-	NeedsReload bool          // set during diff if daemon-reload is needed
-	Results     []ApplyResult // final summary for reporting
+	// set during diff if daemon-reload is needed
+	NeedsReload bool
+
+	// final summary for reporting
+	Results []ApplyResult
 }
 
 // Apply reads specs from a zip file or directory, validates them, diffs against the
@@ -102,72 +102,73 @@ type ApplyPlan struct {
 //  6. Single daemon-reload
 //  7. Start containers that should be running
 func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, path string) error {
-	specs, err := LoadSpecs(path)
+	pc := podman.New()
+	specs, err := api.LoadSpecs(path)
 	if err != nil {
 		return err
 	}
 
 	// Pre-render validation: check raw input data.
-	if err := ValidateSpecs(specs); err != nil {
+	if err := api.ValidateSpecs(specs); err != nil {
 		return fmt.Errorf("pre-render validation: %w", err)
 	}
 
-	cfg := NewConfigFileManager(fs)
-	containerConfigDir := DefaultContainerConfigDir
+	cfg := containerconfig.NewConfigFileManager(fs)
+	containerConfigDir := containerconfig.DefaultContainerConfigDir
 
 	// Render all specs to intermediate unit options.
-	var containers, volumes, networks []RenderedUnit
+	var containers, volumes, networks []api.RenderedUnit
 	specNames := make(map[string]bool)
 
 	for _, s := range specs {
-		var r RenderedUnit
+		var r api.RenderedUnit
 		var err error
 
 		switch s.GetType() {
-		case SpecTypeContainer:
-			r, err = renderContainer(s.(*ContainerSpec), containerConfigDir)
+		case api.SpecTypeContainer:
+			r, err = s.(*api.ContainerSpec).Render(containerConfigDir)
 			if err != nil {
 				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
 			}
 			containers = append(containers, r)
-		case SpecTypeVolume:
-			r, err = renderVolume(s.(*VolumeSpec))
+		case api.SpecTypeVolume:
+			r, err = s.(*api.VolumeSpec).Render()
 			if err != nil {
 				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
 			}
 			volumes = append(volumes, r)
-		case SpecTypeNetwork:
-			r, err = renderNetwork(s.(*NetworkSpec))
+		case api.SpecTypeNetwork:
+			r, err = s.(*api.NetworkSpec).Render()
 			if err != nil {
 				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
 			}
 			networks = append(networks, r)
 		}
-		specNames[fullUnitName(s)] = true
+		specNames[s.FullUnitName()] = true
 	}
 
 	// Post-render validation: check rendered units and cross-references.
-	if err := ValidateRenderedUnits(containers, volumes, networks); err != nil {
+	if err := api.ValidateRenderedUnits(containers, volumes, networks); err != nil {
 		return fmt.Errorf("post-render validation: %w", err)
 	}
 
 	// Serialize unit options to strings after validation passes.
 	for i := range containers {
-		content, err := serializeUnitOptions(containers[i].UnitOptions)
+		content, err := containers[i].SerializeUnitOptions()
 		if err != nil {
 			return fmt.Errorf("serializing %s: %w", containers[i].Spec.GetName(), err)
 		}
 		containers[i].Content = content
 	}
 	for i := range volumes {
-		content, err := serializeUnitOptions(volumes[i].UnitOptions)
+		content, err := volumes[i].SerializeUnitOptions()
 		if err != nil {
 			return fmt.Errorf("serializing %s: %w", volumes[i].Spec.GetName(), err)
 		}
 		volumes[i].Content = content
 	}
 	for i := range networks {
-		content, err := serializeUnitOptions(networks[i].UnitOptions)
+		content, err := networks[i].SerializeUnitOptions()
 		if err != nil {
 			return fmt.Errorf("serializing %s: %w", networks[i].Spec.GetName(), err)
 		}
@@ -179,17 +180,17 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 
 	// Diff containers (handles config files, unit files, start/stop).
 	for _, r := range containers {
-		if err := diffContainer(ctx, sd, cfg, plan, r.Spec, r.Content); err != nil {
+		if err := diffContainer(ctx, sd, cfg, plan, r); err != nil {
 			return fmt.Errorf("diffing container %s: %w", r.Spec.GetName(), err)
 		}
 	}
 
 	// Diff volumes and networks (unit files only).
 	for _, r := range volumes {
-		diffSimple(sd, plan, r.Spec, r.Content)
+		diffSimple(sd, plan, r)
 	}
 	for _, r := range networks {
-		diffSimple(sd, plan, r.Spec, r.Content)
+		diffSimple(sd, plan, r)
 	}
 
 	// Find installed files that are NOT in the current spec set (stale → prune).
@@ -247,13 +248,13 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 	// Delete podman volumes and networks if requested.
 	for _, op := range plan.DeleteVolumes {
 		logger.Info("deleting podman volume", "name", op.name)
-		if err := deletePodmanVolume(ctx, op.name); err != nil {
+		if err := pc.DeleteVolume(ctx, op.name); err != nil {
 			logger.Error("failed to delete volume", "name", op.name, "error", err)
 		}
 	}
 	for _, op := range plan.DeleteNetworks {
 		logger.Info("deleting podman network", "name", op.name)
-		if err := deletePodmanNetwork(ctx, op.name); err != nil {
+		if err := pc.DeleteNetwork(ctx, op.name); err != nil {
 			logger.Error("failed to delete network", "name", op.name, "error", err)
 		}
 	}
@@ -289,205 +290,6 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 	return nil
 }
 
-// diffSimple computes the diff for a volume or network spec.
-// These are write-only: install the unit file if new or changed.
-func diffSimple(sd *systemd.Client, plan *ApplyPlan, s Spec, newContent string) {
-	fn := fullUnitName(s)
-	isNew := false
-	changed := false
-
-	if !sd.UnitFileExists(fn) {
-		isNew = true
-		changed = true
-	} else {
-		existing, err := sd.ReadUnitFile(fn)
-		if err != nil {
-			recordError(plan, fn, fmt.Sprintf("reading installed unit: %v", err))
-			return
-		}
-		if sha256hex([]byte(newContent)) != sha256hex(existing) {
-			changed = true
-		}
-	}
-
-	// Add write operation if unit changed.
-	if changed {
-		plan.WriteUnits = append(plan.WriteUnits, UnitFileWrite{
-			fullName: fn,
-			content:  newContent,
-		})
-		plan.NeedsReload = true
-	}
-
-	// Record result for summary.
-	status := "unchanged"
-	message := "up to date"
-	if isNew {
-		status = "created"
-		message = "created"
-	} else if changed {
-		status = "updated"
-		message = "unit updated"
-	}
-	plan.Results = append(plan.Results, ApplyResult{
-		fullName: fn,
-		status:   status,
-		message:  message,
-	})
-}
-
-// diffContainer computes the diff for a container spec, including config
-// changes and start/stop decisions based on desired state and runtime state.
-func diffContainer(ctx context.Context, sd *systemd.Client, cfg *ConfigFileManager, plan *ApplyPlan, s Spec, newContent string) error {
-	container, ok := s.(*ContainerSpec)
-	if !ok {
-		return fmt.Errorf("diffContainer called with non-container spec")
-	}
-
-	fn := fullUnitName(s)
-	isNew := false
-	unitChanged := false
-	configChanged := false
-
-	if !sd.UnitFileExists(fn) {
-		isNew = true
-		unitChanged = true
-		configChanged = len(container.Configs) > 0
-	} else {
-		// Check unit file changes.
-		existing, err := sd.ReadUnitFile(fn)
-		if os.IsNotExist(err) {
-			isNew = true
-			unitChanged = true
-		} else if err != nil {
-			return err
-		} else if sha256hex([]byte(newContent)) != sha256hex(existing) {
-			unitChanged = true
-		}
-
-		// Check config changes.
-		configChanged = configsChanged(cfg, container)
-	}
-
-	// Query runtime state.
-	var isRunning bool
-	if !isNew {
-		state, err := sd.ContainerState(ctx, fn)
-		if err != nil {
-			return fmt.Errorf("querying state of %s: %w", fn, err)
-		}
-		isRunning = state.ActiveState == "active" || state.ActiveState == "activating"
-	}
-
-	// Build operations based on changes and desired state.
-	needsStop := false
-	needsStart := false
-
-	// If unit or config changed and currently running, need to stop first.
-	if (unitChanged || configChanged) && isRunning {
-		needsStop = true
-	}
-
-	switch strings.ToLower(container.DesiredState) {
-	case "running":
-		if !isRunning || needsStop {
-			needsStart = true
-		}
-	case "stopped":
-		if isRunning {
-			needsStop = true
-		}
-	}
-
-	// Add operations to plan.
-	if needsStop {
-		plan.StopContainers = append(plan.StopContainers, StopOp{fullName: fn})
-	}
-
-	if configChanged {
-		addConfigOperations(plan, cfg, container)
-	}
-
-	if unitChanged {
-		plan.WriteUnits = append(plan.WriteUnits, UnitFileWrite{
-			fullName: fn,
-			content:  newContent,
-		})
-		plan.NeedsReload = true
-	}
-
-	if needsStart {
-		plan.StartContainers = append(plan.StartContainers, StartOp{fullName: fn})
-	}
-
-	// Record result for summary.
-	status, message := summarizeContainer(isNew, unitChanged, configChanged, needsStop, needsStart)
-	plan.Results = append(plan.Results, ApplyResult{
-		fullName: fn,
-		status:   status,
-		message:  message,
-	})
-
-	return nil
-}
-
-// findStaleUnits scans /etc/containers/systemd/ for unit files that are not
-// in the current spec set. Adds prune operations to the plan.
-func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, specNames map[string]bool) error {
-	for _, ext := range []string{".container", ".volume", ".network"} {
-		files, err := sd.ListUnitFiles(ext)
-		if err != nil {
-			return err
-		}
-		for _, fn := range files {
-			if specNames[fn] {
-				continue
-			}
-
-			// If it's a container, check if it's running so we stop it first.
-			if ext == ".container" {
-				state, err := sd.ContainerState(ctx, fn)
-				if err == nil && (state.ActiveState == "active" || state.ActiveState == "activating") {
-					plan.StopContainers = append(plan.StopContainers, StopOp{fullName: fn})
-				}
-
-				// Add operation to delete config directory.
-				containerName := strings.TrimSuffix(fn, ".container")
-				plan.DeleteConfigDirs = append(plan.DeleteConfigDirs, ConfigDirDelete{
-					containerName: containerName,
-				})
-			}
-
-			// For volumes and networks, check if reclaim policy is Delete.
-			if ext == ".volume" || ext == ".network" {
-				shouldDelete := checkReclaimPolicy(sd, fn)
-				if shouldDelete {
-					name := strings.TrimSuffix(fn, ext)
-					if ext == ".volume" {
-						plan.DeleteVolumes = append(plan.DeleteVolumes, VolumeDeleteOp{name: name})
-					} else {
-						plan.DeleteNetworks = append(plan.DeleteNetworks, NetworkDeleteOp{name: name})
-					}
-				}
-			}
-
-			// Add delete operation for unit file.
-			plan.DeleteUnits = append(plan.DeleteUnits, UnitFileDelete{
-				fullName: fn,
-			})
-			plan.NeedsReload = true
-
-			// Record result for summary.
-			plan.Results = append(plan.Results, ApplyResult{
-				fullName: fn,
-				status:   "removed",
-				message:  "removed",
-			})
-		}
-	}
-	return nil
-}
-
 // recordError adds an error result to the plan.
 func recordError(plan *ApplyPlan, fullName, message string) {
 	// Check if result already exists, update it.
@@ -508,146 +310,3 @@ func recordError(plan *ApplyPlan, fullName, message string) {
 	})
 }
 
-// addConfigOperations adds config write and delete operations to the plan.
-func addConfigOperations(plan *ApplyPlan, cfg *ConfigFileManager, container *ContainerSpec) {
-	// Add write operations for all configs in the spec.
-	for _, cfgEntry := range container.Configs {
-		basename := filepath.Base(cfgEntry.TargetVolumePath)
-		plan.WriteConfigs = append(plan.WriteConfigs, ConfigFileWrite{
-			containerName: container.Name,
-			filename:      basename,
-			content:       cfgEntry.Content,
-		})
-	}
-
-	// Add delete operations for stale configs (on disk but not in spec).
-	deployed, err := cfg.ListFiles(container.Name)
-	if err != nil {
-		return
-	}
-	specFiles := make(map[string]bool)
-	for _, ce := range container.Configs {
-		specFiles[filepath.Base(ce.TargetVolumePath)] = true
-	}
-	for _, f := range deployed {
-		if !specFiles[f] {
-			plan.DeleteConfigs = append(plan.DeleteConfigs, ConfigFileDelete{
-				containerName: container.Name,
-				filename:      f,
-			})
-		}
-	}
-
-	// If container has no configs, schedule the entire config directory for deletion.
-	if len(container.Configs) == 0 && len(deployed) > 0 {
-		plan.DeleteConfigDirs = append(plan.DeleteConfigDirs, ConfigDirDelete{
-			containerName: container.Name,
-		})
-	}
-}
-
-// summarizeContainer builds a status and message for a container result.
-func summarizeContainer(isNew, unitChanged, configChanged, needsStop, needsStart bool) (status, message string) {
-	var parts []string
-	if isNew {
-		parts = append(parts, "created")
-		status = "created"
-	} else if unitChanged || configChanged || needsStop || needsStart {
-		status = "updated"
-	} else {
-		status = "unchanged"
-	}
-
-	if unitChanged && !isNew {
-		parts = append(parts, "unit updated")
-	}
-	if configChanged {
-		parts = append(parts, "config updated")
-	}
-	if needsStop && needsStart {
-		parts = append(parts, "restarted")
-	} else if needsStart {
-		parts = append(parts, "started")
-	} else if needsStop {
-		parts = append(parts, "stopped")
-	}
-
-	if len(parts) == 0 {
-		message = "up to date"
-	} else {
-		message = strings.Join(parts, ", ")
-	}
-	return status, message
-}
-
-// configsChanged checks if any config file in the spec differs from what's deployed.
-func configsChanged(cfg *ConfigFileManager, container *ContainerSpec) bool {
-	// Check if any spec configs differ from disk.
-	for _, ce := range container.Configs {
-		basename := filepath.Base(ce.TargetVolumePath)
-		changed, err := cfg.IsChanged(container.Name, basename, ce.Content)
-		if err != nil || changed {
-			return true
-		}
-	}
-	// Check if there are config files on disk that are no longer in the spec.
-	deployed, _ := cfg.ListFiles(container.Name)
-	specFiles := make(map[string]bool)
-	for _, ce := range container.Configs {
-		specFiles[filepath.Base(ce.TargetVolumePath)] = true
-	}
-	for _, f := range deployed {
-		if !specFiles[f] {
-			return true
-		}
-	}
-	return false
-}
-
-// fullUnitName returns the quadlet file name for a spec (e.g. "webapp.container").
-func fullUnitName(s Spec) string {
-	return s.GetName() + "." + string(s.GetType())
-}
-
-// checkReclaimPolicy reads a unit file and checks if the ReclaimPolicy is set to "Delete".
-// Returns true if the resource should be deleted when the unit is removed.
-func checkReclaimPolicy(sd *systemd.Client, fullName string) bool {
-	content, err := sd.ReadUnitFile(fullName)
-	if err != nil {
-		return false
-	}
-
-	// Parse unit file using systemd library.
-	opts, err := gounit.Deserialize(bytes.NewReader(content))
-	if err != nil {
-		return false
-	}
-
-	// Look for ReclaimPolicy=Delete in X-Syslet section.
-	for _, opt := range opts {
-		if opt.Section == "X-Syslet" && opt.Name == "ReclaimPolicy" {
-			return strings.EqualFold(opt.Value, "Delete")
-		}
-	}
-	return false
-}
-
-// deletePodmanVolume executes 'podman volume rm <name>' to delete a volume.
-func deletePodmanVolume(ctx context.Context, name string) error {
-	cmd := exec.CommandContext(ctx, "podman", "volume", "rm", name)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("podman volume rm %s failed: %w (output: %s)", name, err, string(output))
-	}
-	return nil
-}
-
-// deletePodmanNetwork executes 'podman network rm <name>' to delete a network.
-func deletePodmanNetwork(ctx context.Context, name string) error {
-	cmd := exec.CommandContext(ctx, "podman", "network", "rm", name)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("podman network rm %s failed: %w (output: %s)", name, err, string(output))
-	}
-	return nil
-}

@@ -1,4 +1,4 @@
-package syslet
+package containerconfig
 
 import (
 	"crypto/sha256"
@@ -51,7 +51,7 @@ func (m *ConfigFileManager) IsChanged(containerName, filename, content string) (
 	if err != nil {
 		return false, fmt.Errorf("reading %s: %w", path, err)
 	}
-	return sha256hex([]byte(content)) != sha256hex(existing), nil
+	return Sha256hex([]byte(content)) != Sha256hex(existing), nil
 }
 
 // ListFiles returns all config filenames for a container.
@@ -111,7 +111,7 @@ func (m *ConfigFileManager) ListContainers() ([]string, error) {
 	return names, nil
 }
 
-func sha256hex(data []byte) string {
+func Sha256hex(data []byte) string {
 	h := sha256.Sum256(data)
 	return fmt.Sprintf("%x", h[:])
 }

@@ -10,6 +10,8 @@ import (
 	"os"
 	"testing"
 
+	"codeberg.org/xchangeee/syslet/internal/api"
+	"codeberg.org/xchangeee/syslet/internal/containerconfig"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 
 	"github.com/spf13/afero"
@@ -79,13 +81,13 @@ func (m *mockDBusConn) setUnitState(serviceName string, activeState string) {
 
 // testFixture helps build test scenarios with specs and existing state.
 type testFixture struct {
-	specs         []Spec
+	specs         []api.Spec
 	existingUnits map[string]string // fullName -> content
 	existingState map[string]string // service name -> "active"|"inactive"
 }
 
 // createZipFromSpecs marshals specs to JSON and creates a zip in memory.
-func createZipFromSpecs(specs []Spec) (string, error) {
+func createZipFromSpecs(specs []api.Spec) (string, error) {
 	// Create a temp file for the zip
 	tmpFile, err := os.CreateTemp("", "syslet-test-*.zip")
 	if err != nil {
@@ -110,7 +112,7 @@ func createZipFromSpecs(specs []Spec) (string, error) {
 
 		// Add type-specific fields
 		switch s := spec.(type) {
-		case *ContainerSpec:
+		case *api.ContainerSpec:
 			fullData := map[string]interface{}{
 				"type": "container",
 				"name": s.Name,
@@ -189,8 +191,8 @@ func setupTest(t *testing.T, fixture testFixture) (context.Context, afero.Fs, *s
 }
 
 func TestApply_NewContainer_DesiredStateRunning(t *testing.T) {
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {
@@ -229,8 +231,8 @@ func TestApply_NewContainer_DesiredStateRunning(t *testing.T) {
 }
 
 func TestApply_NewContainer_DesiredStateStopped(t *testing.T) {
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {
@@ -264,8 +266,8 @@ func TestApply_NewContainer_DesiredStateStopped(t *testing.T) {
 }
 
 func TestApply_UnchangedContainer_NoRestart(t *testing.T) {
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {
@@ -277,11 +279,11 @@ func TestApply_UnchangedContainer_NoRestart(t *testing.T) {
 	}
 
 	// Render the spec to get the expected unit content
-	rendered, err := renderContainer(specs[0].(*ContainerSpec), DefaultContainerConfigDir)
+	rendered, err := specs[0].(*api.ContainerSpec).Render(containerconfig.DefaultContainerConfigDir)
 	if err != nil {
 		t.Fatalf("failed to render spec: %v", err)
 	}
-	content, err := serializeUnitOptions(rendered.UnitOptions)
+	content, err := rendered.SerializeUnitOptions()
 	if err != nil {
 		t.Fatalf("failed to serialize unit: %v", err)
 	}
@@ -315,8 +317,8 @@ func TestApply_UnchangedContainer_NoRestart(t *testing.T) {
 }
 
 func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {
@@ -328,7 +330,7 @@ func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
 	}
 
 	// Create old unit content with different image
-	oldSpec := &ContainerSpec{
+	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
 		Unit: map[string]map[string]any{
 			"Container": {
@@ -337,11 +339,11 @@ func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
 		},
 		DesiredState: "running",
 	}
-	rendered, err := renderContainer(oldSpec, DefaultContainerConfigDir)
+	rendered, err := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	if err != nil {
 		t.Fatalf("failed to render old spec: %v", err)
 	}
-	oldContent, err := serializeUnitOptions(rendered.UnitOptions)
+	oldContent, err := rendered.SerializeUnitOptions()
 	if err != nil {
 		t.Fatalf("failed to serialize old unit: %v", err)
 	}
@@ -375,8 +377,8 @@ func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
 }
 
 func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {
@@ -384,7 +386,7 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 				},
 			},
 			DesiredState: "running",
-			Configs: []ConfigEntry{
+			Configs: []api.ConfigEntry{
 				{
 					Content:          "new config content",
 					TargetVolumePath: "/etc/nginx/nginx.conf",
@@ -394,7 +396,7 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 	}
 
 	// Create old unit without config
-	oldSpec := &ContainerSpec{
+	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
 		Unit: map[string]map[string]any{
 			"Container": {
@@ -403,11 +405,11 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 		},
 		DesiredState: "running",
 	}
-	rendered, err := renderContainer(oldSpec, DefaultContainerConfigDir)
+	rendered, err := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	if err != nil {
 		t.Fatalf("failed to render old spec: %v", err)
 	}
-	oldContent, err := serializeUnitOptions(rendered.UnitOptions)
+	oldContent, err := rendered.SerializeUnitOptions()
 	if err != nil {
 		t.Fatalf("failed to serialize old unit: %v", err)
 	}
@@ -435,7 +437,7 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 	}
 
 	// Verify config file was written
-	cfg := NewConfigFileManager(fs)
+	cfg := containerconfig.NewConfigFileManager(fs)
 	files, err := cfg.ListFiles("webapp")
 	if err != nil {
 		t.Fatalf("failed to list config files: %v", err)
@@ -447,22 +449,22 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 
 func TestApply_MinimalRestarts_MultipleContainers(t *testing.T) {
 	// Three containers: one unchanged, one with unit change, one new
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "unchanged",
 			Unit: map[string]map[string]any{
 				"Container": {"Image": "nginx:latest"},
 			},
 			DesiredState: "running",
 		},
-		&ContainerSpec{
+		&api.ContainerSpec{
 			Name: "changed",
 			Unit: map[string]map[string]any{
 				"Container": {"Image": "nginx:alpine"},
 			},
 			DesiredState: "running",
 		},
-		&ContainerSpec{
+		&api.ContainerSpec{
 			Name: "new",
 			Unit: map[string]map[string]any{
 				"Container": {"Image": "redis:latest"},
@@ -472,18 +474,18 @@ func TestApply_MinimalRestarts_MultipleContainers(t *testing.T) {
 	}
 
 	// Create existing units
-	unchangedRendered, _ := renderContainer(specs[0].(*ContainerSpec), DefaultContainerConfigDir)
-	unchangedContent, _ := serializeUnitOptions(unchangedRendered.UnitOptions)
+	unchangedRendered, _ := specs[0].(*api.ContainerSpec).Render(containerconfig.DefaultContainerConfigDir)
+	unchangedContent, _ := unchangedRendered.SerializeUnitOptions()
 
-	changedOldSpec := &ContainerSpec{
+	changedOldSpec := &api.ContainerSpec{
 		Name: "changed",
 		Unit: map[string]map[string]any{
 			"Container": {"Image": "nginx:latest"}, // old image
 		},
 		DesiredState: "running",
 	}
-	changedRendered, _ := renderContainer(changedOldSpec, DefaultContainerConfigDir)
-	changedContent, _ := serializeUnitOptions(changedRendered.UnitOptions)
+	changedRendered, _ := changedOldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	changedContent, _ := changedRendered.SerializeUnitOptions()
 
 	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
 		specs: specs,
@@ -521,8 +523,8 @@ func TestApply_MinimalRestarts_MultipleContainers(t *testing.T) {
 
 func TestApply_StaleUnitRemoval(t *testing.T) {
 	// Spec with only one container
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {"Image": "nginx:latest"},
@@ -532,17 +534,17 @@ func TestApply_StaleUnitRemoval(t *testing.T) {
 	}
 
 	// Existing state has two containers, "old" should be removed
-	webappRendered, _ := renderContainer(specs[0].(*ContainerSpec), DefaultContainerConfigDir)
-	webappContent, _ := serializeUnitOptions(webappRendered.UnitOptions)
+	webappRendered, _ := specs[0].(*api.ContainerSpec).Render(containerconfig.DefaultContainerConfigDir)
+	webappContent, _ := webappRendered.SerializeUnitOptions()
 
-	oldSpec := &ContainerSpec{
+	oldSpec := &api.ContainerSpec{
 		Name: "old",
 		Unit: map[string]map[string]any{
 			"Container": {"Image": "redis:latest"},
 		},
 	}
-	oldRendered, _ := renderContainer(oldSpec, DefaultContainerConfigDir)
-	oldContent, _ := serializeUnitOptions(oldRendered.UnitOptions)
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
 
 	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
 		specs: specs,
@@ -578,14 +580,14 @@ func TestApply_StaleUnitRemoval(t *testing.T) {
 
 func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 	// Spec with updated configs: remove old.conf, add new.conf, keep existing.conf
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {"Image": "nginx:latest"},
 			},
 			DesiredState: "running",
-			Configs: []ConfigEntry{
+			Configs: []api.ConfigEntry{
 				{Content: "existing content updated", TargetVolumePath: "/etc/existing.conf"},
 				{Content: "new content", TargetVolumePath: "/etc/new.conf"},
 			},
@@ -593,19 +595,19 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 	}
 
 	// Old spec with existing.conf and old.conf
-	oldSpec := &ContainerSpec{
+	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
 		Unit: map[string]map[string]any{
 			"Container": {"Image": "nginx:latest"},
 		},
 		DesiredState: "running",
-		Configs: []ConfigEntry{
+		Configs: []api.ConfigEntry{
 			{Content: "existing content", TargetVolumePath: "/etc/existing.conf"},
 			{Content: "old content", TargetVolumePath: "/etc/old.conf"},
 		},
 	}
-	oldRendered, _ := renderContainer(oldSpec, DefaultContainerConfigDir)
-	oldContent, _ := serializeUnitOptions(oldRendered.UnitOptions)
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
 
 	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
 		specs: specs,
@@ -618,7 +620,7 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 	})
 
 	// Write existing config files
-	cfg := NewConfigFileManager(fs)
+	cfg := containerconfig.NewConfigFileManager(fs)
 	cfg.Write("webapp", "existing.conf", "existing content")
 	cfg.Write("webapp", "old.conf", "old content")
 
@@ -657,21 +659,21 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 }
 
 func TestApply_VolumeAndNetworkChanges_NoContainerRestart(t *testing.T) {
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {"Image": "nginx:latest"},
 			},
 			DesiredState: "running",
 		},
-		&VolumeSpec{
+		&api.VolumeSpec{
 			Name: "data",
 			Unit: map[string]map[string]any{
 				"Volume": {"Device": "tmpfs"},
 			},
 		},
-		&NetworkSpec{
+		&api.NetworkSpec{
 			Name: "frontend",
 			Unit: map[string]map[string]any{
 				"Network": {"Driver": "bridge"},
@@ -680,20 +682,20 @@ func TestApply_VolumeAndNetworkChanges_NoContainerRestart(t *testing.T) {
 	}
 
 	// Existing state with all units unchanged except volume
-	webappRendered, _ := renderContainer(specs[0].(*ContainerSpec), DefaultContainerConfigDir)
-	webappContent, _ := serializeUnitOptions(webappRendered.UnitOptions)
+	webappRendered, _ := specs[0].(*api.ContainerSpec).Render(containerconfig.DefaultContainerConfigDir)
+	webappContent, _ := webappRendered.SerializeUnitOptions()
 
-	oldVolumeSpec := &VolumeSpec{
+	oldVolumeSpec := &api.VolumeSpec{
 		Name: "data",
 		Unit: map[string]map[string]any{
 			"Volume": {"Device": "old-device"}, // Changed
 		},
 	}
-	oldVolumeRendered, _ := renderVolume(oldVolumeSpec)
-	oldVolumeContent, _ := serializeUnitOptions(oldVolumeRendered.UnitOptions)
+	oldVolumeRendered, _ := oldVolumeSpec.Render()
+	oldVolumeContent, _ := oldVolumeRendered.SerializeUnitOptions()
 
-	networkRendered, _ := renderNetwork(specs[2].(*NetworkSpec))
-	networkContent, _ := serializeUnitOptions(networkRendered.UnitOptions)
+	networkRendered, _ := specs[2].(*api.NetworkSpec).Render()
+	networkContent, _ := networkRendered.SerializeUnitOptions()
 
 	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
 		specs: specs,
@@ -735,8 +737,8 @@ func TestApply_VolumeAndNetworkChanges_NoContainerRestart(t *testing.T) {
 }
 
 func TestApply_DesiredStateStopped_StopsRunningContainer(t *testing.T) {
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {"Image": "nginx:latest"},
@@ -745,14 +747,14 @@ func TestApply_DesiredStateStopped_StopsRunningContainer(t *testing.T) {
 		},
 	}
 
-	webappRendered, _ := renderContainer(&ContainerSpec{
+	webappRendered, _ := (&api.ContainerSpec{
 		Name: "webapp",
 		Unit: map[string]map[string]any{
 			"Container": {"Image": "nginx:latest"},
 		},
 		DesiredState: "running",
-	}, DefaultContainerConfigDir)
-	webappContent, _ := serializeUnitOptions(webappRendered.UnitOptions)
+	}).Render(containerconfig.DefaultContainerConfigDir)
+	webappContent, _ := webappRendered.SerializeUnitOptions()
 
 	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
 		specs: specs,
@@ -781,28 +783,28 @@ func TestApply_DesiredStateStopped_StopsRunningContainer(t *testing.T) {
 
 func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 	// Container is stopped, config changes, should update config but not start
-	specs := []Spec{
-		&ContainerSpec{
+	specs := []api.Spec{
+		&api.ContainerSpec{
 			Name: "webapp",
 			Unit: map[string]map[string]any{
 				"Container": {"Image": "nginx:latest"},
 			},
 			DesiredState: "stopped",
-			Configs: []ConfigEntry{
+			Configs: []api.ConfigEntry{
 				{Content: "new config", TargetVolumePath: "/etc/app.conf"},
 			},
 		},
 	}
 
-	oldSpec := &ContainerSpec{
+	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
 		Unit: map[string]map[string]any{
 			"Container": {"Image": "nginx:latest"},
 		},
 		DesiredState: "stopped",
 	}
-	oldRendered, _ := renderContainer(oldSpec, DefaultContainerConfigDir)
-	oldContent, _ := serializeUnitOptions(oldRendered.UnitOptions)
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
 
 	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
 		specs: specs,
@@ -819,7 +821,7 @@ func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 	}
 
 	// Verify config was written
-	cfg := NewConfigFileManager(fs)
+	cfg := containerconfig.NewConfigFileManager(fs)
 	files, _ := cfg.ListFiles("webapp")
 	if len(files) != 1 || files[0] != "app.conf" {
 		t.Errorf("expected app.conf, got: %v", files)

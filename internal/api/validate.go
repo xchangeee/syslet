@@ -1,4 +1,4 @@
-package syslet
+package api
 
 import (
 	"fmt"
