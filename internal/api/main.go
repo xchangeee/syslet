@@ -27,7 +27,7 @@ const (
 type Spec interface {
 	GetName() string
 	GetType() SpecType
-	GetUnit() map[string]map[string]any
+	GetUnit() map[string]map[string]UnitValue
 	FullUnitName() string
 }
 
@@ -181,7 +181,7 @@ func ensureUnitOption(opts *[]UnitOption, section, name, value string) {
 // flattenUnitMap converts a unit map into flattened UnitOptions.
 // This is a helper function used by the type-specific render functions.
 // Sections and keys are sorted alphabetically for deterministic output.
-func flattenUnitMap(unitMap map[string]map[string]any) ([]UnitOption, error) {
+func flattenUnitMap(unitMap map[string]map[string]UnitValue) ([]UnitOption, error) {
 	sections := make([]string, 0, len(unitMap))
 	for section := range unitMap {
 		sections = append(sections, section)
@@ -197,20 +197,11 @@ func flattenUnitMap(unitMap map[string]map[string]any) ([]UnitOption, error) {
 		sort.Strings(keys)
 
 		for _, key := range keys {
-			val := unitMap[section][key]
-			switch v := val.(type) {
-			case string:
+			unitValue := unitMap[section][key]
+			// Expand each value in the UnitValue into a separate UnitOption.
+			// This allows array values to produce multiple options with the same key.
+			for _, v := range unitValue.Values() {
 				opts = append(opts, UnitOption{Section: section, Name: key, Value: v})
-			case []any:
-				for _, item := range v {
-					str, ok := item.(string)
-					if !ok {
-						return nil, fmt.Errorf("option %s.%s: expected string value, got %T", section, key, item)
-					}
-					opts = append(opts, UnitOption{Section: section, Name: key, Value: str})
-				}
-			default:
-				opts = append(opts, UnitOption{Section: section, Name: key, Value: fmt.Sprintf("%v", v)})
 			}
 		}
 	}

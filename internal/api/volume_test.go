@@ -12,8 +12,8 @@ import (
 func TestVolumeSpec_GetMethods(t *testing.T) {
 	spec := &VolumeSpec{
 		Name: "data",
-		Unit: map[string]map[string]any{
-			"Volume": {"Device": "tmpfs"},
+		Unit: map[string]map[string]UnitValue{
+			"Volume": {"Device": UV("tmpfs")},
 		},
 	}
 
@@ -31,8 +31,8 @@ func TestVolumeSpec_GetMethods(t *testing.T) {
 func TestVolumeSpec_Render_BasicVolume(t *testing.T) {
 	spec := &VolumeSpec{
 		Name: "data",
-		Unit: map[string]map[string]any{
-			"Volume": {"Device": "tmpfs"},
+		Unit: map[string]map[string]UnitValue{
+			"Volume": {"Device": UV("tmpfs")},
 		},
 	}
 
@@ -56,8 +56,8 @@ func TestVolumeSpec_Render_BasicVolume(t *testing.T) {
 func TestVolumeSpec_Render_WithReclaimPolicy(t *testing.T) {
 	spec := &VolumeSpec{
 		Name: "data",
-		Unit: map[string]map[string]any{
-			"Volume": {"Device": "tmpfs"},
+		Unit: map[string]map[string]UnitValue{
+			"Volume": {"Device": UV("tmpfs")},
 		},
 		ReclaimPolicy: "Delete",
 	}
@@ -81,9 +81,9 @@ func TestVolumeSpec_Render_WithReclaimPolicy(t *testing.T) {
 func TestVolumeSpec_Render_VolumeNameNotOverridden(t *testing.T) {
 	spec := &VolumeSpec{
 		Name: "data",
-		Unit: map[string]map[string]any{
+		Unit: map[string]map[string]UnitValue{
 			"Volume": {
-				"VolumeName": "custom-volume", // User-specified name
+				"VolumeName": UV("custom-volume"), // User-specified name
 			},
 		},
 	}

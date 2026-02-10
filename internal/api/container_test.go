@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -8,8 +9,8 @@ import (
 func TestContainerSpec_GetMethods(t *testing.T) {
 	spec := &ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]UnitValue{
+			"Container": {"Image": UV("nginx:latest")},
 		},
 	}
 
@@ -27,8 +28,8 @@ func TestContainerSpec_GetMethods(t *testing.T) {
 func TestContainerSpec_Render_BasicContainer(t *testing.T) {
 	spec := &ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]UnitValue{
+			"Container": {"Image": UV("nginx:latest")},
 		},
 		DesiredState: "running",
 	}
@@ -64,8 +65,8 @@ func TestContainerSpec_Render_BasicContainer(t *testing.T) {
 func TestContainerSpec_Render_DesiredStateStopped(t *testing.T) {
 	spec := &ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]UnitValue{
+			"Container": {"Image": UV("nginx:latest")},
 		},
 		DesiredState: "stopped",
 	}
@@ -86,8 +87,8 @@ func TestContainerSpec_Render_DesiredStateStopped(t *testing.T) {
 func TestContainerSpec_Render_WithConfigs(t *testing.T) {
 	spec := &ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]UnitValue{
+			"Container": {"Image": UV("nginx:latest")},
 		},
 		Configs: []ConfigEntry{
 			{
@@ -125,10 +126,10 @@ func TestContainerSpec_Render_WithConfigs(t *testing.T) {
 func TestContainerSpec_Render_ContainerNameNotOverridden(t *testing.T) {
 	spec := &ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
+		Unit: map[string]map[string]UnitValue{
 			"Container": {
-				"Image":         "nginx:latest",
-				"ContainerName": "custom-name", // User-specified name
+				"Image":         UV("nginx:latest"),
+				"ContainerName": UV("custom-name"), // User-specified name
 			},
 		},
 	}
@@ -153,18 +154,56 @@ func TestContainerSpec_Render_ContainerNameNotOverridden(t *testing.T) {
 	}
 }
 
-func TestContainerSpec_Render_InvalidUnit(t *testing.T) {
-	spec := &ContainerSpec{
-		Name: "webapp",
-		Unit: map[string]map[string]any{
+func TestContainerSpec_Unmarshal_InvalidUnit_Number(t *testing.T) {
+	jsonData := []byte(`{
+		"name": "webapp",
+		"type": "container",
+		"unit": {
 			"Container": {
-				"Image": []any{123}, // Invalid: array with non-string
-			},
-		},
-	}
+				"Port": 8080
+			}
+		}
+	}`)
 
-	_, err := spec.Render("/etc/containers/config")
+	var spec ContainerSpec
+	err := json.Unmarshal(jsonData, &spec)
 	if err == nil {
-		t.Error("expected Render to fail with invalid unit data")
+		t.Error("expected unmarshal to fail with numeric value, but it succeeded")
+	}
+}
+
+func TestContainerSpec_Unmarshal_InvalidUnit_Boolean(t *testing.T) {
+	jsonData := []byte(`{
+		"name": "webapp",
+		"type": "container",
+		"unit": {
+			"Container": {
+				"Enabled": true
+			}
+		}
+	}`)
+
+	var spec ContainerSpec
+	err := json.Unmarshal(jsonData, &spec)
+	if err == nil {
+		t.Error("expected unmarshal to fail with boolean value, but it succeeded")
+	}
+}
+
+func TestContainerSpec_Unmarshal_InvalidUnit_ArrayWithNumber(t *testing.T) {
+	jsonData := []byte(`{
+		"name": "webapp",
+		"type": "container",
+		"unit": {
+			"Container": {
+				"Image": [123, 456]
+			}
+		}
+	}`)
+
+	var spec ContainerSpec
+	err := json.Unmarshal(jsonData, &spec)
+	if err == nil {
+		t.Error("expected unmarshal to fail with array of numbers, but it succeeded")
 	}
 }

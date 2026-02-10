@@ -10,15 +10,15 @@ import (
 
 // VolumeSpec describes a volume and maps to a .volume quadlet file.
 type VolumeSpec struct {
-	Name          string                    `json:"name"`
-	Unit          map[string]map[string]any `json:"unit"`
-	ReclaimPolicy string                    `json:"reclaimPolicy,omitempty"`
+	Name          string                          `json:"name"`
+	Unit          map[string]map[string]UnitValue `json:"unit"`
+	ReclaimPolicy string                          `json:"reclaimPolicy,omitempty"`
 }
 
-func (s *VolumeSpec) GetName() string                    { return s.Name }
-func (s *VolumeSpec) GetType() SpecType                  { return SpecTypeVolume }
-func (s *VolumeSpec) GetUnit() map[string]map[string]any { return s.Unit }
-func (s *VolumeSpec) FullUnitName() string               { return s.Name + ".volume" }
+func (s *VolumeSpec) GetName() string                          { return s.Name }
+func (s *VolumeSpec) GetType() SpecType                        { return SpecTypeVolume }
+func (s *VolumeSpec) GetUnit() map[string]map[string]UnitValue { return s.Unit }
+func (s *VolumeSpec) FullUnitName() string                     { return s.Name + ".volume" }
 
 // ShouldDeleteOnRemoval checks if the volume resource should be deleted when the unit is removed.
 // It reads the installed unit file and checks if ReclaimPolicy is set to "Delete" in the X-Syslet section.

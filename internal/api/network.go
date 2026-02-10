@@ -10,15 +10,15 @@ import (
 
 // NetworkSpec describes a network and maps to a .network quadlet file.
 type NetworkSpec struct {
-	Name          string                    `json:"name"`
-	Unit          map[string]map[string]any `json:"unit"`
-	ReclaimPolicy string                    `json:"reclaimPolicy,omitempty"`
+	Name          string                          `json:"name"`
+	Unit          map[string]map[string]UnitValue `json:"unit"`
+	ReclaimPolicy string                          `json:"reclaimPolicy,omitempty"`
 }
 
-func (s *NetworkSpec) GetName() string                    { return s.Name }
-func (s *NetworkSpec) GetType() SpecType                  { return SpecTypeNetwork }
-func (s *NetworkSpec) GetUnit() map[string]map[string]any { return s.Unit }
-func (s *NetworkSpec) FullUnitName() string               { return s.Name + ".network" }
+func (s *NetworkSpec) GetName() string                          { return s.Name }
+func (s *NetworkSpec) GetType() SpecType                        { return SpecTypeNetwork }
+func (s *NetworkSpec) GetUnit() map[string]map[string]UnitValue { return s.Unit }
+func (s *NetworkSpec) FullUnitName() string                     { return s.Name + ".network" }
 
 // ShouldDeleteOnRemoval checks if the network resource should be deleted when the unit is removed.
 // It reads the installed unit file and checks if ReclaimPolicy is set to "Delete" in the X-Syslet section.

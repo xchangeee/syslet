@@ -12,8 +12,8 @@ import (
 func TestNetworkSpec_GetMethods(t *testing.T) {
 	spec := &NetworkSpec{
 		Name: "frontend",
-		Unit: map[string]map[string]any{
-			"Network": {"Driver": "bridge"},
+		Unit: map[string]map[string]UnitValue{
+			"Network": {"Driver": UV("bridge")},
 		},
 	}
 
@@ -31,8 +31,8 @@ func TestNetworkSpec_GetMethods(t *testing.T) {
 func TestNetworkSpec_Render_BasicNetwork(t *testing.T) {
 	spec := &NetworkSpec{
 		Name: "frontend",
-		Unit: map[string]map[string]any{
-			"Network": {"Driver": "bridge"},
+		Unit: map[string]map[string]UnitValue{
+			"Network": {"Driver": UV("bridge")},
 		},
 	}
 
@@ -56,8 +56,8 @@ func TestNetworkSpec_Render_BasicNetwork(t *testing.T) {
 func TestNetworkSpec_Render_WithReclaimPolicy(t *testing.T) {
 	spec := &NetworkSpec{
 		Name: "frontend",
-		Unit: map[string]map[string]any{
-			"Network": {"Driver": "bridge"},
+		Unit: map[string]map[string]UnitValue{
+			"Network": {"Driver": UV("bridge")},
 		},
 		ReclaimPolicy: "Delete",
 	}
@@ -81,9 +81,9 @@ func TestNetworkSpec_Render_WithReclaimPolicy(t *testing.T) {
 func TestNetworkSpec_Render_NetworkNameNotOverridden(t *testing.T) {
 	spec := &NetworkSpec{
 		Name: "frontend",
-		Unit: map[string]map[string]any{
+		Unit: map[string]map[string]UnitValue{
 			"Network": {
-				"NetworkName": "custom-network", // User-specified name
+				"NetworkName": UV("custom-network"), // User-specified name
 			},
 		},
 	}

@@ -214,9 +214,9 @@ func TestApply_NewContainer_DesiredStateRunning(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
+			Unit: map[string]map[string]api.UnitValue{
 				"Container": {
-					"Image": "nginx:latest",
+					"Image": api.UV("nginx:latest"),
 				},
 			},
 			DesiredState: "running",
@@ -254,9 +254,9 @@ func TestApply_NewContainer_DesiredStateStopped(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
+			Unit: map[string]map[string]api.UnitValue{
 				"Container": {
-					"Image": "nginx:latest",
+					"Image": api.UV("nginx:latest"),
 				},
 			},
 			DesiredState: "stopped",
@@ -289,9 +289,9 @@ func TestApply_UnchangedContainer_NoRestart(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
+			Unit: map[string]map[string]api.UnitValue{
 				"Container": {
-					"Image": "nginx:latest",
+					"Image": api.UV("nginx:latest"),
 				},
 			},
 			DesiredState: "running",
@@ -340,9 +340,9 @@ func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
+			Unit: map[string]map[string]api.UnitValue{
 				"Container": {
-					"Image": "nginx:alpine", // Changed from nginx:latest
+					"Image": api.UV("nginx:alpine"), // Changed from nginx:latest
 				},
 			},
 			DesiredState: "running",
@@ -352,9 +352,9 @@ func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
 	// Create old unit content with different image
 	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
+		Unit: map[string]map[string]api.UnitValue{
 			"Container": {
-				"Image": "nginx:latest",
+				"Image": api.UV("nginx:latest"),
 			},
 		},
 		DesiredState: "running",
@@ -400,9 +400,9 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
+			Unit: map[string]map[string]api.UnitValue{
 				"Container": {
-					"Image": "nginx:latest",
+					"Image": api.UV("nginx:latest"),
 				},
 			},
 			DesiredState: "running",
@@ -418,9 +418,9 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 	// Create old unit without config
 	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
+		Unit: map[string]map[string]api.UnitValue{
 			"Container": {
-				"Image": "nginx:latest",
+				"Image": api.UV("nginx:latest"),
 			},
 		},
 		DesiredState: "running",
@@ -472,22 +472,22 @@ func TestApply_MinimalRestarts_MultipleContainers(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "unchanged",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 		},
 		&api.ContainerSpec{
 			Name: "changed",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:alpine"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:alpine")},
 			},
 			DesiredState: "running",
 		},
 		&api.ContainerSpec{
 			Name: "new",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "redis:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("redis:latest")},
 			},
 			DesiredState: "running",
 		},
@@ -499,8 +499,8 @@ func TestApply_MinimalRestarts_MultipleContainers(t *testing.T) {
 
 	changedOldSpec := &api.ContainerSpec{
 		Name: "changed",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"}, // old image
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("nginx:latest")}, // old image
 		},
 		DesiredState: "running",
 	}
@@ -546,8 +546,8 @@ func TestApply_StaleUnitRemoval(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 		},
@@ -559,8 +559,8 @@ func TestApply_StaleUnitRemoval(t *testing.T) {
 
 	oldSpec := &api.ContainerSpec{
 		Name: "old",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "redis:latest"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("redis:latest")},
 		},
 	}
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
@@ -603,8 +603,8 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 			Configs: []api.ConfigEntry{
@@ -617,8 +617,8 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 	// Old spec with existing.conf and old.conf
 	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("nginx:latest")},
 		},
 		DesiredState: "running",
 		Configs: []api.ConfigEntry{
@@ -682,21 +682,21 @@ func TestApply_VolumeAndNetworkChanges_NoContainerRestart(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 		},
 		&api.VolumeSpec{
 			Name: "data",
-			Unit: map[string]map[string]any{
-				"Volume": {"Device": "tmpfs"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Volume": {"Device": api.UV("tmpfs")},
 			},
 		},
 		&api.NetworkSpec{
 			Name: "frontend",
-			Unit: map[string]map[string]any{
-				"Network": {"Driver": "bridge"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Network": {"Driver": api.UV("bridge")},
 			},
 		},
 	}
@@ -707,8 +707,8 @@ func TestApply_VolumeAndNetworkChanges_NoContainerRestart(t *testing.T) {
 
 	oldVolumeSpec := &api.VolumeSpec{
 		Name: "data",
-		Unit: map[string]map[string]any{
-			"Volume": {"Device": "old-device"}, // Changed
+		Unit: map[string]map[string]api.UnitValue{
+			"Volume": {"Device": api.UV("old-device")}, // Changed
 		},
 	}
 	oldVolumeRendered, _ := oldVolumeSpec.Render()
@@ -760,8 +760,8 @@ func TestApply_DesiredStateStopped_StopsRunningContainer(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "stopped", // Changed from running to stopped
 		},
@@ -769,8 +769,8 @@ func TestApply_DesiredStateStopped_StopsRunningContainer(t *testing.T) {
 
 	webappRendered, _ := (&api.ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("nginx:latest")},
 		},
 		DesiredState: "running",
 	}).Render(containerconfig.DefaultContainerConfigDir)
@@ -806,8 +806,8 @@ func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "stopped",
 			Configs: []api.ConfigEntry{
@@ -818,8 +818,8 @@ func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 
 	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("nginx:latest")},
 		},
 		DesiredState: "stopped",
 	}
@@ -861,14 +861,14 @@ func TestApply_NewVolumeAndNetwork(t *testing.T) {
 	specs := []api.Spec{
 		&api.VolumeSpec{
 			Name: "data",
-			Unit: map[string]map[string]any{
-				"Volume": {"Device": "tmpfs"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Volume": {"Device": api.UV("tmpfs")},
 			},
 		},
 		&api.NetworkSpec{
 			Name: "frontend",
-			Unit: map[string]map[string]any{
-				"Network": {"Driver": "bridge"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Network": {"Driver": api.UV("bridge")},
 			},
 		},
 	}
@@ -913,8 +913,8 @@ func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 		},
@@ -927,8 +927,8 @@ func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
 	// Create stale volume WITHOUT ReclaimPolicy (should only remove unit file)
 	staleVolumeSpec := &api.VolumeSpec{
 		Name: "olddata",
-		Unit: map[string]map[string]any{
-			"Volume": {"Device": "tmpfs"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Volume": {"Device": api.UV("tmpfs")},
 		},
 	}
 	staleVolumeRendered, _ := staleVolumeSpec.Render()
@@ -937,8 +937,8 @@ func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
 	// Create stale network WITHOUT ReclaimPolicy (should only remove unit file)
 	staleNetworkSpec := &api.NetworkSpec{
 		Name: "oldnet",
-		Unit: map[string]map[string]any{
-			"Network": {"Driver": "bridge"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Network": {"Driver": api.UV("bridge")},
 		},
 	}
 	staleNetworkRendered, _ := staleNetworkSpec.Render()
@@ -996,8 +996,8 @@ func TestApply_StaleVolumeWithReclaimPolicyDelete(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 		},
@@ -1010,8 +1010,8 @@ func TestApply_StaleVolumeWithReclaimPolicyDelete(t *testing.T) {
 	staleVolumeSpec := &api.VolumeSpec{
 		Name:          "olddata",
 		ReclaimPolicy: "Delete",
-		Unit: map[string]map[string]any{
-			"Volume": {"Device": "tmpfs"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Volume": {"Device": api.UV("tmpfs")},
 		},
 	}
 	staleVolumeRendered, _ := staleVolumeSpec.Render()
@@ -1049,8 +1049,8 @@ func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 		},
@@ -1063,8 +1063,8 @@ func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
 	staleNetworkSpec := &api.NetworkSpec{
 		Name:          "oldnet",
 		ReclaimPolicy: "Delete",
-		Unit: map[string]map[string]any{
-			"Network": {"Driver": "bridge"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Network": {"Driver": api.UV("bridge")},
 		},
 	}
 	staleNetworkRendered, _ := staleNetworkSpec.Render()
@@ -1104,8 +1104,8 @@ func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 			Configs: []api.ConfigEntry{
@@ -1117,8 +1117,8 @@ func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
 	// Old spec had both a.conf and b.conf
 	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("nginx:latest")},
 		},
 		DesiredState: "running",
 		Configs: []api.ConfigEntry{
@@ -1184,8 +1184,8 @@ func TestApply_AllConfigsRemoved_DeletesConfigDirectory(t *testing.T) {
 	specs := []api.Spec{
 		&api.ContainerSpec{
 			Name: "webapp",
-			Unit: map[string]map[string]any{
-				"Container": {"Image": "nginx:latest"},
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
 			},
 			DesiredState: "running",
 			// No configs in the new spec
@@ -1195,8 +1195,8 @@ func TestApply_AllConfigsRemoved_DeletesConfigDirectory(t *testing.T) {
 	// Old spec had configs
 	oldSpec := &api.ContainerSpec{
 		Name: "webapp",
-		Unit: map[string]map[string]any{
-			"Container": {"Image": "nginx:latest"},
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("nginx:latest")},
 		},
 		DesiredState: "running",
 		Configs: []api.ConfigEntry{
