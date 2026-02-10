@@ -1,16 +1,14 @@
 # syslet
 
-syslet is a GitOps-friendly deployment tool for Podman containers using systemd. Instead of manually crafting systemd unit files, you define your infrastructure as JSON specs and let syslet handle the translation to Podman Quadlet units.
+syslet is a GitOps-friendly deployment tool for Podman containers using systemd and quadlets. Instead of manually crafting unit files on the remote host and running `systemctl` daemon-reload`,`start`,`stop`, etc, you manually craft your infrastructure as JSON specs in a local directory and let syslet handle the translation to Podman Quadlet units and`systemctl`/`podman` interaction.
 
-**Key characteristics:**
+For most single-node deployments, level-triggered systems (e.g., Kubernetes) do not make much sense. Even minimal distributions like k3s or k0s still require a considerable amount of resources to run, introduce a ton of configuration complexity even though single node deployments are mostly-static, and continuous reconciliation increases the system load for no good reason.
 
-- **JSON-only input** — syslet exclusively consumes JSON specifications
-- **Declarative** — describe what you want, not how to get there
-- **Idempotent** — safe to run repeatedly; only changes what's necessary
-- **SSH-based deployment** — no agents or daemons; deploy over standard SSH
-- **GitOps-ready** — designed to be automated with git webhooks (e.g., [webhookd](https://github.com/ncarlier/webhookd))
-- **Systemd integration** — leverages Podman Quadlet for robust container management
-- **Pruning by default** — removes specs not in the current deployment automatically
+syslet keeps a few things that I like about the Kubernetes user experience: Defining the desired state in a high-level JSON spec, a bit of validation to prevent bad config from being pushed, being able to push JSON specs to the remote system and not having to manually start or stop containers. It's implemented as an **edge-triggered desired-state reconciler**, e.g. syslet executes once per invocation and delegates the hard work to systemd and podman.
+
+JSON specs can be updated either directly via SSH using `syslet-push`, or committed to a git repository and updated on the server via [webhookd](https://github.com/ncarlier/webhookd).
+
+By default, syslet prunes specs that aren't in the current deployment automatically, and optionally prunes unused podman networks and volumes after deletion from the spec.
 
 ## How it works
 
@@ -140,7 +138,7 @@ Key points:
 
 ### 4. Deploy
 
-The deployment must be able to connect to the remote host via ssh public key authentication. password auth is not supported.
+The deployment host must be able to connect to the remote host via ssh public key authentication. password auth is not supported.
 
 Use the `syslet-push` command:
 
