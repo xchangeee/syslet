@@ -101,6 +101,81 @@ func TestLoadSpecsFromDirectory_NoFiles(t *testing.T) {
 	}
 }
 
+// TestLoadSpecsFromDirectory_NonJSONFiles tests that non-.json files and subdirectories are ignored.
+func TestLoadSpecsFromDirectory_NonJSONFiles(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	testDir := "/mixed"
+
+	// Create test directory
+	if err := fs.Mkdir(testDir, 0755); err != nil {
+		t.Fatalf("failed to create test directory: %v", err)
+	}
+
+	// Create subdirectory (should be ignored)
+	subDir := filepath.Join(testDir, "subdir")
+	if err := fs.Mkdir(subDir, 0755); err != nil {
+		t.Fatalf("failed to create subdirectory: %v", err)
+	}
+
+	// Add valid .json spec file
+	containerJSON := `{
+		"type": "container",
+		"name": "web",
+		"unit": {
+			"Container": {
+				"Image": "nginx:latest"
+			}
+		}
+	}`
+	if err := afero.WriteFile(fs, filepath.Join(testDir, "container.json"), []byte(containerJSON), 0644); err != nil {
+		t.Fatalf("failed to write container.json: %v", err)
+	}
+
+	// Add non-.json files (should be ignored)
+	if err := afero.WriteFile(fs, filepath.Join(testDir, "README.md"), []byte("# README"), 0644); err != nil {
+		t.Fatalf("failed to write README.md: %v", err)
+	}
+	if err := afero.WriteFile(fs, filepath.Join(testDir, "notes.txt"), []byte("some notes"), 0644); err != nil {
+		t.Fatalf("failed to write notes.txt: %v", err)
+	}
+	if err := afero.WriteFile(fs, filepath.Join(testDir, "config.yaml"), []byte("key: value"), 0644); err != nil {
+		t.Fatalf("failed to write config.yaml: %v", err)
+	}
+
+	// Add a .json file in the subdirectory (should be ignored because it's in a subdirectory)
+	subJSON := `{
+		"type": "volume",
+		"name": "data",
+		"unit": {
+			"Volume": {}
+		}
+	}`
+	if err := afero.WriteFile(fs, filepath.Join(subDir, "volume.json"), []byte(subJSON), 0644); err != nil {
+		t.Fatalf("failed to write volume.json in subdirectory: %v", err)
+	}
+
+	// Load specs
+	specs, err := LoadSpecsFromDirectoryFS(fs, testDir)
+	if err != nil {
+		t.Fatalf("LoadSpecsFromDirectory failed: %v", err)
+	}
+
+	// Should only get 1 spec (the container.json file)
+	if len(specs) != 1 {
+		t.Errorf("expected 1 spec, got %d", len(specs))
+	}
+
+	// Verify it's the container spec
+	if len(specs) == 1 {
+		if specs[0].GetType() != SpecTypeContainer {
+			t.Errorf("expected container spec, got %s", specs[0].GetType())
+		}
+		if specs[0].GetName() != "web" {
+			t.Errorf("expected name 'web', got %s", specs[0].GetName())
+		}
+	}
+}
+
 // TestLoadSpecsFromDirectory_InvalidJSON tests error handling for malformed JSON.
 func TestLoadSpecsFromDirectory_InvalidJSON(t *testing.T) {
 	fs := afero.NewMemMapFs()

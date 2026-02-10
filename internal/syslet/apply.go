@@ -309,4 +309,3 @@ func recordError(plan *ApplyPlan, fullName, message string) {
 		errored:  true,
 	})
 }
-

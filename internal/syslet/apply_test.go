@@ -831,6 +831,402 @@ func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 	}
 }
 
+func TestApply_NewVolumeAndNetwork(t *testing.T) {
+	// Test creating brand new volume and network units (isNew = true in diffSimple)
+	specs := []api.Spec{
+		&api.VolumeSpec{
+			Name: "data",
+			Unit: map[string]map[string]any{
+				"Volume": {"Device": "tmpfs"},
+			},
+		},
+		&api.NetworkSpec{
+			Name: "frontend",
+			Unit: map[string]map[string]any{
+				"Network": {"Driver": "bridge"},
+			},
+		},
+	}
+
+	// No existing units - this is a fresh install
+	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+		specs:         specs,
+		existingUnits: map[string]string{},
+		existingState: map[string]string{},
+	})
+
+	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify volume unit was created
+	if !sd.UnitFileExists("data.volume") {
+		t.Error("volume unit file was not created")
+	}
+
+	// Verify network unit was created
+	if !sd.UnitFileExists("frontend.network") {
+		t.Error("network unit file was not created")
+	}
+
+	// Verify reload was called
+	if !mockConn.reloaded {
+		t.Error("expected daemon-reload to be called")
+	}
+
+	// Verify no containers were started/stopped
+	if len(mockConn.started) != 0 {
+		t.Errorf("expected no starts, got: %v", mockConn.started)
+	}
+	if len(mockConn.stopped) != 0 {
+		t.Errorf("expected no stops, got: %v", mockConn.stopped)
+	}
+}
+
+func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
+	// Spec with only a container, but existing state has stale volume and network
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]any{
+				"Container": {"Image": "nginx:latest"},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	// Existing state has container, volume, and network, but spec only has container
+	webappRendered, _ := specs[0].(*api.ContainerSpec).Render(containerconfig.DefaultContainerConfigDir)
+	webappContent, _ := webappRendered.SerializeUnitOptions()
+
+	// Create stale volume WITHOUT ReclaimPolicy (should only remove unit file)
+	staleVolumeSpec := &api.VolumeSpec{
+		Name: "olddata",
+		Unit: map[string]map[string]any{
+			"Volume": {"Device": "tmpfs"},
+		},
+	}
+	staleVolumeRendered, _ := staleVolumeSpec.Render()
+	staleVolumeContent, _ := staleVolumeRendered.SerializeUnitOptions()
+
+	// Create stale network WITHOUT ReclaimPolicy (should only remove unit file)
+	staleNetworkSpec := &api.NetworkSpec{
+		Name: "oldnet",
+		Unit: map[string]map[string]any{
+			"Network": {"Driver": "bridge"},
+		},
+	}
+	staleNetworkRendered, _ := staleNetworkSpec.Render()
+	staleNetworkContent, _ := staleNetworkRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": webappContent,
+			"olddata.volume":   staleVolumeContent,
+			"oldnet.network":   staleNetworkContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify stale volume unit file was removed
+	if sd.UnitFileExists("olddata.volume") {
+		t.Error("stale volume unit file was not removed")
+	}
+
+	// Verify stale network unit file was removed
+	if sd.UnitFileExists("oldnet.network") {
+		t.Error("stale network unit file was not removed")
+	}
+
+	// Verify webapp was not affected
+	if sd.UnitFileExists("webapp.container") {
+		// Container should still exist
+	} else {
+		t.Error("webapp container unit should still exist")
+	}
+
+	// Verify no containers were stopped/started (webapp unchanged)
+	if len(mockConn.stopped) != 0 {
+		t.Errorf("expected no stops, got: %v", mockConn.stopped)
+	}
+	if len(mockConn.started) != 0 {
+		t.Errorf("expected no starts, got: %v", mockConn.started)
+	}
+
+	// Verify reload was called (units were deleted)
+	if !mockConn.reloaded {
+		t.Error("expected daemon-reload to be called")
+	}
+}
+
+func TestApply_StaleVolumeWithReclaimPolicyDelete(t *testing.T) {
+	// Test that stale volumes with ReclaimPolicy=Delete trigger volume deletion
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]any{
+				"Container": {"Image": "nginx:latest"},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	webappRendered, _ := specs[0].(*api.ContainerSpec).Render(containerconfig.DefaultContainerConfigDir)
+	webappContent, _ := webappRendered.SerializeUnitOptions()
+
+	// Create stale volume WITH ReclaimPolicy=Delete
+	staleVolumeSpec := &api.VolumeSpec{
+		Name:          "olddata",
+		ReclaimPolicy: "Delete",
+		Unit: map[string]map[string]any{
+			"Volume": {"Device": "tmpfs"},
+		},
+	}
+	staleVolumeRendered, _ := staleVolumeSpec.Render()
+	staleVolumeContent, _ := staleVolumeRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, _, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": webappContent,
+			"olddata.volume":   staleVolumeContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify stale volume unit file was removed
+	if sd.UnitFileExists("olddata.volume") {
+		t.Error("stale volume unit file was not removed")
+	}
+
+	// Note: We can't directly test that podman.DeleteVolume was called since
+	// we don't mock the podman client. The test verifies that Apply succeeds
+	// and the unit file is removed. In a real scenario, podman would be called
+	// to delete the volume resource based on the ReclaimPolicy.
+}
+
+func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
+	// Test that stale networks with ReclaimPolicy=Delete trigger network deletion
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]any{
+				"Container": {"Image": "nginx:latest"},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	webappRendered, _ := specs[0].(*api.ContainerSpec).Render(containerconfig.DefaultContainerConfigDir)
+	webappContent, _ := webappRendered.SerializeUnitOptions()
+
+	// Create stale network WITH ReclaimPolicy=Delete
+	staleNetworkSpec := &api.NetworkSpec{
+		Name:          "oldnet",
+		ReclaimPolicy: "Delete",
+		Unit: map[string]map[string]any{
+			"Network": {"Driver": "bridge"},
+		},
+	}
+	staleNetworkRendered, _ := staleNetworkSpec.Render()
+	staleNetworkContent, _ := staleNetworkRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, _, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": webappContent,
+			"oldnet.network":   staleNetworkContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify stale network unit file was removed
+	if sd.UnitFileExists("oldnet.network") {
+		t.Error("stale network unit file was not removed")
+	}
+
+	// Note: We can't directly test that podman.DeleteNetwork was called since
+	// we don't mock the podman client. The test verifies that Apply succeeds
+	// and the unit file is removed. In a real scenario, podman would be called
+	// to delete the network resource based on the ReclaimPolicy.
+}
+
+func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
+	// Test scenario: container has unchanged config a.conf, but removes b.conf.
+	// This tests the second block in configsChanged where we detect stale files
+	// without any content changes triggering an early return.
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]any{
+				"Container": {"Image": "nginx:latest"},
+			},
+			DesiredState: "running",
+			Configs: []api.ConfigEntry{
+				{Content: "unchanged content", TargetVolumePath: "/etc/app/a.conf"},
+			},
+		},
+	}
+
+	// Old spec had both a.conf and b.conf
+	oldSpec := &api.ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]any{
+			"Container": {"Image": "nginx:latest"},
+		},
+		DesiredState: "running",
+		Configs: []api.ConfigEntry{
+			{Content: "unchanged content", TargetVolumePath: "/etc/app/a.conf"},
+			{Content: "old content", TargetVolumePath: "/etc/app/b.conf"},
+		},
+	}
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": oldContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	// Write existing config files (both a.conf and b.conf)
+	cfg := containerconfig.NewConfigFileManager(fs)
+	if err := cfg.Write("webapp", "a.conf", "unchanged content"); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+	if err := cfg.Write("webapp", "b.conf", "old content"); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify config files: a.conf should remain, b.conf should be deleted
+	files, err := cfg.ListFiles("webapp")
+	if err != nil {
+		t.Fatalf("failed to list config files: %v", err)
+	}
+
+	fileMap := make(map[string]bool)
+	for _, f := range files {
+		fileMap[f] = true
+	}
+	if !fileMap["a.conf"] {
+		t.Error("a.conf should still exist")
+	}
+	if fileMap["b.conf"] {
+		t.Error("b.conf should be deleted")
+	}
+
+	// Verify container was restarted due to config change (b.conf removed)
+	if len(mockConn.stopped) != 1 || mockConn.stopped[0] != "webapp.service" {
+		t.Errorf("expected webapp to be stopped, got: %v", mockConn.stopped)
+	}
+	if len(mockConn.started) != 1 || mockConn.started[0] != "webapp.service" {
+		t.Errorf("expected webapp to be started, got: %v", mockConn.started)
+	}
+}
+
+func TestApply_AllConfigsRemoved_DeletesConfigDirectory(t *testing.T) {
+	// Test scenario: container previously had configs, now has none.
+	// The entire config directory should be deleted.
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]any{
+				"Container": {"Image": "nginx:latest"},
+			},
+			DesiredState: "running",
+			// No configs in the new spec
+		},
+	}
+
+	// Old spec had configs
+	oldSpec := &api.ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]any{
+			"Container": {"Image": "nginx:latest"},
+		},
+		DesiredState: "running",
+		Configs: []api.ConfigEntry{
+			{Content: "config1", TargetVolumePath: "/etc/app/config1.conf"},
+			{Content: "config2", TargetVolumePath: "/etc/app/config2.conf"},
+		},
+	}
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, mockConn, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": oldContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	// Write existing config files to simulate previous deployment
+	cfg := containerconfig.NewConfigFileManager(fs)
+	if err := cfg.Write("webapp", "config1.conf", "config1"); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+	if err := cfg.Write("webapp", "config2.conf", "config2"); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	// Verify configs exist before apply
+	files, err := cfg.ListFiles("webapp")
+	if err != nil {
+		t.Fatalf("failed to list config files before apply: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 config files before apply, got %d", len(files))
+	}
+
+	if err := Apply(ctx, testLogger(), fs, sd, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify entire config directory was deleted
+	files, err = cfg.ListFiles("webapp")
+	if err == nil && len(files) > 0 {
+		t.Errorf("expected config directory to be deleted, but found files: %v", files)
+	}
+
+	// Verify container was restarted due to config change
+	if len(mockConn.stopped) != 1 || mockConn.stopped[0] != "webapp.service" {
+		t.Errorf("expected webapp to be stopped, got: %v", mockConn.stopped)
+	}
+	if len(mockConn.started) != 1 || mockConn.started[0] != "webapp.service" {
+		t.Errorf("expected webapp to be started, got: %v", mockConn.started)
+	}
+}
+
 // testLogger returns a no-op logger for tests.
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{

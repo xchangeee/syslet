@@ -12,6 +12,22 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 )
 
+// checkUnitFileChanged reads an existing unit file and determines if it's new or changed.
+// Returns (isNew, contentChanged, error).
+func checkUnitFileChanged(sd *systemd.Client, fullUnitName, newContent string) (bool, bool, error) {
+	existing, err := sd.ReadUnitFile(fullUnitName)
+	if os.IsNotExist(err) {
+		// Unit doesn't exist, mark as new.
+		return true, true, nil
+	} else if err != nil {
+		// Other read error.
+		return false, false, err
+	}
+	// Unit exists, check if content changed.
+	contentChanged := containerconfig.Sha256hex([]byte(newContent)) != containerconfig.Sha256hex(existing)
+	return false, contentChanged, nil
+}
+
 // diffContainer computes the diff for a container spec, including config
 // changes and start/stop decisions based on desired state and runtime state.
 func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig.ConfigFileManager, plan *ApplyPlan, r api.RenderedUnit) error {
@@ -21,27 +37,16 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 	}
 
 	fn := r.Spec.FullUnitName()
-	isNew := false
-	unitChanged := false
-	configChanged := false
 
-	if !sd.UnitFileExists(fn) {
-		isNew = true
-		unitChanged = true
+	isNew, unitChanged, err := checkUnitFileChanged(sd, fn, r.Content)
+	if err != nil {
+		return err
+	}
+
+	configChanged := false
+	if isNew {
 		configChanged = len(container.Configs) > 0
 	} else {
-		// Check unit file changes.
-		existing, err := sd.ReadUnitFile(fn)
-		if os.IsNotExist(err) {
-			isNew = true
-			unitChanged = true
-		} else if err != nil {
-			return err
-		} else if containerconfig.Sha256hex([]byte(r.Content)) != containerconfig.Sha256hex(existing) {
-			unitChanged = true
-		}
-
-		// Check config changes.
 		configChanged = configsChanged(cfg, container)
 	}
 
@@ -111,21 +116,11 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 // These are write-only: install the unit file if new or changed.
 func diffSimple(sd *systemd.Client, plan *ApplyPlan, r api.RenderedUnit) {
 	fn := r.Spec.FullUnitName()
-	isNew := false
-	changed := false
 
-	if !sd.UnitFileExists(fn) {
-		isNew = true
-		changed = true
-	} else {
-		existing, err := sd.ReadUnitFile(fn)
-		if err != nil {
-			recordError(plan, fn, fmt.Sprintf("reading installed unit: %v", err))
-			return
-		}
-		if containerconfig.Sha256hex([]byte(r.Content)) != containerconfig.Sha256hex(existing) {
-			changed = true
-		}
+	isNew, changed, err := checkUnitFileChanged(sd, fn, r.Content)
+	if err != nil {
+		recordError(plan, fn, fmt.Sprintf("reading installed unit: %v", err))
+		return
 	}
 
 	// Add write operation if unit changed.
@@ -213,7 +208,6 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 	}
 	return nil
 }
-
 
 // addConfigOperations adds config write and delete operations to the plan.
 func addConfigOperations(plan *ApplyPlan, cfg *containerconfig.ConfigFileManager, container *api.ContainerSpec) {
