@@ -1,6 +1,6 @@
 # syslet
 
-syslet is a GitOps-friendly deployment tool for Podman containers using systemd and quadlets. Instead of manually crafting unit files on the remote host and running `systemctl daemon-reload`, `start`, `stop`, etc, you manually craft your infrastructure as JSON specs in a local directory and let syslet handle the translation to Podman Quadlet units and`systemctl`/`podman` interaction.
+syslet is a GitOps-friendly deployment tool for [Podman](https://podman.io/) containers using [systemd](https://systemd.io/) and [quadlets](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html). Instead of manually crafting unit files on the remote host and running `systemctl daemon-reload`, `start`, `stop`, etc, you manually craft your infrastructure as JSON specs in a local directory and let syslet handle the translation to Podman Quadlet units and`systemctl`/`podman` interaction.
 
 For most single-node deployments, level-triggered systems (e.g., Kubernetes) do not make much sense. Even minimal distributions like k3s or k0s still require a considerable amount of resources to run, introduce a ton of configuration complexity even though single node deployments are mostly-static, and continuous reconciliation increases the system load for no good reason.
 
