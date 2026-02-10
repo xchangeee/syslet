@@ -1,4 +1,26 @@
-.PHONY: build test clean build-linux-amd64 coverage
+.PHONY: deps check fmt test coverage build build-bin build-linux-amd64 clean
+
+deps:
+	go mod tidy
+	go mod download
+	go mod verify
+
+check:
+	go vet ./...
+	golangci-lint run ./...
+
+fmt:
+	go fmt ./...
+
+# Run tests
+test:
+	go test ./...
+
+# Generate test coverage report
+coverage:
+	go test -coverprofile=build/coverage.out ./...
+	go tool cover -html=build/coverage.out -o build/coverage.html
+	@echo "Coverage report generated: build/coverage.html"
 
 # Build all packages
 build:
@@ -15,24 +37,6 @@ build-linux-amd64:
 	mkdir -p build
 	GOOS=linux GOARCH=amd64 go build -o ./build/syslet-linux-amd64 ./cmd/syslet
 	GOOS=linux GOARCH=amd64 go build -o ./build/syslet-push-linux-amd64 ./cmd/syslet-push
-
-# Run tests
-test:
-	go test ./...
-
-# Generate test coverage report
-coverage:
-	go test -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report generated: coverage.html"
-
-
-fmt:
-	go fmt ./...
-
-
-vet:
-	go vet ./...
 
 # Remove build artifacts
 clean:
