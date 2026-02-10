@@ -33,6 +33,11 @@ type ConfigFileDelete struct {
 	filename      string
 }
 
+// ConfigDirDelete represents a container config directory to delete entirely.
+type ConfigDirDelete struct {
+	containerName string
+}
+
 // UnitFileWrite represents a unit file to write.
 type UnitFileWrite struct {
 	fullName string
@@ -60,14 +65,16 @@ type ApplyResult struct {
 // ApplyPlan contains all operations to execute, organized by phase.
 // This is the global struct passed to diff functions to accumulate operations.
 type ApplyPlan struct {
-	StopContainers  []StopOp
-	WriteConfigs    []ConfigFileWrite
-	DeleteConfigs   []ConfigFileDelete
-	WriteUnits      []UnitFileWrite
-	DeleteUnits     []UnitFileDelete
-	StartContainers []StartOp
+	StopContainers   []StopOp
+	WriteConfigs     []ConfigFileWrite
+	DeleteConfigs    []ConfigFileDelete
+	DeleteConfigDirs []ConfigDirDelete
+	WriteUnits       []UnitFileWrite
+	DeleteUnits      []UnitFileDelete
+	StartContainers  []StartOp
 
-	Results []ApplyResult // final summary for reporting
+	NeedsReload bool          // set during diff if daemon-reload is needed
+	Results     []ApplyResult // final summary for reporting
 }
 
 // Apply reads specs from a zip file, validates them, diffs against the
@@ -170,7 +177,7 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 	}
 
 	// Find installed files that are NOT in the current spec set (stale → prune).
-	if err := findStaleUnits(ctx, sd, cfg, plan, specNames); err != nil {
+	if err := findStaleUnits(ctx, sd, plan, specNames); err != nil {
 		return fmt.Errorf("finding stale units: %w", err)
 	}
 
@@ -199,36 +206,30 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 			logger.Error("failed to remove stale config", "container", op.containerName, "file", op.filename, "error", err)
 		}
 	}
+	for _, op := range plan.DeleteConfigDirs {
+		logger.Info("removing config directory", "container", op.containerName)
+		if err := cfg.RemoveAll(op.containerName); err != nil {
+			logger.Error("failed to remove config dir", "container", op.containerName, "error", err)
+		}
+	}
 
 	// Phase 3: Write and delete unit files.
-	needReload := false
 	for _, op := range plan.WriteUnits {
 		logger.Info("writing unit file", "unit", op.fullName)
 		if err := sd.WriteUnitFile(op.fullName, []byte(op.content)); err != nil {
 			logger.Error("failed to write unit file", "unit", op.fullName, "error", err)
 			recordError(plan, op.fullName, fmt.Sprintf("failed to write unit file: %v", err))
-			continue
 		}
-		needReload = true
 	}
 	for _, op := range plan.DeleteUnits {
 		logger.Info("removing stale unit", "unit", op.fullName)
 		if err := sd.RemoveUnitFile(op.fullName); err != nil {
 			logger.Error("failed to remove unit file", "unit", op.fullName, "error", err)
-		} else {
-			needReload = true
-		}
-		// Remove config directory if this was a container.
-		if strings.HasSuffix(op.fullName, ".container") {
-			name := strings.TrimSuffix(op.fullName, ".container")
-			if err := cfg.RemoveAll(name); err != nil {
-				logger.Error("failed to remove config dir", "container", name, "error", err)
-			}
 		}
 	}
 
 	// Single daemon-reload if needed.
-	if needReload {
+	if plan.NeedsReload {
 		logger.Info("daemon-reload")
 		if err := sd.DaemonReload(ctx); err != nil {
 			logger.Error("daemon-reload failed", "error", err)
@@ -285,6 +286,7 @@ func diffSimple(sd *systemd.Client, plan *ApplyPlan, s Spec, newContent string) 
 			fullName: fn,
 			content:  newContent,
 		})
+		plan.NeedsReload = true
 	}
 
 	// Record result for summary.
@@ -381,6 +383,7 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *ConfigFileManag
 			fullName: fn,
 			content:  newContent,
 		})
+		plan.NeedsReload = true
 	}
 
 	if needsStart {
@@ -400,7 +403,7 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *ConfigFileManag
 
 // findStaleUnits scans /etc/containers/systemd/ for unit files that are not
 // in the current spec set. Adds prune operations to the plan.
-func findStaleUnits(ctx context.Context, sd *systemd.Client, cfg *ConfigFileManager, plan *ApplyPlan, specNames map[string]bool) error {
+func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, specNames map[string]bool) error {
 	for _, ext := range []string{".container", ".volume", ".network"} {
 		files, err := sd.ListUnitFiles(ext)
 		if err != nil {
@@ -417,12 +420,19 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, cfg *ConfigFileMana
 				if err == nil && (state.ActiveState == "active" || state.ActiveState == "activating") {
 					plan.StopContainers = append(plan.StopContainers, StopOp{fullName: fn})
 				}
+
+				// Add operation to delete config directory.
+				containerName := strings.TrimSuffix(fn, ".container")
+				plan.DeleteConfigDirs = append(plan.DeleteConfigDirs, ConfigDirDelete{
+					containerName: containerName,
+				})
 			}
 
-			// Add delete operation.
+			// Add delete operation for unit file.
 			plan.DeleteUnits = append(plan.DeleteUnits, UnitFileDelete{
 				fullName: fn,
 			})
+			plan.NeedsReload = true
 
 			// Record result for summary.
 			plan.Results = append(plan.Results, ApplyResult{
@@ -483,6 +493,13 @@ func addConfigOperations(plan *ApplyPlan, cfg *ConfigFileManager, container *Con
 				filename:      f,
 			})
 		}
+	}
+
+	// If container has no configs, schedule the entire config directory for deletion.
+	if len(container.Configs) == 0 && len(deployed) > 0 {
+		plan.DeleteConfigDirs = append(plan.DeleteConfigDirs, ConfigDirDelete{
+			containerName: container.Name,
+		})
 	}
 }
 
