@@ -36,6 +36,10 @@ func (s *ContainerSpec) Render(containerConfigDir string) (RenderedUnit, error) 
 		return RenderedUnit{}, err
 	}
 
+	// Add auto-generated description if not explicitly set by user.
+	// This provides a human-readable description in systemd.
+	ensureUnitOption(&opts, "Unit", "Description", s.Name+" container")
+
 	// Add ContainerName if not already specified in the spec.
 	// This ensures the container name matches the spec name for consistency.
 	ensureUnitOption(&opts, "Container", "ContainerName", s.Name)
