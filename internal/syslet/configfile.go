@@ -26,11 +26,6 @@ func NewConfigFileManager(fs afero.Fs) *ConfigFileManager {
 	return &ConfigFileManager{fs: fs, baseDir: DefaultContainerConfigDir}
 }
 
-// NewConfigFileManagerWithPath creates a config manager with a custom base path.
-func NewConfigFileManagerWithPath(fs afero.Fs, baseDir string) *ConfigFileManager {
-	return &ConfigFileManager{fs: fs, baseDir: baseDir}
-}
-
 // configDir returns the config directory for a given container name.
 func (m *ConfigFileManager) configDir(containerName string) string {
 	return filepath.Join(m.baseDir, containerName)

@@ -9,24 +9,65 @@ import (
 	"strings"
 
 	"codeberg.org/xchangeee/syslet/internal/systemd"
+
 	"github.com/spf13/afero"
 )
 
-// change captures the diff for a single spec against the installed state.
-type change struct {
-	spec       Spec
-	fullName   string // e.g. "webapp.container"
-	newContent string // rendered unit file content
+// Per-phase operation structs for the apply plan.
 
-	isNew         bool
-	unitChanged   bool
-	configChanged bool
-	needsStop     bool
-	needsStart    bool
-	prune         bool // installed on disk but not in specs
+// StopOp represents a container that needs to be stopped.
+type StopOp struct {
+	fullName string
+}
 
-	errored bool
-	message string
+// ConfigFileWrite represents a config file to write.
+type ConfigFileWrite struct {
+	containerName string
+	filename      string
+	content       string
+}
+
+// ConfigFileDelete represents a config file to delete.
+type ConfigFileDelete struct {
+	containerName string
+	filename      string
+}
+
+// UnitFileWrite represents a unit file to write.
+type UnitFileWrite struct {
+	fullName string
+	content  string
+}
+
+// UnitFileDelete represents a unit file to delete (prune).
+type UnitFileDelete struct {
+	fullName string
+}
+
+// StartOp represents a container that needs to be started.
+type StartOp struct {
+	fullName string
+}
+
+// ApplyResult tracks the outcome for a single unit (for summary reporting).
+type ApplyResult struct {
+	fullName string
+	status   string // "created", "updated", "unchanged", "removed", "error"
+	message  string
+	errored  bool
+}
+
+// ApplyPlan contains all operations to execute, organized by phase.
+// This is the global struct passed to diff functions to accumulate operations.
+type ApplyPlan struct {
+	StopContainers  []StopOp
+	WriteConfigs    []ConfigFileWrite
+	DeleteConfigs   []ConfigFileDelete
+	WriteUnits      []UnitFileWrite
+	DeleteUnits     []UnitFileDelete
+	StartContainers []StartOp
+
+	Results []ApplyResult // final summary for reporting
 }
 
 // Apply reads specs from a zip file, validates them, diffs against the
@@ -42,135 +83,151 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 	if err != nil {
 		return err
 	}
+
+	// Pre-render validation: check raw input data.
 	if err := ValidateSpecs(specs); err != nil {
-		return fmt.Errorf("validation: %w", err)
+		return fmt.Errorf("pre-render validation: %w", err)
 	}
 
 	cfg := NewConfigFileManager(fs)
 	containerConfigDir := DefaultContainerConfigDir
 
-	// Render all specs to unit file content.
-	type rendered struct {
-		spec    Spec
-		content string
-	}
-	var containers, volumes, networks []rendered
+	// Render all specs to intermediate unit options.
+	var containers, volumes, networks []RenderedUnit
 	specNames := make(map[string]bool)
 
 	for _, s := range specs {
-		content, err := renderUnitContent(s, containerConfigDir)
-		if err != nil {
-			return fmt.Errorf("rendering %s: %w", s.Name, err)
-		}
-		r := rendered{spec: s, content: content}
-		switch strings.ToLower(s.Type) {
-		case "container":
+		var r RenderedUnit
+		var err error
+
+		switch s.GetType() {
+		case SpecTypeContainer:
+			r, err = renderContainer(s.(*ContainerSpec), containerConfigDir)
+			if err != nil {
+				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
+			}
 			containers = append(containers, r)
-		case "volume":
+		case SpecTypeVolume:
+			r, err = renderVolume(s.(*VolumeSpec))
+			if err != nil {
+				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
+			}
 			volumes = append(volumes, r)
-		case "network":
+		case SpecTypeNetwork:
+			r, err = renderNetwork(s.(*NetworkSpec))
+			if err != nil {
+				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
+			}
 			networks = append(networks, r)
 		}
 		specNames[fullUnitName(s)] = true
 	}
 
-	// Compute changes for all spec types.
-	var changes []*change
+	// Post-render validation: check rendered units and cross-references.
+	if err := ValidateRenderedUnits(containers, volumes, networks); err != nil {
+		return fmt.Errorf("post-render validation: %w", err)
+	}
 
-	// Volumes and networks: simple unit file diff (no configs, no start/stop).
+	// Serialize unit options to strings after validation passes.
+	for i := range containers {
+		content, err := serializeUnitOptions(containers[i].UnitOptions)
+		if err != nil {
+			return fmt.Errorf("serializing %s: %w", containers[i].Spec.GetName(), err)
+		}
+		containers[i].Content = content
+	}
+	for i := range volumes {
+		content, err := serializeUnitOptions(volumes[i].UnitOptions)
+		if err != nil {
+			return fmt.Errorf("serializing %s: %w", volumes[i].Spec.GetName(), err)
+		}
+		volumes[i].Content = content
+	}
+	for i := range networks {
+		content, err := serializeUnitOptions(networks[i].UnitOptions)
+		if err != nil {
+			return fmt.Errorf("serializing %s: %w", networks[i].Spec.GetName(), err)
+		}
+		networks[i].Content = content
+	}
+
+	// Build the apply plan by diffing all specs.
+	plan := &ApplyPlan{}
+
+	// Diff containers (handles config files, unit files, start/stop).
+	for _, r := range containers {
+		if err := diffContainer(ctx, sd, cfg, plan, r.Spec, r.Content); err != nil {
+			return fmt.Errorf("diffing container %s: %w", r.Spec.GetName(), err)
+		}
+	}
+
+	// Diff volumes and networks (unit files only).
 	for _, r := range volumes {
-		c := diffSimple(sd, r.spec, r.content)
-		changes = append(changes, c)
+		diffSimple(sd, plan, r.Spec, r.Content)
 	}
 	for _, r := range networks {
-		c := diffSimple(sd, r.spec, r.content)
-		changes = append(changes, c)
-	}
-
-	// Containers: unit file diff + config diff + start/stop logic.
-	for _, r := range containers {
-		c, err := diffContainer(ctx, sd, cfg, r.spec, r.content)
-		if err != nil {
-			return fmt.Errorf("diffing container %s: %w", r.spec.Name, err)
-		}
-		changes = append(changes, c)
+		diffSimple(sd, plan, r.Spec, r.Content)
 	}
 
 	// Find installed files that are NOT in the current spec set (stale → prune).
-	pruneChanges, err := findStaleUnits(ctx, sd, specNames)
-	if err != nil {
+	if err := findStaleUnits(ctx, sd, cfg, plan, specNames); err != nil {
 		return fmt.Errorf("finding stale units: %w", err)
 	}
-	changes = append(changes, pruneChanges...)
 
-	// Execute in strict global order.
+	// Execute in strict global order (4 phases).
 
-	// 1. Stop containers that need stopping (changed, being pruned, or desired stopped).
-	for _, c := range changes {
-		if !c.needsStop {
-			continue
-		}
-		logger.Info("stopping", "unit", c.fullName)
-		if err := sd.StopContainer(ctx, c.fullName); err != nil {
-			logger.Error("failed to stop", "unit", c.fullName, "error", err)
-			c.errored = true
-			c.message = fmt.Sprintf("failed to stop: %v", err)
+	// Phase 1: Stop containers that need stopping.
+	for _, op := range plan.StopContainers {
+		logger.Info("stopping", "unit", op.fullName)
+		if err := sd.StopContainer(ctx, op.fullName); err != nil {
+			logger.Error("failed to stop", "unit", op.fullName, "error", err)
+			recordError(plan, op.fullName, fmt.Sprintf("failed to stop: %v", err))
 		}
 	}
 
-	// 2. Write config files for changed containers.
-	for _, c := range changes {
-		if c.errored || c.prune || !c.configChanged {
-			continue
+	// Phase 2: Write and delete config files.
+	for _, op := range plan.WriteConfigs {
+		logger.Info("writing config", "container", op.containerName, "file", op.filename)
+		if err := cfg.Write(op.containerName, op.filename, op.content); err != nil {
+			logger.Error("failed to write config", "container", op.containerName, "file", op.filename, "error", err)
+			recordError(plan, op.containerName+".container", fmt.Sprintf("failed to write config %s: %v", op.filename, err))
 		}
-		for _, cfgEntry := range c.spec.Configs {
-			basename := filepath.Base(cfgEntry.TargetVolumePath)
-			logger.Info("writing config", "container", c.spec.Name, "file", basename)
-			if err := cfg.Write(c.spec.Name, basename, cfgEntry.Content); err != nil {
-				logger.Error("failed to write config", "container", c.spec.Name, "file", basename, "error", err)
-			}
+	}
+	for _, op := range plan.DeleteConfigs {
+		logger.Info("removing stale config", "container", op.containerName, "file", op.filename)
+		if err := cfg.RemoveFile(op.containerName, op.filename); err != nil {
+			logger.Error("failed to remove stale config", "container", op.containerName, "file", op.filename, "error", err)
 		}
-		// Remove config files that are on disk but no longer in the spec.
-		pruneStaleConfigs(logger, cfg, c.spec)
 	}
 
-	// 3. Write unit files for changed specs.
+	// Phase 3: Write and delete unit files.
 	needReload := false
-	for _, c := range changes {
-		if c.errored || c.prune || !c.unitChanged {
-			continue
-		}
-		logger.Info("writing unit file", "unit", c.fullName)
-		if err := sd.WriteUnitFile(c.fullName, []byte(c.newContent)); err != nil {
-			logger.Error("failed to write unit file", "unit", c.fullName, "error", err)
-			c.errored = true
-			c.message = fmt.Sprintf("failed to write unit file: %v", err)
+	for _, op := range plan.WriteUnits {
+		logger.Info("writing unit file", "unit", op.fullName)
+		if err := sd.WriteUnitFile(op.fullName, []byte(op.content)); err != nil {
+			logger.Error("failed to write unit file", "unit", op.fullName, "error", err)
+			recordError(plan, op.fullName, fmt.Sprintf("failed to write unit file: %v", err))
 			continue
 		}
 		needReload = true
 	}
-
-	// 4. Remove pruned unit files and their config dirs.
-	for _, c := range changes {
-		if !c.prune || c.errored {
-			continue
-		}
-		logger.Info("removing stale unit", "unit", c.fullName)
-		if err := sd.RemoveUnitFile(c.fullName); err != nil {
-			logger.Error("failed to remove unit file", "unit", c.fullName, "error", err)
+	for _, op := range plan.DeleteUnits {
+		logger.Info("removing stale unit", "unit", op.fullName)
+		if err := sd.RemoveUnitFile(op.fullName); err != nil {
+			logger.Error("failed to remove unit file", "unit", op.fullName, "error", err)
 		} else {
 			needReload = true
 		}
 		// Remove config directory if this was a container.
-		if strings.HasSuffix(c.fullName, ".container") {
-			name := strings.TrimSuffix(c.fullName, ".container")
+		if strings.HasSuffix(op.fullName, ".container") {
+			name := strings.TrimSuffix(op.fullName, ".container")
 			if err := cfg.RemoveAll(name); err != nil {
 				logger.Error("failed to remove config dir", "container", name, "error", err)
 			}
 		}
 	}
 
-	// 5. Single daemon-reload.
+	// Single daemon-reload if needed.
 	if needReload {
 		logger.Info("daemon-reload")
 		if err := sd.DaemonReload(ctx); err != nil {
@@ -178,35 +235,23 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 		}
 	}
 
-	// 6. Start containers that need starting.
-	for _, c := range changes {
-		if c.errored || !c.needsStart {
-			continue
-		}
-		logger.Info("starting", "unit", c.fullName)
-		if err := sd.StartContainer(ctx, c.fullName); err != nil {
-			logger.Error("failed to start", "unit", c.fullName, "error", err)
-			c.errored = true
-			c.message = fmt.Sprintf("failed to start: %v", err)
+	// Phase 4: Start containers that need starting.
+	for _, op := range plan.StartContainers {
+		logger.Info("starting", "unit", op.fullName)
+		if err := sd.StartContainer(ctx, op.fullName); err != nil {
+			logger.Error("failed to start", "unit", op.fullName, "error", err)
+			recordError(plan, op.fullName, fmt.Sprintf("failed to start: %v", err))
 		}
 	}
 
 	// Print summary.
-	for _, c := range changes {
-		msg := c.message
-		if !c.errored && msg == "" {
-			msg = summarize(c)
-		}
-		status := "unchanged"
-		if c.unitChanged || c.configChanged || c.needsStart || c.needsStop || c.prune {
-			status = "changed"
-		}
-		fmt.Printf("%-40s %-10s %s\n", c.fullName, status, msg)
+	for _, result := range plan.Results {
+		fmt.Printf("%-40s %-10s %s\n", result.fullName, result.status, result.message)
 	}
 
-	// Return error if any changes had errors.
-	for _, c := range changes {
-		if c.errored {
+	// Return error if any operations failed.
+	for _, result := range plan.Results {
+		if result.errored {
 			return fmt.Errorf("one or more units failed to apply")
 		}
 	}
@@ -215,136 +260,280 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 
 // diffSimple computes the diff for a volume or network spec.
 // These are write-only: install the unit file if new or changed.
-func diffSimple(sd *systemd.Client, s Spec, newContent string) *change {
+func diffSimple(sd *systemd.Client, plan *ApplyPlan, s Spec, newContent string) {
 	fn := fullUnitName(s)
-	c := &change{
-		spec:       s,
-		fullName:   fn,
-		newContent: newContent,
-	}
+	isNew := false
+	changed := false
 
 	if !sd.UnitFileExists(fn) {
-		c.isNew = true
-		c.unitChanged = true
-		return c
+		isNew = true
+		changed = true
+	} else {
+		existing, err := sd.ReadUnitFile(fn)
+		if err != nil {
+			recordError(plan, fn, fmt.Sprintf("reading installed unit: %v", err))
+			return
+		}
+		if sha256hex([]byte(newContent)) != sha256hex(existing) {
+			changed = true
+		}
 	}
 
-	existing, err := sd.ReadUnitFile(fn)
-	if err != nil {
-		c.errored = true
-		c.message = fmt.Sprintf("reading installed unit: %v", err)
-		return c
+	// Add write operation if unit changed.
+	if changed {
+		plan.WriteUnits = append(plan.WriteUnits, UnitFileWrite{
+			fullName: fn,
+			content:  newContent,
+		})
 	}
-	if sha256hex([]byte(newContent)) != sha256hex(existing) {
-		c.unitChanged = true
+
+	// Record result for summary.
+	status := "unchanged"
+	message := "up to date"
+	if isNew {
+		status = "created"
+		message = "created"
+	} else if changed {
+		status = "updated"
+		message = "unit updated"
 	}
-	return c
+	plan.Results = append(plan.Results, ApplyResult{
+		fullName: fn,
+		status:   status,
+		message:  message,
+	})
 }
 
 // diffContainer computes the diff for a container spec, including config
 // changes and start/stop decisions based on desired state and runtime state.
-func diffContainer(ctx context.Context, sd *systemd.Client, cfg *ConfigFileManager, s Spec, newContent string) (*change, error) {
-	fn := fullUnitName(s)
-	c := &change{
-		spec:       s,
-		fullName:   fn,
-		newContent: newContent,
+func diffContainer(ctx context.Context, sd *systemd.Client, cfg *ConfigFileManager, plan *ApplyPlan, s Spec, newContent string) error {
+	container, ok := s.(*ContainerSpec)
+	if !ok {
+		return fmt.Errorf("diffContainer called with non-container spec")
 	}
+
+	fn := fullUnitName(s)
+	isNew := false
+	unitChanged := false
+	configChanged := false
 
 	if !sd.UnitFileExists(fn) {
-		c.isNew = true
-		c.unitChanged = true
-		c.configChanged = len(s.Configs) > 0
-		if strings.ToLower(s.DesiredState) == "running" {
-			c.needsStart = true
+		isNew = true
+		unitChanged = true
+		configChanged = len(container.Configs) > 0
+	} else {
+		// Check unit file changes.
+		existing, err := sd.ReadUnitFile(fn)
+		if os.IsNotExist(err) {
+			isNew = true
+			unitChanged = true
+		} else if err != nil {
+			return err
+		} else if sha256hex([]byte(newContent)) != sha256hex(existing) {
+			unitChanged = true
 		}
-		return c, nil
-	}
 
-	// Check unit file changes.
-	existing, err := sd.ReadUnitFile(fn)
-	if os.IsNotExist(err) {
-		c.isNew = true
-		c.unitChanged = true
-	} else if err != nil {
-		return nil, err
-	} else if sha256hex([]byte(newContent)) != sha256hex(existing) {
-		c.unitChanged = true
+		// Check config changes.
+		configChanged = configsChanged(cfg, container)
 	}
-
-	// Check config changes.
-	c.configChanged = configsChanged(cfg, s)
 
 	// Query runtime state.
-	state, err := sd.ContainerState(ctx, fn)
-	if err != nil {
-		return nil, fmt.Errorf("querying state of %s: %w", fn, err)
+	var isRunning bool
+	if !isNew {
+		state, err := sd.ContainerState(ctx, fn)
+		if err != nil {
+			return fmt.Errorf("querying state of %s: %w", fn, err)
+		}
+		isRunning = state.ActiveState == "active" || state.ActiveState == "activating"
 	}
+
+	// Build operations based on changes and desired state.
+	needsStop := false
+	needsStart := false
 
 	// If unit or config changed and currently running, need to stop first.
-	isRunning := state.ActiveState == "active" || state.ActiveState == "activating"
-	if (c.unitChanged || c.configChanged) && isRunning {
-		c.needsStop = true
+	if (unitChanged || configChanged) && isRunning {
+		needsStop = true
 	}
 
-	switch strings.ToLower(s.DesiredState) {
+	switch strings.ToLower(container.DesiredState) {
 	case "running":
-		if !isRunning || c.needsStop {
-			c.needsStart = true
+		if !isRunning || needsStop {
+			needsStart = true
 		}
 	case "stopped":
 		if isRunning {
-			c.needsStop = true
+			needsStop = true
 		}
 	}
 
-	return c, nil
+	// Add operations to plan.
+	if needsStop {
+		plan.StopContainers = append(plan.StopContainers, StopOp{fullName: fn})
+	}
+
+	if configChanged {
+		addConfigOperations(plan, cfg, container)
+	}
+
+	if unitChanged {
+		plan.WriteUnits = append(plan.WriteUnits, UnitFileWrite{
+			fullName: fn,
+			content:  newContent,
+		})
+	}
+
+	if needsStart {
+		plan.StartContainers = append(plan.StartContainers, StartOp{fullName: fn})
+	}
+
+	// Record result for summary.
+	status, message := summarizeContainer(isNew, unitChanged, configChanged, needsStop, needsStart)
+	plan.Results = append(plan.Results, ApplyResult{
+		fullName: fn,
+		status:   status,
+		message:  message,
+	})
+
+	return nil
 }
 
 // findStaleUnits scans /etc/containers/systemd/ for unit files that are not
-// in the current spec set. Returns changes marked for pruning.
-func findStaleUnits(ctx context.Context, sd *systemd.Client, specNames map[string]bool) ([]*change, error) {
-	var stale []*change
+// in the current spec set. Adds prune operations to the plan.
+func findStaleUnits(ctx context.Context, sd *systemd.Client, cfg *ConfigFileManager, plan *ApplyPlan, specNames map[string]bool) error {
 	for _, ext := range []string{".container", ".volume", ".network"} {
 		files, err := sd.ListUnitFiles(ext)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, fn := range files {
 			if specNames[fn] {
 				continue
 			}
-			c := &change{
-				fullName: fn,
-				prune:    true,
-			}
+
 			// If it's a container, check if it's running so we stop it first.
 			if ext == ".container" {
 				state, err := sd.ContainerState(ctx, fn)
 				if err == nil && (state.ActiveState == "active" || state.ActiveState == "activating") {
-					c.needsStop = true
+					plan.StopContainers = append(plan.StopContainers, StopOp{fullName: fn})
 				}
 			}
-			stale = append(stale, c)
+
+			// Add delete operation.
+			plan.DeleteUnits = append(plan.DeleteUnits, UnitFileDelete{
+				fullName: fn,
+			})
+
+			// Record result for summary.
+			plan.Results = append(plan.Results, ApplyResult{
+				fullName: fn,
+				status:   "removed",
+				message:  "removed",
+			})
 		}
 	}
-	return stale, nil
+	return nil
+}
+
+// recordError adds an error result to the plan.
+func recordError(plan *ApplyPlan, fullName, message string) {
+	// Check if result already exists, update it.
+	for i := range plan.Results {
+		if plan.Results[i].fullName == fullName {
+			plan.Results[i].errored = true
+			plan.Results[i].status = "error"
+			plan.Results[i].message = message
+			return
+		}
+	}
+	// Otherwise add a new error result.
+	plan.Results = append(plan.Results, ApplyResult{
+		fullName: fullName,
+		status:   "error",
+		message:  message,
+		errored:  true,
+	})
+}
+
+// addConfigOperations adds config write and delete operations to the plan.
+func addConfigOperations(plan *ApplyPlan, cfg *ConfigFileManager, container *ContainerSpec) {
+	// Add write operations for all configs in the spec.
+	for _, cfgEntry := range container.Configs {
+		basename := filepath.Base(cfgEntry.TargetVolumePath)
+		plan.WriteConfigs = append(plan.WriteConfigs, ConfigFileWrite{
+			containerName: container.Name,
+			filename:      basename,
+			content:       cfgEntry.Content,
+		})
+	}
+
+	// Add delete operations for stale configs (on disk but not in spec).
+	deployed, err := cfg.ListFiles(container.Name)
+	if err != nil {
+		return
+	}
+	specFiles := make(map[string]bool)
+	for _, ce := range container.Configs {
+		specFiles[filepath.Base(ce.TargetVolumePath)] = true
+	}
+	for _, f := range deployed {
+		if !specFiles[f] {
+			plan.DeleteConfigs = append(plan.DeleteConfigs, ConfigFileDelete{
+				containerName: container.Name,
+				filename:      f,
+			})
+		}
+	}
+}
+
+// summarizeContainer builds a status and message for a container result.
+func summarizeContainer(isNew, unitChanged, configChanged, needsStop, needsStart bool) (status, message string) {
+	var parts []string
+	if isNew {
+		parts = append(parts, "created")
+		status = "created"
+	} else if unitChanged || configChanged || needsStop || needsStart {
+		status = "updated"
+	} else {
+		status = "unchanged"
+	}
+
+	if unitChanged && !isNew {
+		parts = append(parts, "unit updated")
+	}
+	if configChanged {
+		parts = append(parts, "config updated")
+	}
+	if needsStop && needsStart {
+		parts = append(parts, "restarted")
+	} else if needsStart {
+		parts = append(parts, "started")
+	} else if needsStop {
+		parts = append(parts, "stopped")
+	}
+
+	if len(parts) == 0 {
+		message = "up to date"
+	} else {
+		message = strings.Join(parts, ", ")
+	}
+	return status, message
 }
 
 // configsChanged checks if any config file in the spec differs from what's deployed.
-func configsChanged(cfg *ConfigFileManager, s Spec) bool {
+func configsChanged(cfg *ConfigFileManager, container *ContainerSpec) bool {
 	// Check if any spec configs differ from disk.
-	for _, ce := range s.Configs {
+	for _, ce := range container.Configs {
 		basename := filepath.Base(ce.TargetVolumePath)
-		changed, err := cfg.IsChanged(s.Name, basename, ce.Content)
+		changed, err := cfg.IsChanged(container.Name, basename, ce.Content)
 		if err != nil || changed {
 			return true
 		}
 	}
 	// Check if there are config files on disk that are no longer in the spec.
-	deployed, _ := cfg.ListFiles(s.Name)
+	deployed, _ := cfg.ListFiles(container.Name)
 	specFiles := make(map[string]bool)
-	for _, ce := range s.Configs {
+	for _, ce := range container.Configs {
 		specFiles[filepath.Base(ce.TargetVolumePath)] = true
 	}
 	for _, f := range deployed {
@@ -355,60 +544,7 @@ func configsChanged(cfg *ConfigFileManager, s Spec) bool {
 	return false
 }
 
-// pruneStaleConfigs removes config files that are on disk but no longer
-// in the container's spec.
-func pruneStaleConfigs(logger *slog.Logger, cfg *ConfigFileManager, s Spec) {
-	deployed, err := cfg.ListFiles(s.Name)
-	if err != nil {
-		return
-	}
-	specFiles := make(map[string]bool)
-	for _, ce := range s.Configs {
-		specFiles[filepath.Base(ce.TargetVolumePath)] = true
-	}
-	for _, f := range deployed {
-		if !specFiles[f] {
-			logger.Info("removing stale config", "container", s.Name, "file", f)
-			if err := cfg.RemoveFile(s.Name, f); err != nil {
-				logger.Error("failed to remove stale config", "container", s.Name, "file", f, "error", err)
-			}
-		}
-	}
-	// If no configs remain, remove the entire directory.
-	if len(s.Configs) == 0 {
-		cfg.RemoveAll(s.Name)
-	}
-}
-
 // fullUnitName returns the quadlet file name for a spec (e.g. "webapp.container").
 func fullUnitName(s Spec) string {
-	return s.Name + "." + strings.ToLower(s.Type)
-}
-
-// summarize builds a human-readable message for a change.
-func summarize(c *change) string {
-	if c.prune {
-		return "removed"
-	}
-	var parts []string
-	if c.isNew {
-		parts = append(parts, "created")
-	}
-	if c.unitChanged && !c.isNew {
-		parts = append(parts, "unit updated")
-	}
-	if c.configChanged {
-		parts = append(parts, "config updated")
-	}
-	if c.needsStop && c.needsStart {
-		parts = append(parts, "restarted")
-	} else if c.needsStart {
-		parts = append(parts, "started")
-	} else if c.needsStop {
-		parts = append(parts, "stopped")
-	}
-	if len(parts) == 0 {
-		return "up to date"
-	}
-	return strings.Join(parts, ", ")
+	return s.GetName() + "." + string(s.GetType())
 }
