@@ -1,15 +1,18 @@
 package syslet
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 
+	gounit "github.com/coreos/go-systemd/v22/unit"
 	"github.com/spf13/afero"
 )
 
@@ -54,6 +57,16 @@ type StartOp struct {
 	fullName string
 }
 
+// VolumeDeleteOp represents a volume that needs to be deleted via podman.
+type VolumeDeleteOp struct {
+	name string
+}
+
+// NetworkDeleteOp represents a network that needs to be deleted via podman.
+type NetworkDeleteOp struct {
+	name string
+}
+
 // ApplyResult tracks the outcome for a single unit (for summary reporting).
 type ApplyResult struct {
 	fullName string
@@ -71,6 +84,8 @@ type ApplyPlan struct {
 	DeleteConfigDirs []ConfigDirDelete
 	WriteUnits       []UnitFileWrite
 	DeleteUnits      []UnitFileDelete
+	DeleteVolumes    []VolumeDeleteOp
+	DeleteNetworks   []NetworkDeleteOp
 	StartContainers  []StartOp
 
 	NeedsReload bool          // set during diff if daemon-reload is needed
@@ -83,8 +98,9 @@ type ApplyPlan struct {
 //  2. Write config files
 //  3. Write unit files
 //  4. Remove pruned unit files and config dirs
-//  5. Single daemon-reload
-//  6. Start containers that should be running
+//  5. Delete podman volumes and networks (if ReclaimPolicy is "Delete")
+//  6. Single daemon-reload
+//  7. Start containers that should be running
 func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, zipPath string) error {
 	specs, err := LoadSpecsFromZip(zipPath)
 	if err != nil {
@@ -225,6 +241,20 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 		logger.Info("removing stale unit", "unit", op.fullName)
 		if err := sd.RemoveUnitFile(op.fullName); err != nil {
 			logger.Error("failed to remove unit file", "unit", op.fullName, "error", err)
+		}
+	}
+
+	// Delete podman volumes and networks if requested.
+	for _, op := range plan.DeleteVolumes {
+		logger.Info("deleting podman volume", "name", op.name)
+		if err := deletePodmanVolume(ctx, op.name); err != nil {
+			logger.Error("failed to delete volume", "name", op.name, "error", err)
+		}
+	}
+	for _, op := range plan.DeleteNetworks {
+		logger.Info("deleting podman network", "name", op.name)
+		if err := deletePodmanNetwork(ctx, op.name); err != nil {
+			logger.Error("failed to delete network", "name", op.name, "error", err)
 		}
 	}
 
@@ -428,6 +458,19 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 				})
 			}
 
+			// For volumes and networks, check if reclaim policy is Delete.
+			if ext == ".volume" || ext == ".network" {
+				shouldDelete := checkReclaimPolicy(sd, fn)
+				if shouldDelete {
+					name := strings.TrimSuffix(fn, ext)
+					if ext == ".volume" {
+						plan.DeleteVolumes = append(plan.DeleteVolumes, VolumeDeleteOp{name: name})
+					} else {
+						plan.DeleteNetworks = append(plan.DeleteNetworks, NetworkDeleteOp{name: name})
+					}
+				}
+			}
+
 			// Add delete operation for unit file.
 			plan.DeleteUnits = append(plan.DeleteUnits, UnitFileDelete{
 				fullName: fn,
@@ -564,4 +607,47 @@ func configsChanged(cfg *ConfigFileManager, container *ContainerSpec) bool {
 // fullUnitName returns the quadlet file name for a spec (e.g. "webapp.container").
 func fullUnitName(s Spec) string {
 	return s.GetName() + "." + string(s.GetType())
+}
+
+// checkReclaimPolicy reads a unit file and checks if the ReclaimPolicy is set to "Delete".
+// Returns true if the resource should be deleted when the unit is removed.
+func checkReclaimPolicy(sd *systemd.Client, fullName string) bool {
+	content, err := sd.ReadUnitFile(fullName)
+	if err != nil {
+		return false
+	}
+
+	// Parse unit file using systemd library.
+	opts, err := gounit.Deserialize(bytes.NewReader(content))
+	if err != nil {
+		return false
+	}
+
+	// Look for ReclaimPolicy=Delete in X-Syslet section.
+	for _, opt := range opts {
+		if opt.Section == "X-Syslet" && opt.Name == "ReclaimPolicy" {
+			return strings.EqualFold(opt.Value, "Delete")
+		}
+	}
+	return false
+}
+
+// deletePodmanVolume executes 'podman volume rm <name>' to delete a volume.
+func deletePodmanVolume(ctx context.Context, name string) error {
+	cmd := exec.CommandContext(ctx, "podman", "volume", "rm", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("podman volume rm %s failed: %w (output: %s)", name, err, string(output))
+	}
+	return nil
+}
+
+// deletePodmanNetwork executes 'podman network rm <name>' to delete a network.
+func deletePodmanNetwork(ctx context.Context, name string) error {
+	cmd := exec.CommandContext(ctx, "podman", "network", "rm", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("podman network rm %s failed: %w (output: %s)", name, err, string(output))
+	}
+	return nil
 }

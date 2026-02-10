@@ -50,14 +50,16 @@ type ConfigEntry struct {
 
 // VolumeSpec describes a volume and maps to a .volume quadlet file.
 type VolumeSpec struct {
-	Name string                    `json:"name"`
-	Unit map[string]map[string]any `json:"unit"`
+	Name          string                    `json:"name"`
+	Unit          map[string]map[string]any `json:"unit"`
+	ReclaimPolicy string                    `json:"reclaimPolicy,omitempty"`
 }
 
 // NetworkSpec describes a network and maps to a .network quadlet file.
 type NetworkSpec struct {
-	Name string                    `json:"name"`
-	Unit map[string]map[string]any `json:"unit"`
+	Name          string                    `json:"name"`
+	Unit          map[string]map[string]any `json:"unit"`
+	ReclaimPolicy string                    `json:"reclaimPolicy,omitempty"`
 }
 
 // RenderedUnit holds a spec and its rendered unit options before serialization.
@@ -192,20 +194,30 @@ func renderContainer(s *ContainerSpec, containerConfigDir string) (RenderedUnit,
 
 // renderVolume converts a VolumeSpec into a RenderedUnit with flattened UnitOptions.
 // Sections and keys are sorted alphabetically for deterministic output.
+// If ReclaimPolicy is set, adds it to the X-Syslet section for cleanup on removal.
 func renderVolume(s *VolumeSpec) (RenderedUnit, error) {
 	opts, err := flattenUnitMap(s.GetUnit())
 	if err != nil {
 		return RenderedUnit{}, err
+	}
+	// Prepend reclaim policy if set.
+	if s.ReclaimPolicy != "" {
+		opts = append([]UnitOption{{Section: "X-Syslet", Name: "ReclaimPolicy", Value: s.ReclaimPolicy}}, opts...)
 	}
 	return RenderedUnit{Spec: s, UnitOptions: opts}, nil
 }
 
 // renderNetwork converts a NetworkSpec into a RenderedUnit with flattened UnitOptions.
 // Sections and keys are sorted alphabetically for deterministic output.
+// If ReclaimPolicy is set, adds it to the X-Syslet section for cleanup on removal.
 func renderNetwork(s *NetworkSpec) (RenderedUnit, error) {
 	opts, err := flattenUnitMap(s.GetUnit())
 	if err != nil {
 		return RenderedUnit{}, err
+	}
+	// Prepend reclaim policy if set.
+	if s.ReclaimPolicy != "" {
+		opts = append([]UnitOption{{Section: "X-Syslet", Name: "ReclaimPolicy", Value: s.ReclaimPolicy}}, opts...)
 	}
 	return RenderedUnit{Spec: s, UnitOptions: opts}, nil
 }
