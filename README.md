@@ -101,14 +101,6 @@ A container spec:
 }
 ```
 
-Key points:
-
-- `unit` maps 1:1 to systemd unit file sections and their options
-- `desiredState` controls whether syslet starts (`running`) or stops (`stopped`) the container
-- `configs` define files mounted into the container -- syslet writes them to `/etc/containers/config/<name>/` and injects the corresponding `Volume=` entries automatically
-- The `[Install]` section is auto-generated only when `desiredState: "running"` to enable auto-start on boot
-- `ContainerName`, `VolumeName`, and `NetworkName` are automatically set to match the spec `name` if not explicitly specified
-
 A volume spec:
 
 ```json
@@ -138,7 +130,17 @@ A network spec:
 }
 ```
 
+Key points:
+
+- `desiredState` controls whether syslet starts (`running`) or stops (`stopped`) the container
+- `unit` maps 1:1 to systemd unit file sections and their options
+- unit properties `ContainerName`, `VolumeName`, and `NetworkName` are automatically set to match the spec `name` if not explicitly specified
+- For containers the `[Install]` section will be added when `desiredState: "running"` to enable auto-start on boot
+- For containers, `configs` define files to be bind-mounted into the container -- syslet writes them to `/etc/containers/config/<name>/` and injects the corresponding `Volume=` entries
+
 ### 4. Deploy
+
+The deployment must be able to connect to the remote host via ssh public key authentication. password auth is not supported.
 
 Use the `syslet-push` command:
 
@@ -150,7 +152,7 @@ syslet-push --directory hosts/web01/ web01
 cat specs.json | syslet-push --stdin web01
 ```
 
-`syslet-push` zips the spec files, copies them to the remote host, and runs syslet via SSH. Hosts are managed through your SSH config.
+`syslet-push` zips the spec files, copies them to the remote host, and runs syslet via SSH.
 
 Alternatively, deploy manually:
 
