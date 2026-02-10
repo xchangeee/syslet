@@ -124,7 +124,7 @@ func createZipFromSpecs(fs afero.Fs, specs []api.Spec) (string, error) {
 			"unit": spec.GetUnit(),
 		})
 		if err != nil {
-			w.Close()
+			_ = w.Close()
 			return "", err
 		}
 
@@ -144,7 +144,7 @@ func createZipFromSpecs(fs afero.Fs, specs []api.Spec) (string, error) {
 			}
 			data, err = json.Marshal(fullData)
 			if err != nil {
-				w.Close()
+				_ = w.Close()
 				return "", err
 			}
 		}
@@ -153,11 +153,11 @@ func createZipFromSpecs(fs afero.Fs, specs []api.Spec) (string, error) {
 		filename := fmt.Sprintf("spec-%d.json", i)
 		f, err := w.Create(filename)
 		if err != nil {
-			w.Close()
+			_ = w.Close()
 			return "", err
 		}
 		if _, err := f.Write(data); err != nil {
-			w.Close()
+			_ = w.Close()
 			return "", err
 		}
 	}
@@ -641,8 +641,8 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 
 	// Write existing config files
 	cfg := containerconfig.NewConfigFileManager(fs)
-	cfg.Write("webapp", "existing.conf", "existing content")
-	cfg.Write("webapp", "old.conf", "old content")
+	_ = cfg.Write("webapp", "existing.conf", "existing content")
+	_ = cfg.Write("webapp", "old.conf", "old content")
 
 	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)

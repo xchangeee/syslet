@@ -111,7 +111,7 @@ func LoadSpecsFromZipFS(fs afero.Fs, zipPath string) ([]Spec, error) {
 			return nil, fmt.Errorf("opening %s in zip: %w", f.Name, err)
 		}
 		fileData, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			return nil, fmt.Errorf("reading %s from zip: %w", f.Name, err)
 		}

@@ -64,7 +64,7 @@ func TestConfigFileManager_IsChanged_UnchangedFile(t *testing.T) {
 	mgr := NewConfigFileManager(fs)
 
 	// Write initial file
-	mgr.Write("webapp", "config.json", "same content")
+	_ = mgr.Write("webapp", "config.json", "same content")
 
 	// Check with same content
 	changed, err := mgr.IsChanged("webapp", "config.json", "same content")
@@ -81,7 +81,7 @@ func TestConfigFileManager_IsChanged_ModifiedFile(t *testing.T) {
 	mgr := NewConfigFileManager(fs)
 
 	// Write initial file
-	mgr.Write("webapp", "config.json", "old content")
+	_ = mgr.Write("webapp", "config.json", "old content")
 
 	// Check with different content
 	changed, err := mgr.IsChanged("webapp", "config.json", "new content")
@@ -112,9 +112,9 @@ func TestConfigFileManager_ListFiles_WithFiles(t *testing.T) {
 	mgr := NewConfigFileManager(fs)
 
 	// Write multiple files
-	mgr.Write("webapp", "app.conf", "content1")
-	mgr.Write("webapp", "db.conf", "content2")
-	mgr.Write("webapp", "cache.conf", "content3")
+	_ = mgr.Write("webapp", "app.conf", "content1")
+	_ = mgr.Write("webapp", "db.conf", "content2")
+	_ = mgr.Write("webapp", "cache.conf", "content3")
 
 	files, err := mgr.ListFiles("webapp")
 	if err != nil {
@@ -141,8 +141,8 @@ func TestConfigFileManager_ListFiles_IgnoresDirectories(t *testing.T) {
 	mgr := NewConfigFileManager(fs)
 
 	// Create a subdirectory within the container config dir
-	mgr.Write("webapp", "app.conf", "content")
-	fs.MkdirAll("/etc/containers/config/webapp/subdir", 0755)
+	_ = mgr.Write("webapp", "app.conf", "content")
+	_ = fs.MkdirAll("/etc/containers/config/webapp/subdir", 0755)
 
 	files, err := mgr.ListFiles("webapp")
 	if err != nil {
@@ -158,7 +158,7 @@ func TestConfigFileManager_RemoveFile(t *testing.T) {
 	mgr := NewConfigFileManager(fs)
 
 	// Write file
-	mgr.Write("webapp", "old.conf", "content")
+	_ = mgr.Write("webapp", "old.conf", "content")
 
 	// Remove it
 	err := mgr.RemoveFile("webapp", "old.conf")
@@ -189,8 +189,8 @@ func TestConfigFileManager_RemoveAll(t *testing.T) {
 	mgr := NewConfigFileManager(fs)
 
 	// Write multiple files
-	mgr.Write("webapp", "app.conf", "content1")
-	mgr.Write("webapp", "db.conf", "content2")
+	_ = mgr.Write("webapp", "app.conf", "content1")
+	_ = mgr.Write("webapp", "db.conf", "content2")
 
 	// Remove all
 	err := mgr.RemoveAll("webapp")
@@ -234,9 +234,9 @@ func TestConfigFileManager_ListContainers_WithContainers(t *testing.T) {
 	mgr := NewConfigFileManager(fs)
 
 	// Create config files for multiple containers
-	mgr.Write("webapp", "app.conf", "content1")
-	mgr.Write("database", "db.conf", "content2")
-	mgr.Write("cache", "cache.conf", "content3")
+	_ = mgr.Write("webapp", "app.conf", "content1")
+	_ = mgr.Write("database", "db.conf", "content2")
+	_ = mgr.Write("cache", "cache.conf", "content3")
 
 	containers, err := mgr.ListContainers()
 	if err != nil {
@@ -263,10 +263,10 @@ func TestConfigFileManager_ListContainers_IgnoresFiles(t *testing.T) {
 	mgr := NewConfigFileManager(fs)
 
 	// Create a container
-	mgr.Write("webapp", "app.conf", "content")
+	_ = mgr.Write("webapp", "app.conf", "content")
 
 	// Create a file directly in base dir (should be ignored)
-	afero.WriteFile(fs, "/etc/containers/config/somefile.txt", []byte("ignore"), 0644)
+	_ = afero.WriteFile(fs, "/etc/containers/config/somefile.txt", []byte("ignore"), 0644)
 
 	containers, err := mgr.ListContainers()
 	if err != nil {

@@ -166,7 +166,7 @@ func TestClient_ReadUnitFile(t *testing.T) {
 
 	// Write a unit file first
 	expectedContent := []byte("[Container]\nImage=redis:latest\n")
-	client.WriteUnitFile("cache.container", expectedContent)
+	_ = client.WriteUnitFile("cache.container", expectedContent)
 
 	// Read it back
 	content, err := client.ReadUnitFile("cache.container")
@@ -184,7 +184,7 @@ func TestClient_RemoveUnitFile(t *testing.T) {
 	client := NewClient(mockConn, fs)
 
 	// Write a unit file
-	client.WriteUnitFile("old.container", []byte("content"))
+	_ = client.WriteUnitFile("old.container", []byte("content"))
 
 	// Remove it
 	err := client.RemoveUnitFile("old.container")
@@ -221,7 +221,7 @@ func TestClient_UnitFileExists(t *testing.T) {
 	}
 
 	// Write file
-	client.WriteUnitFile("webapp.container", []byte("content"))
+	_ = client.WriteUnitFile("webapp.container", []byte("content"))
 
 	// Now it exists
 	if !client.UnitFileExists("webapp.container") {
@@ -250,10 +250,10 @@ func TestClient_ListUnitFiles_ByExtension(t *testing.T) {
 	client := NewClient(mockConn, fs)
 
 	// Write different types of unit files
-	client.WriteUnitFile("webapp.container", []byte("content"))
-	client.WriteUnitFile("db.container", []byte("content"))
-	client.WriteUnitFile("data.volume", []byte("content"))
-	client.WriteUnitFile("frontend.network", []byte("content"))
+	_ = client.WriteUnitFile("webapp.container", []byte("content"))
+	_ = client.WriteUnitFile("db.container", []byte("content"))
+	_ = client.WriteUnitFile("data.volume", []byte("content"))
+	_ = client.WriteUnitFile("frontend.network", []byte("content"))
 
 	// List only containers
 	containers, err := client.ListUnitFiles(".container")
@@ -289,10 +289,10 @@ func TestClient_ListUnitFiles_IgnoresDirectories(t *testing.T) {
 	client := NewClient(mockConn, fs)
 
 	// Write a unit file
-	client.WriteUnitFile("webapp.container", []byte("content"))
+	_ = client.WriteUnitFile("webapp.container", []byte("content"))
 
 	// Create a subdirectory
-	fs.MkdirAll("/etc/containers/systemd/subdir", 0755)
+	_ = fs.MkdirAll("/etc/containers/systemd/subdir", 0755)
 
 	// Should only list the file, not the directory
 	files, err := client.ListUnitFiles(".container")
@@ -311,7 +311,7 @@ func TestClient_CustomQuadletDir(t *testing.T) {
 	client := NewClientWithPaths(mockConn, fs, customDir)
 
 	// Write a unit file
-	client.WriteUnitFile("test.container", []byte("content"))
+	_ = client.WriteUnitFile("test.container", []byte("content"))
 
 	// Verify it was written to custom directory
 	content, err := afero.ReadFile(fs, "/custom/path/systemd/test.container")

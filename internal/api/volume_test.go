@@ -123,9 +123,9 @@ func TestVolumeSpec_ShouldDeleteOnRemoval_WithDelete(t *testing.T) {
 	}
 	content := gounit.Serialize(opts)
 	contentBytes := new(bytes.Buffer)
-	contentBytes.ReadFrom(content)
+	_, _ = contentBytes.ReadFrom(content)
 
-	sd.WriteUnitFile("data.volume", contentBytes.Bytes())
+	_ = sd.WriteUnitFile("data.volume", contentBytes.Bytes())
 
 	if !spec.ShouldDeleteOnRemoval(sd) {
 		t.Error("expected ShouldDeleteOnRemoval to return true for Delete policy")
@@ -146,9 +146,9 @@ func TestVolumeSpec_ShouldDeleteOnRemoval_WithRetain(t *testing.T) {
 	}
 	content := gounit.Serialize(opts)
 	contentBytes := new(bytes.Buffer)
-	contentBytes.ReadFrom(content)
+	_, _ = contentBytes.ReadFrom(content)
 
-	sd.WriteUnitFile("data.volume", contentBytes.Bytes())
+	_ = sd.WriteUnitFile("data.volume", contentBytes.Bytes())
 
 	if spec.ShouldDeleteOnRemoval(sd) {
 		t.Error("expected ShouldDeleteOnRemoval to return false for Retain policy")
@@ -168,9 +168,9 @@ func TestVolumeSpec_ShouldDeleteOnRemoval_NoPolicy(t *testing.T) {
 	}
 	content := gounit.Serialize(opts)
 	contentBytes := new(bytes.Buffer)
-	contentBytes.ReadFrom(content)
+	_, _ = contentBytes.ReadFrom(content)
 
-	sd.WriteUnitFile("data.volume", contentBytes.Bytes())
+	_ = sd.WriteUnitFile("data.volume", contentBytes.Bytes())
 
 	if spec.ShouldDeleteOnRemoval(sd) {
 		t.Error("expected ShouldDeleteOnRemoval to return false when no policy is set")
@@ -203,9 +203,9 @@ func TestVolumeSpec_ShouldDeleteOnRemoval_CaseInsensitive(t *testing.T) {
 	}
 	content := gounit.Serialize(opts)
 	contentBytes := new(bytes.Buffer)
-	contentBytes.ReadFrom(content)
+	_, _ = contentBytes.ReadFrom(content)
 
-	sd.WriteUnitFile("data.volume", contentBytes.Bytes())
+	_ = sd.WriteUnitFile("data.volume", contentBytes.Bytes())
 
 	if !spec.ShouldDeleteOnRemoval(sd) {
 		t.Error("expected ShouldDeleteOnRemoval to be case-insensitive")

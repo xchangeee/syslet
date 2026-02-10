@@ -69,13 +69,13 @@ func main() {
 		os.Exit(1)
 	}
 	tmpZipPath := tmpZip.Name()
-	defer os.Remove(tmpZipPath) // Clean up on exit
+	defer func() { _ = os.Remove(tmpZipPath) }() // Clean up on exit
 
 	// Zip specs based on source
 	if *stdinFlag {
 		// Read from stdin
 		if err := zipFromStdin(tmpZip); err != nil {
-			tmpZip.Close()
+			_ = tmpZip.Close()
 			fmt.Fprintf(os.Stderr, "Error creating zip from stdin: %v\n", err)
 			os.Exit(1)
 		}
@@ -95,12 +95,15 @@ func main() {
 		}
 
 		if err := zipJSONFiles(tmpZip, specDir); err != nil {
-			tmpZip.Close()
+			_ = tmpZip.Close()
 			fmt.Fprintf(os.Stderr, "Error creating zip: %v\n", err)
 			os.Exit(1)
 		}
 	}
-	tmpZip.Close()
+	if err := tmpZip.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error closing zip file: %v\n", err)
+		os.Exit(1)
+	}
 
 	fmt.Printf("Created zip: %s\n", tmpZipPath)
 
@@ -131,7 +134,7 @@ func main() {
 // Each spec object is written as a separate .json file in the zip.
 func zipFromStdin(w io.Writer) error {
 	zipWriter := zip.NewWriter(w)
-	defer zipWriter.Close()
+	defer func() { _ = zipWriter.Close() }()
 
 	// Read all stdin content
 	stdinData, err := io.ReadAll(os.Stdin)
@@ -202,7 +205,7 @@ func zipFromStdin(w io.Writer) error {
 // Files are added flat (no directory structure preserved).
 func zipJSONFiles(w io.Writer, dir string) error {
 	zipWriter := zip.NewWriter(w)
-	defer zipWriter.Close()
+	defer func() { _ = zipWriter.Close() }()
 
 	// Find all .json files in the directory
 	pattern := filepath.Join(dir, "*.json")
@@ -231,7 +234,7 @@ func addFileToZip(zipWriter *zip.Writer, filePath string) error {
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Use only the basename (flat structure)
 	basename := filepath.Base(filePath)
