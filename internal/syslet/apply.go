@@ -113,7 +113,6 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 	}
 
 	cfg := containerconfig.NewConfigFileManager(fs)
-	containerConfigDir := containerconfig.DefaultContainerConfigDir
 
 	// Render all specs to intermediate unit options.
 	var containers, volumes, networks []api.RenderedUnit
@@ -125,7 +124,7 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 
 		switch s.GetType() {
 		case api.SpecTypeContainer:
-			r, err = s.(*api.ContainerSpec).Render(containerConfigDir)
+			r, err = s.(*api.ContainerSpec).Render(cfg.BaseDirectory())
 			if err != nil {
 				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
 			}
