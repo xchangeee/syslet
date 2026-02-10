@@ -2,15 +2,20 @@
 //
 // Usage:
 //
-//	syslet-deploy <host> <spec-dir>
+//	syslet-deploy [--directory <dir> | --stdin] <host>
 //
-// Example:
+// Examples:
 //
-//	syslet-deploy web01 hosts/web01/
+//	syslet-deploy --directory hosts/web01/ web01
+//	cat specs.json | syslet-deploy --stdin web01
 package main
 
 import (
 	"archive/zip"
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -21,33 +26,41 @@ import (
 // Deploy syslet specs to a remote host via SSH.
 //
 // Responsibilities:
-// - Validate command-line arguments (host and spec directory)
-// - Package all .json files from the spec directory into a zip archive
+// - Validate command-line arguments (host and spec source)
+// - Package all specs (from directory or stdin) into a zip archive
 // - Transfer the zip to the remote host via SCP
 // - Execute syslet on the remote host to apply the configuration
 //
 // This script orchestrates the deployment pipeline, delegating network operations
 // to SSH/SCP and relying on the remote syslet binary for actual system configuration.
 func main() {
-	if len(os.Args) != 3 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <host> <spec-dir>\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "\nExample:\n  %s web01 hosts/web01/\n", os.Args[0])
+	// Define flags
+	dirFlag := flag.String("directory", "", "Directory containing .json spec files")
+	stdinFlag := flag.Bool("stdin", false, "Read spec objects from stdin (JSON array or newline-delimited JSON)")
+	flag.Parse()
+
+	// Validate flags are mutually exclusive
+	if *dirFlag != "" && *stdinFlag {
+		fmt.Fprintf(os.Stderr, "Error: --directory and --stdin are mutually exclusive\n")
+		flag.Usage()
 		os.Exit(1)
 	}
 
-	host := os.Args[1]
-	specDir := os.Args[2]
+	if *dirFlag == "" && !*stdinFlag {
+		fmt.Fprintf(os.Stderr, "Error: must specify either --directory or --stdin\n")
+		flag.Usage()
+		os.Exit(1)
+	}
 
-	// Validate spec directory exists
-	info, err := os.Stat(specDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	// Get host from remaining arguments
+	if flag.NArg() != 1 {
+		fmt.Fprintf(os.Stderr, "Usage: %s [--directory <dir> | --stdin] <host>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  %s --directory hosts/web01/ web01\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  cat specs.json | %s --stdin web01\n", os.Args[0])
 		os.Exit(1)
 	}
-	if !info.IsDir() {
-		fmt.Fprintf(os.Stderr, "Error: %s is not a directory\n", specDir)
-		os.Exit(1)
-	}
+	host := flag.Arg(0)
 
 	// Create temporary zip file
 	tmpZip, err := os.CreateTemp("", "syslet-*.zip")
@@ -58,11 +71,34 @@ func main() {
 	tmpZipPath := tmpZip.Name()
 	defer os.Remove(tmpZipPath) // Clean up on exit
 
-	// Zip all .json files from spec directory (flat, no directory structure)
-	if err := zipJSONFiles(tmpZip, specDir); err != nil {
-		tmpZip.Close()
-		fmt.Fprintf(os.Stderr, "Error creating zip: %v\n", err)
-		os.Exit(1)
+	// Zip specs based on source
+	if *stdinFlag {
+		// Read from stdin
+		if err := zipFromStdin(tmpZip); err != nil {
+			tmpZip.Close()
+			fmt.Fprintf(os.Stderr, "Error creating zip from stdin: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		// Read from directory
+		specDir := *dirFlag
+
+		// Validate spec directory exists
+		info, err := os.Stat(specDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if !info.IsDir() {
+			fmt.Fprintf(os.Stderr, "Error: %s is not a directory\n", specDir)
+			os.Exit(1)
+		}
+
+		if err := zipJSONFiles(tmpZip, specDir); err != nil {
+			tmpZip.Close()
+			fmt.Fprintf(os.Stderr, "Error creating zip: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	tmpZip.Close()
 
@@ -88,6 +124,78 @@ func main() {
 	}
 
 	fmt.Println("Deployment successful!")
+}
+
+// zipFromStdin creates a zip archive containing spec objects read from stdin.
+// Supports both JSON array format and newline-delimited JSON.
+// Each spec object is written as a separate .json file in the zip.
+func zipFromStdin(w io.Writer) error {
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	// Read all stdin content
+	stdinData, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("reading stdin: %w", err)
+	}
+
+	if len(stdinData) == 0 {
+		return fmt.Errorf("no data received from stdin")
+	}
+
+	// Try to parse as JSON array first
+	var specs []json.RawMessage
+	if err := json.Unmarshal(stdinData, &specs); err == nil {
+		// Successfully parsed as array
+		if len(specs) == 0 {
+			return fmt.Errorf("empty spec array received from stdin")
+		}
+
+		for i, spec := range specs {
+			filename := fmt.Sprintf("spec-%03d.json", i)
+			if err := addJSONToZip(zipWriter, filename, spec); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Try newline-delimited JSON
+	scanner := bufio.NewScanner(bufio.NewReader(bytes.NewReader(stdinData)))
+	lineNum := 0
+	specCount := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Bytes()
+
+		// Skip empty lines
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+
+		// Validate it's valid JSON
+		var spec json.RawMessage
+		if err := json.Unmarshal(line, &spec); err != nil {
+			return fmt.Errorf("invalid JSON on line %d: %w", lineNum, err)
+		}
+
+		filename := fmt.Sprintf("spec-%03d.json", specCount)
+		if err := addJSONToZip(zipWriter, filename, spec); err != nil {
+			return err
+		}
+		specCount++
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("reading stdin: %w", err)
+	}
+
+	if specCount == 0 {
+		return fmt.Errorf("no valid spec objects found in stdin")
+	}
+
+	return nil
 }
 
 // zipJSONFiles creates a zip archive containing all .json files from the specified directory.
@@ -134,6 +242,20 @@ func addFileToZip(zipWriter *zip.Writer, filePath string) error {
 
 	if _, err := io.Copy(writer, file); err != nil {
 		return fmt.Errorf("writing %s to zip: %w", basename, err)
+	}
+
+	return nil
+}
+
+// addJSONToZip adds a JSON object to the zip archive with the specified filename.
+func addJSONToZip(zipWriter *zip.Writer, filename string, data json.RawMessage) error {
+	writer, err := zipWriter.Create(filename)
+	if err != nil {
+		return fmt.Errorf("creating zip entry for %s: %w", filename, err)
+	}
+
+	if _, err := writer.Write(data); err != nil {
+		return fmt.Errorf("writing %s to zip: %w", filename, err)
 	}
 
 	return nil
