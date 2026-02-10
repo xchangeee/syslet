@@ -10,6 +10,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/containerconfig"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/util"
 )
 
 // checkUnitFileChanged reads an existing unit file and determines if it's new or changed.
@@ -24,7 +25,7 @@ func checkUnitFileChanged(sd *systemd.Client, fullUnitName, newContent string) (
 		return false, false, err
 	}
 	// Unit exists, check if content changed.
-	contentChanged := containerconfig.Sha256hex([]byte(newContent)) != containerconfig.Sha256hex(existing)
+	contentChanged := util.Sha256hex([]byte(newContent)) != util.Sha256hex(existing)
 	return false, contentChanged, nil
 }
 

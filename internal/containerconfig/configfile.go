@@ -1,11 +1,11 @@
 package containerconfig
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"codeberg.org/xchangeee/syslet/internal/util"
 	"github.com/spf13/afero"
 )
 
@@ -51,7 +51,7 @@ func (m *ConfigFileManager) IsChanged(containerName, filename, content string) (
 	if err != nil {
 		return false, fmt.Errorf("reading %s: %w", path, err)
 	}
-	return Sha256hex([]byte(content)) != Sha256hex(existing), nil
+	return util.Sha256hex([]byte(content)) != util.Sha256hex(existing), nil
 }
 
 // ListFiles returns all config filenames for a container.
@@ -109,9 +109,4 @@ func (m *ConfigFileManager) ListContainers() ([]string, error) {
 		}
 	}
 	return names, nil
-}
-
-func Sha256hex(data []byte) string {
-	h := sha256.Sum256(data)
-	return fmt.Sprintf("%x", h[:])
 }
