@@ -6,13 +6,15 @@ build:
 
 # Build binaries for current platform
 build-bin:
-	go build -o syslet ./cmd/syslet
-	go build -o deploy ./cmd/deploy
+	mkdir -p build
+	go build -o ./build/syslet ./cmd/syslet
+	go build -o ./build/deploy ./cmd/deploy
 
 # Build binaries for linux amd64
 build-linux-amd64:
-	GOOS=linux GOARCH=amd64 go build -o syslet-linux-amd64 ./cmd/syslet
-	GOOS=linux GOARCH=amd64 go build -o deploy-linux-amd64 ./cmd/deploy
+	mkdir -p build
+	GOOS=linux GOARCH=amd64 go build -o ./build/syslet-linux-amd64 ./cmd/syslet
+	GOOS=linux GOARCH=amd64 go build -o ./build/deploy-linux-amd64 ./cmd/deploy
 
 # Run tests
 test:
@@ -20,4 +22,4 @@ test:
 
 # Remove build artifacts
 clean:
-	rm -f syslet deploy syslet-linux-amd64 deploy-linux-amd64
+	rm -rf ./build
