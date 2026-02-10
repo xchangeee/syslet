@@ -4,13 +4,9 @@
 
 This project uses a Makefile. Key targets:
 
-- `make proto` — Generate Go code from proto files (run after any `.proto` changes)
-- `make build` — Generate proto + build all packages
+- `make build` — Build all packages
 - `make test` — Run all tests
-- `make tools` — Install protoc Go plugins (one-time setup)
-- `make clean` — Remove generated proto files
-
-Always run `make proto` before `make build` or `make test` if proto files have changed. **Do NOT run `go build` or `go run` directly.**
+- `make clean` — Remove build artifacts
 
 To see source files from a dependency, or to answer questions about a dependency, run `go mod download -json MODULE` and use the returned `Dir` path to read the files.
 

@@ -1,9 +1,9 @@
 # syslet
 
-Declarative container management for Podman. Define your containers, volumes, and networks as JSON specs, push them to a server, and `syslet` keeps them running. Designed for gitops pipelines.
+Declarative container management for Podman. Define your containers, volumes, and networks as JSON specs, push them to a server via SSH, and `syslet` applies the desired state.
 
 ```
-rsctl apply -f ./hosts/web01/ ---gRPC---> syslet daemon ---D-Bus---> systemd
+local: zip specs → scp → remote: syslet /etc/syslet/config.zip → systemd
 ```
 
 ## Getting started
@@ -11,44 +11,31 @@ rsctl apply -f ./hosts/web01/ ---gRPC---> syslet daemon ---D-Bus---> systemd
 ### 1. Build
 
 ```sh
-make tools   # one-time: install protoc-gen-go and protoc-gen-go-grpc
-make build   # generate proto + build syslet and rsctl
+make build
 ```
 
-Requires Go and `protoc` (Protocol Buffers compiler).
+Requires Go 1.25+.
 
-### 2. Set up the daemon on your server
+### 2. Install on the server
 
-Copy the `syslet` binary to the server and run it:
+Copy the `syslet` binary to the target server and ensure it's in PATH. syslet needs root access for systemd D-Bus operations.
 
-```sh
-sudo syslet
-```
+### 3. Create your JSON specs
 
-It listens on `:7233` by default. Override with `SYSLET_LISTEN=:9000 sudo syslet`.
-
-### 3. Connect rsctl to the server
-
-On your workstation, add the server as a context:
-
-```sh
-rsctl context add web01 --server 10.0.0.5:7233
-```
-
-This saves the connection to `~/.config/rsctl/config.yaml`. The first context you add becomes the active one automatically.
-
-### 4. Create your JSON specs
-
-Create a directory for the server with your JSON spec files:
+Organize specs by host in your local repository:
 
 ```
-hosts/web01/
-├── webapp.json
-├── webapp-data.json
-└── webapp-net.json
+my-infra/
+└── hosts/
+    ├── web01/
+    │   ├── webapp.json
+    │   ├── webapp-data.json
+    │   └── webapp-net.json
+    └── web02/
+        └── ...
 ```
 
-A container spec looks like this:
+A container spec:
 
 ```json
 {
@@ -78,10 +65,10 @@ A container spec looks like this:
 
 Key points:
 
-- `unit` is a 1:1 JSON map of systemd unit file sections and their options
-- `desiredState` controls whether syslet keeps the container running or stopped
-- `configs` define files to mount into the container. syslet writes them to the host at `/etc/containers/config/<name>/` and automatically injects the corresponding `Volume=` entries -- you never need to specify volume mounts for configs manually
-- The `[Install]` section is auto-generated based on `desiredState`
+- `unit` maps 1:1 to systemd unit file sections and their options
+- `desiredState` controls whether syslet starts (`running`) or stops (`stopped`) the container
+- `configs` define files mounted into the container -- syslet writes them to `/etc/containers/config/<name>/` and injects the corresponding `Volume=` entries automatically
+- The `[Install]` section is auto-generated
 
 A volume spec:
 
@@ -112,74 +99,59 @@ A network spec:
 }
 ```
 
-### 5. Apply
+### 4. Deploy
+
+Use the included `deploy.sh` script:
 
 ```sh
-rsctl apply -f hosts/web01/
+./deploy.sh web01 hosts/web01/
 ```
 
-The daemon receives the specs, generates quadlet unit files, and reconciles toward the desired state. You'll see output like:
+This zips the spec files, copies them to the remote host, and runs syslet via SSH. Hosts are managed through your SSH config.
 
-```
-webapp.container               changed  created, started
-webapp-data.volume             changed  created
-webapp-net.network             changed  created
-```
-
-### 6. Manage
+Or do it manually:
 
 ```sh
-rsctl list                          # list all managed units
-rsctl list --type=container         # filter by type
-rsctl status webapp.container       # detailed unit status
-rsctl logs webapp.container         # recent logs
-rsctl logs webapp.container -f      # follow logs
-rsctl delete webapp                 # stop and remove
+zip -j /tmp/config.zip hosts/web01/*.json
+scp /tmp/config.zip web01:/etc/syslet/config.zip
+ssh web01 sudo syslet /etc/syslet/config.zip
 ```
 
-## Managing multiple servers
-
-rsctl uses a context system (similar to kubectl) to manage connections to multiple servers.
-
-### Config file
-
-Stored at `~/.config/rsctl/config.yaml` (respects `XDG_CONFIG_HOME`):
-
-```yaml
-current-context: web01
-contexts:
-  web01:
-    server: 10.0.0.5:7233
-  web02:
-    server: 10.0.0.6:7233
-  staging:
-    server: staging.example.com:7233
-```
-
-### Context commands
-
-```sh
-rsctl context add web02 --server 10.0.0.6:7233   # add a server
-rsctl context list                                 # show all contexts
-rsctl context use web02                            # switch active context
-rsctl context remove staging                       # remove a context
-```
-
-### Overrides
-
-Use `--context` to target a specific server without switching:
-
-```sh
-rsctl --context web02 list
-```
-
-Priority: `--context` flag > `current-context` from config > `localhost:7233`.
-
-## Architecture
-
-### Server-side file layout
+Output looks like:
 
 ```
+webapp-net.network                       changed    created
+webapp-data.volume                       changed    created
+webapp.container                         changed    created, started
+```
+
+## How it works
+
+syslet reads a zip file containing JSON specs, validates them, and applies the desired state:
+
+1. **Read** all JSON specs from the zip (in memory, no extraction)
+2. **Validate** consistency:
+   - No duplicate unit names
+   - All volumes and networks referenced by containers exist as specs
+   - No duplicate config paths within a container
+3. **Diff** against the installed state on disk
+4. **Execute** in strict order:
+   1. Stop containers that changed or are being removed
+   2. Write config files to `/etc/containers/config/<name>/`
+   3. Write quadlet unit files to `/etc/containers/systemd/`
+   4. Remove stale unit files and config dirs (pruning)
+   5. Single `systemctl daemon-reload`
+   6. Start containers with `desiredState: "running"`
+5. **Exit** with status summary
+
+Files not present in the current zip are pruned from the host. This means removing a spec from the zip and re-running syslet will stop the container and clean up its files.
+
+## Server-side file layout
+
+```
+/etc/syslet/
+└── config.zip                      # uploaded by deploy script
+
 /etc/containers/
 ├── systemd/                        # quadlet files (generated by syslet)
 │   ├── webapp.container
@@ -189,21 +161,6 @@ Priority: `--context` flag > `current-context` from config > `localhost:7233`.
     └── webapp/
         ├── nginx.conf
         └── env
-```
-
-The quadlet files in `/etc/containers/systemd/` are the source of truth. syslet generates and overwrites them on every apply, and derives the list of managed resources by scanning this directory.
-
-### Local gitops repository
-
-```
-my-infra/
-└── hosts/
-    ├── web01/
-    │   ├── webapp.json
-    │   ├── webapp-data.json
-    │   └── webapp-net.json
-    └── web02/
-        └── ...
 ```
 
 ## JSON spec reference
@@ -232,7 +189,7 @@ my-infra/
 }
 ```
 
-### Volume (immutable after creation)
+### Volume
 
 ```json
 {
@@ -246,7 +203,7 @@ my-infra/
 }
 ```
 
-### Network (immutable after creation)
+### Network
 
 ```json
 {
@@ -263,38 +220,8 @@ my-infra/
 
 ## Supported unit types
 
-| Type | Startable | Mutable | Notes |
-|------|-----------|---------|-------|
-| container | Yes | Yes | Auto-generates `[Install]` section |
-| volume | No | Immutable | Created once, changes rejected |
-| network | No | Immutable | Created once, changes rejected |
-
-All specs are converted to Podman quadlets and installed to `/etc/containers/systemd/`.
-
-## How reconciliation works
-
-The daemon runs a reconciliation loop every 10 seconds (configurable). It operates in two phases:
-
-**Phase 1 -- Diff:** Convert specs to quadlet format, compare checksums against installed unit files on disk, check active state against desired state.
-
-**Phase 2 -- Execute** (strict order):
-
-1. Stop units that need updating (uses old config for clean shutdown)
-2. Write changed config files
-3. Write changed unit files
-4. Single `daemon-reload` if any unit files changed
-5. Start units that should be running
-
-Volumes and networks are immutable after creation -- the reconciler rejects changes and logs an error.
-
-## gRPC API
-
-The daemon exposes a gRPC API. See [proto/syslet.proto](proto/syslet.proto) for the full definition.
-
-| RPC | Description |
-|-----|-------------|
-| `Apply` | Push JSON specs, trigger reconciliation |
-| `Status` | Get status of one or all managed units |
-| `List` | List managed units with optional type filter |
-| `Logs` | Stream journal logs for a unit |
-| `Delete` | Stop and remove a unit |
+| Type | Startable | Notes |
+|------|-----------|-------|
+| container | Yes | Auto-generates `[Install]` section, supports config files |
+| volume | No | |
+| network | No | |
