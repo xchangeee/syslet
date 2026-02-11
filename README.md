@@ -6,9 +6,13 @@ For most single-node deployments, level-triggered systems (e.g., Kubernetes) do 
 
 syslet keeps a few things that I like about the Kubernetes user experience: Defining the desired state in a high-level JSON spec, a bit of validation to prevent bad config from being pushed, being able to push JSON specs to the remote system and not having to manually start or stop containers. It's implemented as an **edge-triggered desired-state reconciler**, e.g. syslet executes once per invocation and delegates the hard work to systemd and podman.
 
-JSON specs can be updated either directly via SSH using `syslet-push`, or committed to a git repository and updated on the server via [webhookd](https://github.com/ncarlier/webhookd).
+Supported unit types:
 
-By default, syslet prunes specs that aren't in the current deployment automatically, and optionally prunes unused podman networks and volumes after deletion from the spec.
+| Type | Startable | Notes |
+|------|-----------|-------|
+| container | Yes | Auto-generates `[Install]` section and `ContainerName`, supports config files |
+| volume | No | Auto-generates `VolumeName` |
+| network | No | Auto-generates `NetworkName` |
 
 ## How it works
 
@@ -29,15 +33,13 @@ syslet reads JSON specs from either a zip file or directory, validates them, and
    6. Start containers with `desiredState: "running"`
 5. **Exit** with status summary
 
+JSON specs can be updated either directly via SSH using `syslet-push`.
+
+Alternatively you can setup an ArgoCD-style workflow with all JSON specs in a git repository and a [webhookd](https://github.com/ncarlier/webhookd) script to pull the git repository and run syslet on the checked out directory.
+
 Files not present in the current input (zip or directory) are pruned from the host. This means removing a spec and re-running syslet will stop the container and clean up its files.
 
-## Supported unit types
-
-| Type | Startable | Notes |
-|------|-----------|-------|
-| container | Yes | Auto-generates `[Install]` section and `ContainerName`, supports config files |
-| volume | No | Auto-generates `VolumeName` |
-| network | No | Auto-generates `NetworkName` |
+For volumes and networks, the spec's `reclaimPolicy` determins if syslet will also remove the podman volume or network from in addition to removing the unit files.
 
 ## Getting started
 
