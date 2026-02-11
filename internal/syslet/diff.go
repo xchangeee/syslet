@@ -1,8 +1,10 @@
 package syslet
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,23 +13,68 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/containerconfig"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/util"
+	gounit "github.com/coreos/go-systemd/v22/unit"
 )
 
+// stripMetadataSections removes metadata from unit file content that shouldn't trigger restarts.
+// This is used to determine if a container needs to be restarted by comparing only
+// runtime-relevant content, ignoring metadata like descriptions and internal markers.
+// Specifically removes:
+// - The entire [X-Syslet] section (internal syslet metadata: RemovalAllowed, ReclaimPolicy)
+// - The Description field from the [Unit] section (user-facing description only)
+func stripMetadataSections(content string) (string, error) {
+	opts, err := gounit.Deserialize(bytes.NewReader([]byte(content)))
+	if err != nil {
+		// If we can't parse it, return original content (better than failing)
+		return content, nil
+	}
+
+	var filtered []*gounit.UnitOption
+	for _, opt := range opts {
+		// Filter out entire X-Syslet section
+		if opt.Section == "X-Syslet" {
+			continue
+		}
+		// Filter out Description from Unit section, but keep other Unit fields
+		if opt.Section == "Unit" && opt.Name == "Description" {
+			continue
+		}
+		filtered = append(filtered, opt)
+	}
+
+	// Serialize back to unit file format
+	data, err := io.ReadAll(gounit.Serialize(filtered))
+	if err != nil {
+		return content, nil
+	}
+	return string(data), nil
+}
+
 // checkUnitFileChanged reads an existing unit file and determines if it's new or changed.
-// Returns (isNew, contentChanged, oldContent, error).
-func checkUnitFileChanged(sd *systemd.Client, fullUnitName, newContent string) (bool, bool, string, error) {
+// Returns (isNew, contentChanged, restartRequired, oldContent, error).
+// contentChanged indicates any change including X-Syslet metadata.
+// restartRequired indicates changes that affect runtime (excluding X-Syslet).
+func checkUnitFileChanged(sd *systemd.Client, fullUnitName, newContent string) (bool, bool, bool, string, error) {
 	existing, err := sd.ReadUnitFile(fullUnitName)
 	if os.IsNotExist(err) {
 		// Unit doesn't exist, mark as new.
-		return true, true, "", nil
+		return true, true, true, "", nil
 	} else if err != nil {
 		// Other read error.
-		return false, false, "", err
+		return false, false, false, "", err
 	}
+
 	// Unit exists, check if content changed.
 	oldContent := string(existing)
 	contentChanged := util.Sha256hex([]byte(newContent)) != util.Sha256hex(existing)
-	return false, contentChanged, oldContent, nil
+
+	// Check if restart is needed by comparing without metadata fields.
+	// Changes to X-Syslet section or Unit.Description don't require container restart.
+	oldStripped, _ := stripMetadataSections(oldContent)
+	newStripped, _ := stripMetadataSections(newContent)
+	restartRequired := util.Sha256hex([]byte(newStripped)) != util.Sha256hex([]byte(oldStripped))
+
+	return false, contentChanged, restartRequired, oldContent, nil
 }
 
 // diffContainer computes the diff for a container spec, including config
@@ -40,7 +87,7 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 
 	fn := r.Spec.FullUnitName()
 
-	isNew, unitChanged, oldUnitContent, err := checkUnitFileChanged(sd, fn, r.Content)
+	isNew, unitChanged, restartRequired, oldUnitContent, err := checkUnitFileChanged(sd, fn, r.Content)
 	if err != nil {
 		return err
 	}
@@ -66,8 +113,10 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 	needsStop := false
 	needsStart := false
 
-	// If unit or config changed and currently running, need to stop first.
-	if (unitChanged || configChanged) && isRunning {
+	// If unit (excluding metadata) or config changed and currently running, need to stop first.
+	// Note: we use restartRequired (not unitChanged) to ignore metadata-only changes
+	// like X-Syslet fields or Unit.Description.
+	if (restartRequired || configChanged) && isRunning {
 		needsStop = true
 	}
 
@@ -120,7 +169,7 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 func diffSimple(sd *systemd.Client, plan *ApplyPlan, r api.RenderedUnit) {
 	fn := r.Spec.FullUnitName()
 
-	isNew, changed, oldContent, err := checkUnitFileChanged(sd, fn, r.Content)
+	isNew, changed, _, oldContent, err := checkUnitFileChanged(sd, fn, r.Content)
 	if err != nil {
 		recordError(plan, fn, fmt.Sprintf("reading installed unit: %v", err))
 		return
