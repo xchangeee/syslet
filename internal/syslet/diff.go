@@ -105,7 +105,7 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 	}
 
 	// Record result for summary.
-	status, message := summarizeContainer(isNew, unitChanged, configChanged, needsStop, needsStart)
+	status, message := summarizeContainer(container, isNew, unitChanged, configChanged, needsStop, needsStart)
 	plan.Results = append(plan.Results, ApplyResult{
 		fullName: fn,
 		status:   status,
@@ -280,7 +280,8 @@ func addConfigOperations(plan *ApplyPlan, cfg *containerconfig.ConfigFileManager
 }
 
 // summarizeContainer builds a status and message for a container result.
-func summarizeContainer(isNew, unitChanged, configChanged, needsStop, needsStart bool) (status, message string) {
+// Includes the desired state in the message to show what state the container should be in.
+func summarizeContainer(container *api.ContainerSpec, isNew, unitChanged, configChanged, needsStop, needsStart bool) (status, message string) {
 	var parts []string
 	if isNew {
 		parts = append(parts, "created")
@@ -305,10 +306,16 @@ func summarizeContainer(isNew, unitChanged, configChanged, needsStop, needsStart
 		parts = append(parts, "stopped")
 	}
 
+	// Add desired state to message for containers.
+	desiredState := container.DesiredState
+	if desiredState == "" {
+		desiredState = "stopped" // Default when not specified
+	}
+
 	if len(parts) == 0 {
-		message = "up to date"
+		message = fmt.Sprintf("up to date (desired: %s)", desiredState)
 	} else {
-		message = strings.Join(parts, ", ")
+		message = fmt.Sprintf("%s (desired: %s)", strings.Join(parts, ", "), desiredState)
 	}
 	return status, message
 }
