@@ -21,6 +21,9 @@ func ValidateSpecs(specs []Spec) error {
 	if err := validateDesiredState(specs); err != nil {
 		return err
 	}
+	if err := validateNoXSysletSection(specs); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -108,6 +111,21 @@ func validateDesiredState(specs []Spec) error {
 		state := strings.ToLower(container.DesiredState)
 		if state != "running" && state != "stopped" {
 			return fmt.Errorf("container %q: invalid desiredState %q (must be \"running\", \"stopped\", or omitted)", container.Name, container.DesiredState)
+		}
+	}
+	return nil
+}
+
+// validateNoXSysletSection ensures that users don't provide X-Syslet section in their unit maps.
+// The X-Syslet section is internal metadata managed by syslet and should not be user-provided.
+// This is a pre-render check on the raw input data.
+func validateNoXSysletSection(specs []Spec) error {
+	for _, s := range specs {
+		unitMap := s.GetUnit()
+		for section := range unitMap {
+			if section == "X-Syslet" {
+				return fmt.Errorf("%s %q: X-Syslet section is reserved for internal use and cannot be provided in spec", s.GetType(), s.GetName())
+			}
 		}
 	}
 	return nil

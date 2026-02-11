@@ -162,3 +162,115 @@ func TestValidateSpecs_IncludesDesiredStateValidation(t *testing.T) {
 		t.Errorf("error should mention 'invalid desiredState', got: %v", err)
 	}
 }
+
+func TestValidateNoXSysletSection_Container(t *testing.T) {
+	specs := []Spec{
+		&ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]UnitValue{
+				"X-Syslet": {
+					"RemovalAllowed": UV("true"),
+				},
+				"Container": {"Image": UV("nginx:latest")},
+			},
+		},
+	}
+
+	err := validateNoXSysletSection(specs)
+	if err == nil {
+		t.Fatal("validateNoXSysletSection() should error when X-Syslet section is provided")
+	}
+	if !strings.Contains(err.Error(), "X-Syslet") {
+		t.Errorf("error should mention 'X-Syslet', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "reserved for internal use") {
+		t.Errorf("error should mention 'reserved for internal use', got: %v", err)
+	}
+}
+
+func TestValidateNoXSysletSection_Volume(t *testing.T) {
+	specs := []Spec{
+		&VolumeSpec{
+			Name: "data",
+			Unit: map[string]map[string]UnitValue{
+				"X-Syslet": {
+					"ReclaimPolicy": UV("Delete"),
+				},
+				"Volume": {"Device": UV("tmpfs")},
+			},
+		},
+	}
+
+	err := validateNoXSysletSection(specs)
+	if err == nil {
+		t.Fatal("validateNoXSysletSection() should error when X-Syslet section is provided")
+	}
+	if !strings.Contains(err.Error(), "volume") {
+		t.Errorf("error should mention spec type 'volume', got: %v", err)
+	}
+}
+
+func TestValidateNoXSysletSection_Network(t *testing.T) {
+	specs := []Spec{
+		&NetworkSpec{
+			Name: "frontend",
+			Unit: map[string]map[string]UnitValue{
+				"X-Syslet": {
+					"ReclaimPolicy": UV("Delete"),
+				},
+				"Network": {"Driver": UV("bridge")},
+			},
+		},
+	}
+
+	err := validateNoXSysletSection(specs)
+	if err == nil {
+		t.Fatal("validateNoXSysletSection() should error when X-Syslet section is provided")
+	}
+	if !strings.Contains(err.Error(), "network") {
+		t.Errorf("error should mention spec type 'network', got: %v", err)
+	}
+}
+
+func TestValidateNoXSysletSection_Valid(t *testing.T) {
+	specs := []Spec{
+		&ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]UnitValue{
+				"Container": {"Image": UV("nginx:latest")},
+				"Service":   {"Restart": UV("always")},
+			},
+		},
+		&VolumeSpec{
+			Name: "data",
+			Unit: map[string]map[string]UnitValue{
+				"Volume": {"Device": UV("tmpfs")},
+			},
+		},
+	}
+
+	err := validateNoXSysletSection(specs)
+	if err != nil {
+		t.Errorf("validateNoXSysletSection() should not error with valid specs, got: %v", err)
+	}
+}
+
+func TestValidateSpecs_IncludesXSysletValidation(t *testing.T) {
+	specs := []Spec{
+		&ContainerSpec{
+			Name: "test",
+			Unit: map[string]map[string]UnitValue{
+				"X-Syslet":  {"RemovalAllowed": UV("true")},
+				"Container": {"Image": UV("nginx:latest")},
+			},
+		},
+	}
+
+	err := ValidateSpecs(specs)
+	if err == nil {
+		t.Fatal("ValidateSpecs() should error with X-Syslet section")
+	}
+	if !strings.Contains(err.Error(), "X-Syslet") {
+		t.Errorf("error should mention 'X-Syslet', got: %v", err)
+	}
+}
