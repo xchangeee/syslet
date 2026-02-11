@@ -225,7 +225,7 @@ func TestApply_NewContainer_DesiredStateRunning(t *testing.T) {
 
 	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -265,7 +265,7 @@ func TestApply_NewContainer_DesiredStateStopped(t *testing.T) {
 
 	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -318,7 +318,7 @@ func TestApply_UnchangedContainer_NoRestart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -378,7 +378,7 @@ func TestApply_UnitChanged_RunningContainer_Restart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -444,7 +444,7 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -519,7 +519,7 @@ func TestApply_MinimalRestarts_MultipleContainers(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -579,7 +579,7 @@ func TestApply_StaleUnitRemoval(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -645,7 +645,7 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 	_ = cfg.Write("webapp", "existing.conf", "existing content")
 	_ = cfg.Write("webapp", "old.conf", "old content")
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -730,7 +730,7 @@ func TestApply_VolumeAndNetworkChanges_NoContainerRestart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -787,7 +787,7 @@ func TestApply_DesiredStateStopped_StopsRunningContainer(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -837,7 +837,7 @@ func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -881,7 +881,7 @@ func TestApply_NewVolumeAndNetwork(t *testing.T) {
 		existingState: map[string]string{},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -959,7 +959,7 @@ func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -1032,7 +1032,7 @@ func TestApply_StaleVolumeWithReclaimPolicyDelete(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -1086,7 +1086,7 @@ func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
 		},
 	})
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -1153,7 +1153,7 @@ func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
 		t.Fatalf("failed to write test config: %v", err)
 	}
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -1240,7 +1240,7 @@ func TestApply_AllConfigsRemoved_DeletesConfigDirectory(t *testing.T) {
 		t.Fatalf("expected 2 config files before apply, got %d", len(files))
 	}
 
-	if err := Apply(ctx, testLogger(), fs, sd, mockPodman, zipPath); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
@@ -1264,4 +1264,13 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError, // Only show errors to keep test output clean
 	}))
+}
+
+// testApply is a helper that builds a plan and applies it.
+func testApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman podman.Interface, zipPath string) error {
+	plan, err := BuildPlan(ctx, fs, sd, zipPath)
+	if err != nil {
+		return err
+	}
+	return Apply(ctx, testLogger(), fs, sd, mockPodman, plan)
 }

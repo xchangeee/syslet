@@ -37,6 +37,7 @@ func main() {
 	// Define flags
 	dirFlag := flag.String("directory", "", "Directory containing .json spec files")
 	stdinFlag := flag.Bool("stdin", false, "Read spec objects from stdin (JSON array or newline-delimited JSON)")
+	diffFlag := flag.Bool("diff", false, "Show what would change without applying (dry-run)")
 	flag.Parse()
 
 	// Validate flags are mutually exclusive
@@ -113,20 +114,36 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Use different remote file for diff vs apply
+	var remoteFile string
+	if *diffFlag {
+		remoteFile = "/etc/syslet/preview.zip"
+	} else {
+		remoteFile = "/etc/syslet/config.zip"
+	}
+
 	// Copy zip to remote host
-	remotePath := fmt.Sprintf("%s:/etc/syslet/config.zip", host)
+	remotePath := fmt.Sprintf("%s:%s", host, remoteFile)
 	if err := runCommand("scp", tmpZipPath, remotePath); err != nil {
 		fmt.Fprintf(os.Stderr, "Error copying to remote host: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Run syslet on remote host
-	if err := runCommand("ssh", host, "syslet /etc/syslet/config.zip"); err != nil {
+	var sysletCmd string
+	if *diffFlag {
+		sysletCmd = fmt.Sprintf("syslet --diff %s", remoteFile)
+	} else {
+		sysletCmd = fmt.Sprintf("syslet %s", remoteFile)
+	}
+	if err := runCommand("ssh", host, sysletCmd); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running syslet: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("Deployment successful!")
+	if !*diffFlag {
+		fmt.Println("Deployment successful!")
+	}
 }
 
 // zipFromStdin creates a zip archive containing spec objects read from stdin.

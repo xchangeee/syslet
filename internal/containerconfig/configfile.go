@@ -85,6 +85,20 @@ func (m *ConfigFileManager) IsChanged(containerName, filename, content string) (
 	return util.Sha256hex([]byte(content)) != util.Sha256hex(existing), nil
 }
 
+// Read reads a config file for a container and returns its content.
+// Returns empty string and nil error if the file doesn't exist.
+func (m *ConfigFileManager) Read(containerName, filename string) (string, error) {
+	path := filepath.Join(m.configDir(containerName), filename)
+	existing, err := afero.ReadFile(m.fs, path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", path, err)
+	}
+	return string(existing), nil
+}
+
 // Write writes a config file for a container.
 func (m *ConfigFileManager) Write(containerName, filename, content string) error {
 	dir := m.configDir(containerName)

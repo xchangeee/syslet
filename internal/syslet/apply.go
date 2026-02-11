@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/containerconfig"
@@ -25,6 +26,7 @@ type ConfigFileWrite struct {
 	containerName string
 	filename      string
 	content       string
+	oldContent    string // empty if new file
 }
 
 // ConfigFileDelete represents a config file to delete.
@@ -40,8 +42,9 @@ type ConfigDirDelete struct {
 
 // UnitFileWrite represents a unit file to write.
 type UnitFileWrite struct {
-	fullName string
-	content  string
+	fullName   string
+	content    string
+	oldContent string // empty if new file
 }
 
 // UnitFileDelete represents a unit file to delete (prune).
@@ -92,24 +95,18 @@ type ApplyPlan struct {
 	Results []ApplyResult
 }
 
-// Apply reads specs from a zip file or directory, validates them, diffs against the
-// installed state, and executes changes in coordinated order:
-//  1. Stop containers that changed or are being pruned
-//  2. Write config files
-//  3. Write unit files
-//  4. Remove pruned unit files and config dirs
-//  5. Delete podman volumes and networks (if ReclaimPolicy is "Delete")
-//  6. Single daemon-reload
-//  7. Start containers that should be running
-func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, pc podman.Interface, path string) error {
+// BuildPlan reads specs from a zip file or directory, validates them, and builds
+// an execution plan by diffing against the installed state.
+// Returns the plan without executing it.
+func BuildPlan(ctx context.Context, fs afero.Fs, sd *systemd.Client, path string) (*ApplyPlan, error) {
 	specs, err := api.LoadSpecsFS(fs, path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Pre-render validation: check raw input data.
 	if err := api.ValidateSpecs(specs); err != nil {
-		return fmt.Errorf("pre-render validation: %w", err)
+		return nil, fmt.Errorf("pre-render validation: %w", err)
 	}
 
 	cfg := containerconfig.NewConfigFileManager(fs)
@@ -126,19 +123,19 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 		case api.SpecTypeContainer:
 			r, err = s.(*api.ContainerSpec).Render(cfg.BaseDirectory())
 			if err != nil {
-				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
+				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
 			}
 			containers = append(containers, r)
 		case api.SpecTypeVolume:
 			r, err = s.(*api.VolumeSpec).Render()
 			if err != nil {
-				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
+				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
 			}
 			volumes = append(volumes, r)
 		case api.SpecTypeNetwork:
 			r, err = s.(*api.NetworkSpec).Render()
 			if err != nil {
-				return fmt.Errorf("rendering %s: %w", s.GetName(), err)
+				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
 			}
 			networks = append(networks, r)
 		}
@@ -147,28 +144,28 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 
 	// Post-render validation: check rendered units and cross-references.
 	if err := api.ValidateRenderedUnits(containers, volumes, networks); err != nil {
-		return fmt.Errorf("post-render validation: %w", err)
+		return nil, fmt.Errorf("post-render validation: %w", err)
 	}
 
 	// Serialize unit options to strings after validation passes.
 	for i := range containers {
 		content, err := containers[i].SerializeUnitOptions()
 		if err != nil {
-			return fmt.Errorf("serializing %s: %w", containers[i].Spec.GetName(), err)
+			return nil, fmt.Errorf("serializing %s: %w", containers[i].Spec.GetName(), err)
 		}
 		containers[i].Content = content
 	}
 	for i := range volumes {
 		content, err := volumes[i].SerializeUnitOptions()
 		if err != nil {
-			return fmt.Errorf("serializing %s: %w", volumes[i].Spec.GetName(), err)
+			return nil, fmt.Errorf("serializing %s: %w", volumes[i].Spec.GetName(), err)
 		}
 		volumes[i].Content = content
 	}
 	for i := range networks {
 		content, err := networks[i].SerializeUnitOptions()
 		if err != nil {
-			return fmt.Errorf("serializing %s: %w", networks[i].Spec.GetName(), err)
+			return nil, fmt.Errorf("serializing %s: %w", networks[i].Spec.GetName(), err)
 		}
 		networks[i].Content = content
 	}
@@ -179,7 +176,7 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 	// Diff containers (handles config files, unit files, start/stop).
 	for _, r := range containers {
 		if err := diffContainer(ctx, sd, cfg, plan, r); err != nil {
-			return fmt.Errorf("diffing container %s: %w", r.Spec.GetName(), err)
+			return nil, fmt.Errorf("diffing container %s: %w", r.Spec.GetName(), err)
 		}
 	}
 
@@ -193,8 +190,22 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 
 	// Find installed files that are NOT in the current spec set (stale → prune).
 	if err := findStaleUnits(ctx, sd, plan, specNames); err != nil {
-		return fmt.Errorf("finding stale units: %w", err)
+		return nil, fmt.Errorf("finding stale units: %w", err)
 	}
+
+	return plan, nil
+}
+
+// Apply executes a pre-built plan in coordinated order:
+//  1. Stop containers that changed or are being pruned
+//  2. Write config files
+//  3. Write unit files
+//  4. Remove pruned unit files and config dirs
+//  5. Delete podman volumes and networks (if ReclaimPolicy is "Delete")
+//  6. Single daemon-reload
+//  7. Start containers that should be running
+func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, pc podman.Interface, plan *ApplyPlan) error {
+	cfg := containerconfig.NewConfigFileManager(fs)
 
 	// Execute in strict global order (4 phases).
 
@@ -306,4 +317,149 @@ func recordError(plan *ApplyPlan, fullName, message string) {
 		message:  message,
 		errored:  true,
 	})
+}
+
+// Diff displays what would change based on a pre-built plan
+// without actually applying the changes.
+func Diff(plan *ApplyPlan) {
+	DisplayDiff(plan)
+}
+
+// displayContentDiff prints a unified diff between old and new content.
+func displayContentDiff(name, oldContent, newContent string) {
+	oldLines := strings.Split(oldContent, "\n")
+	newLines := strings.Split(newContent, "\n")
+
+	fmt.Printf("\n--- %s (current)\n", name)
+	fmt.Printf("+++ %s (new)\n", name)
+
+	// Simple line-by-line comparison
+	maxLen := len(oldLines)
+	if len(newLines) > maxLen {
+		maxLen = len(newLines)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var oldLine, newLine string
+		if i < len(oldLines) {
+			oldLine = oldLines[i]
+		}
+		if i < len(newLines) {
+			newLine = newLines[i]
+		}
+
+		if oldLine != newLine {
+			if oldLine != "" {
+				fmt.Printf("-%s\n", oldLine)
+			}
+			if newLine != "" {
+				fmt.Printf("+%s\n", newLine)
+			}
+		}
+	}
+}
+
+// DisplayDiff prints a human-readable diff showing what would change.
+// It shows operations that would be performed and the final status of each unit.
+func DisplayDiff(plan *ApplyPlan) {
+	// Print operations that would be performed
+	hasChanges := false
+
+	if len(plan.StopContainers) > 0 {
+		hasChanges = true
+		fmt.Println("\nContainers to stop:")
+		for _, op := range plan.StopContainers {
+			fmt.Printf("  - %s\n", op.fullName)
+		}
+	}
+
+	if len(plan.WriteConfigs) > 0 {
+		hasChanges = true
+		fmt.Println("\nConfig file changes:")
+		for _, op := range plan.WriteConfigs {
+			if op.oldContent == "" {
+				fmt.Printf("  - %s/%s (new file)\n", op.containerName, op.filename)
+			} else if op.oldContent != op.content {
+				fmt.Printf("  - %s/%s (modified)\n", op.containerName, op.filename)
+				displayContentDiff(fmt.Sprintf("%s/%s", op.containerName, op.filename), op.oldContent, op.content)
+			}
+		}
+	}
+
+	if len(plan.DeleteConfigs) > 0 {
+		hasChanges = true
+		fmt.Println("\nConfig files to delete:")
+		for _, op := range plan.DeleteConfigs {
+			fmt.Printf("  - %s/%s\n", op.containerName, op.filename)
+		}
+	}
+
+	if len(plan.DeleteConfigDirs) > 0 {
+		hasChanges = true
+		fmt.Println("\nConfig directories to delete:")
+		for _, op := range plan.DeleteConfigDirs {
+			fmt.Printf("  - %s/\n", op.containerName)
+		}
+	}
+
+	if len(plan.WriteUnits) > 0 {
+		hasChanges = true
+		fmt.Println("\nUnit file changes:")
+		for _, op := range plan.WriteUnits {
+			if op.oldContent == "" {
+				fmt.Printf("  - %s (new file)\n", op.fullName)
+			} else if op.oldContent != op.content {
+				fmt.Printf("  - %s (modified)\n", op.fullName)
+				displayContentDiff(op.fullName, op.oldContent, op.content)
+			}
+		}
+	}
+
+	if len(plan.DeleteUnits) > 0 {
+		hasChanges = true
+		fmt.Println("\nUnit files to delete:")
+		for _, op := range plan.DeleteUnits {
+			fmt.Printf("  - %s\n", op.fullName)
+		}
+	}
+
+	if len(plan.DeleteVolumes) > 0 {
+		hasChanges = true
+		fmt.Println("\nPodman volumes to delete:")
+		for _, op := range plan.DeleteVolumes {
+			fmt.Printf("  - %s\n", op.name)
+		}
+	}
+
+	if len(plan.DeleteNetworks) > 0 {
+		hasChanges = true
+		fmt.Println("\nPodman networks to delete:")
+		for _, op := range plan.DeleteNetworks {
+			fmt.Printf("  - %s\n", op.name)
+		}
+	}
+
+	if plan.NeedsReload {
+		hasChanges = true
+		fmt.Println("\nSystemd daemon-reload: required")
+	}
+
+	if len(plan.StartContainers) > 0 {
+		hasChanges = true
+		fmt.Println("\nContainers to start:")
+		for _, op := range plan.StartContainers {
+			fmt.Printf("  - %s\n", op.fullName)
+		}
+	}
+
+	// Print summary of all units
+	fmt.Println("\nSummary:")
+	fmt.Printf("%-40s %-10s %s\n", "UNIT", "STATUS", "CHANGES")
+	for _, result := range plan.Results {
+		fmt.Printf("%-40s %-10s %s\n", result.fullName, result.status, result.message)
+	}
+
+	if !hasChanges {
+		fmt.Println("\nNo changes detected. All units are up to date.")
+	}
 }

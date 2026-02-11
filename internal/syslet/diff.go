@@ -14,19 +14,20 @@ import (
 )
 
 // checkUnitFileChanged reads an existing unit file and determines if it's new or changed.
-// Returns (isNew, contentChanged, error).
-func checkUnitFileChanged(sd *systemd.Client, fullUnitName, newContent string) (bool, bool, error) {
+// Returns (isNew, contentChanged, oldContent, error).
+func checkUnitFileChanged(sd *systemd.Client, fullUnitName, newContent string) (bool, bool, string, error) {
 	existing, err := sd.ReadUnitFile(fullUnitName)
 	if os.IsNotExist(err) {
 		// Unit doesn't exist, mark as new.
-		return true, true, nil
+		return true, true, "", nil
 	} else if err != nil {
 		// Other read error.
-		return false, false, err
+		return false, false, "", err
 	}
 	// Unit exists, check if content changed.
+	oldContent := string(existing)
 	contentChanged := util.Sha256hex([]byte(newContent)) != util.Sha256hex(existing)
-	return false, contentChanged, nil
+	return false, contentChanged, oldContent, nil
 }
 
 // diffContainer computes the diff for a container spec, including config
@@ -39,7 +40,7 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 
 	fn := r.Spec.FullUnitName()
 
-	isNew, unitChanged, err := checkUnitFileChanged(sd, fn, r.Content)
+	isNew, unitChanged, oldUnitContent, err := checkUnitFileChanged(sd, fn, r.Content)
 	if err != nil {
 		return err
 	}
@@ -92,8 +93,9 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 
 	if unitChanged {
 		plan.WriteUnits = append(plan.WriteUnits, UnitFileWrite{
-			fullName: fn,
-			content:  r.Content,
+			fullName:   fn,
+			content:    r.Content,
+			oldContent: oldUnitContent,
 		})
 		plan.NeedsReload = true
 	}
@@ -118,7 +120,7 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 func diffSimple(sd *systemd.Client, plan *ApplyPlan, r api.RenderedUnit) {
 	fn := r.Spec.FullUnitName()
 
-	isNew, changed, err := checkUnitFileChanged(sd, fn, r.Content)
+	isNew, changed, oldContent, err := checkUnitFileChanged(sd, fn, r.Content)
 	if err != nil {
 		recordError(plan, fn, fmt.Sprintf("reading installed unit: %v", err))
 		return
@@ -127,8 +129,9 @@ func diffSimple(sd *systemd.Client, plan *ApplyPlan, r api.RenderedUnit) {
 	// Add write operation if unit changed.
 	if changed {
 		plan.WriteUnits = append(plan.WriteUnits, UnitFileWrite{
-			fullName: fn,
-			content:  r.Content,
+			fullName:   fn,
+			content:    r.Content,
+			oldContent: oldContent,
 		})
 		plan.NeedsReload = true
 	}
@@ -240,10 +243,13 @@ func addConfigOperations(plan *ApplyPlan, cfg *containerconfig.ConfigFileManager
 	// Add write operations for all configs in the api.
 	for _, cfgEntry := range container.Configs {
 		basename := filepath.Base(cfgEntry.TargetVolumePath)
+		// Read existing content for diff display
+		oldContent, _ := cfg.Read(container.Name, basename)
 		plan.WriteConfigs = append(plan.WriteConfigs, ConfigFileWrite{
 			containerName: container.Name,
 			filename:      basename,
 			content:       cfgEntry.Content,
+			oldContent:    oldContent,
 		})
 	}
 
