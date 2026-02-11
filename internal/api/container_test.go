@@ -235,6 +235,42 @@ func TestContainerSpec_Render_DescriptionNotOverridden(t *testing.T) {
 	}
 }
 
+func TestContainerSpec_Render_RestartNotOverridden(t *testing.T) {
+	spec := &ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]UnitValue{
+			"Service": {
+				"Restart": UV("on-failure"), // User-specified restart policy
+			},
+			"Container": {
+				"Image": UV("nginx:latest"),
+			},
+		},
+		DesiredState: "running",
+	}
+
+	rendered, err := spec.Render("/etc/containers/config")
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+
+	// Verify user-specified Restart is preserved and not duplicated
+	restartCount := 0
+	var restartValue string
+	for _, opt := range rendered.UnitOptions {
+		if opt.Section == "Service" && opt.Name == "Restart" {
+			restartCount++
+			restartValue = opt.Value
+		}
+	}
+	if restartCount != 1 {
+		t.Errorf("expected exactly 1 Restart option, got %d", restartCount)
+	}
+	if restartValue != "on-failure" {
+		t.Errorf("expected Restart=on-failure, got %q", restartValue)
+	}
+}
+
 func TestContainerSpec_Unmarshal_InvalidUnit_Number(t *testing.T) {
 	jsonData := []byte(`{
 		"name": "webapp",

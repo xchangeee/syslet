@@ -70,17 +70,10 @@ func (s *ContainerSpec) Render(containerConfigDir string) (RenderedUnit, error) 
 	// Add [Install] section and Restart policy when desiredState is "running".
 	// This ensures containers with desiredState "stopped" won't auto-start on boot
 	// and running containers will automatically restart if they exit.
+	// Use ensureUnitOption to avoid overriding user-specified values.
 	if s.DesiredState == "running" {
-		opts = append(opts, UnitOption{
-			Section: "Service",
-			Name:    "Restart",
-			Value:   "always",
-		})
-		opts = append(opts, UnitOption{
-			Section: "Install",
-			Name:    "WantedBy",
-			Value:   "multi-user.target default.target",
-		})
+		ensureUnitOption(&opts, "Service", "Restart", "always")
+		ensureUnitOption(&opts, "Install", "WantedBy", "multi-user.target default.target")
 	}
 
 	return RenderedUnit{Spec: s, UnitOptions: opts}, nil
