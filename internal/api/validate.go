@@ -84,10 +84,10 @@ func validateNoDuplicateConfigPaths(specs []Spec) error {
 		}
 		configPaths := make(map[string]bool)
 		for _, cfg := range container.Configs {
-			if configPaths[cfg.TargetVolumePath] {
-				return fmt.Errorf("container %q: duplicate config targetVolumePath %q", container.Name, cfg.TargetVolumePath)
+			if configPaths[cfg.MountPath] {
+				return fmt.Errorf("container %q: duplicate config mountPath %q", container.Name, cfg.MountPath)
 			}
-			configPaths[cfg.TargetVolumePath] = true
+			configPaths[cfg.MountPath] = true
 		}
 	}
 	return nil

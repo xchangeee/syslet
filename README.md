@@ -87,11 +87,11 @@ A container spec:
   "configs": [
     {
       "content": "server { listen 80; root /usr/share/nginx/html; }",
-      "targetVolumePath": "/etc/nginx/nginx.conf"
+      "mountPath": "/etc/nginx/nginx.conf"
     },
     {
       "content": "APP_ENV=production",
-      "targetVolumePath": "/run/env"
+      "mountPath": "/run/env"
     }
   ]
 }
@@ -252,7 +252,7 @@ TODO add examples with local push and git ops
   "configs": [
     {
       "content": "file contents here",
-      "targetVolumePath": "/path/in/container"
+      "mountPath": "/path/in/container"
     }
   ],
   "removalAllowed": false

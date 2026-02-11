@@ -409,8 +409,8 @@ func TestApply_ConfigChanged_RunningContainer_Restart(t *testing.T) {
 			DesiredState: "running",
 			Configs: []api.ConfigEntry{
 				{
-					Content:          "new config content",
-					TargetVolumePath: "/etc/nginx/nginx.conf",
+					Content:   "new config content",
+					MountPath: "/etc/nginx/nginx.conf",
 				},
 			},
 		},
@@ -610,8 +610,8 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 			},
 			DesiredState: "running",
 			Configs: []api.ConfigEntry{
-				{Content: "existing content updated", TargetVolumePath: "/etc/existing.conf"},
-				{Content: "new content", TargetVolumePath: "/etc/new.conf"},
+				{Content: "existing content updated", MountPath: "/etc/existing.conf"},
+				{Content: "new content", MountPath: "/etc/new.conf"},
 			},
 		},
 	}
@@ -624,8 +624,8 @@ func TestApply_ConfigFileAdditionsAndDeletions(t *testing.T) {
 		},
 		DesiredState: "running",
 		Configs: []api.ConfigEntry{
-			{Content: "existing content", TargetVolumePath: "/etc/existing.conf"},
-			{Content: "old content", TargetVolumePath: "/etc/old.conf"},
+			{Content: "existing content", MountPath: "/etc/existing.conf"},
+			{Content: "old content", MountPath: "/etc/old.conf"},
 		},
 	}
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
@@ -813,7 +813,7 @@ func TestApply_ConfigOnlyChange_InactiveContainer_NoRestart(t *testing.T) {
 			},
 			DesiredState: "stopped",
 			Configs: []api.ConfigEntry{
-				{Content: "new config", TargetVolumePath: "/etc/app.conf"},
+				{Content: "new config", MountPath: "/etc/app.conf"},
 			},
 		},
 	}
@@ -1115,7 +1115,7 @@ func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
 			},
 			DesiredState: "running",
 			Configs: []api.ConfigEntry{
-				{Content: "unchanged content", TargetVolumePath: "/etc/app/a.conf"},
+				{Content: "unchanged content", MountPath: "/etc/app/a.conf"},
 			},
 		},
 	}
@@ -1128,8 +1128,8 @@ func TestApply_ConfigRemoval_UnchangedContent(t *testing.T) {
 		},
 		DesiredState: "running",
 		Configs: []api.ConfigEntry{
-			{Content: "unchanged content", TargetVolumePath: "/etc/app/a.conf"},
-			{Content: "old content", TargetVolumePath: "/etc/app/b.conf"},
+			{Content: "unchanged content", MountPath: "/etc/app/a.conf"},
+			{Content: "old content", MountPath: "/etc/app/b.conf"},
 		},
 	}
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
@@ -1206,8 +1206,8 @@ func TestApply_AllConfigsRemoved_DeletesConfigDirectory(t *testing.T) {
 		},
 		DesiredState: "running",
 		Configs: []api.ConfigEntry{
-			{Content: "config1", TargetVolumePath: "/etc/app/config1.conf"},
-			{Content: "config2", TargetVolumePath: "/etc/app/config2.conf"},
+			{Content: "config1", MountPath: "/etc/app/config1.conf"},
+			{Content: "config2", MountPath: "/etc/app/config2.conf"},
 		},
 	}
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
@@ -1287,8 +1287,8 @@ func TestDisplayDiff_ConfigFileChanges(t *testing.T) {
 			DesiredState: "running",
 			Configs: []api.ConfigEntry{
 				{
-					Content:          "server {\n  listen 8080;\n  server_name new.example.com;\n}\n",
-					TargetVolumePath: "/etc/nginx/nginx.conf",
+					Content:   "server {\n  listen 8080;\n  server_name new.example.com;\n}\n",
+					MountPath: "/etc/nginx/nginx.conf",
 				},
 			},
 		},
@@ -1303,8 +1303,8 @@ func TestDisplayDiff_ConfigFileChanges(t *testing.T) {
 		DesiredState: "running",
 		Configs: []api.ConfigEntry{
 			{
-				Content:          "server {\n  listen 80;\n  server_name old.example.com;\n}\n",
-				TargetVolumePath: "/etc/nginx/nginx.conf",
+				Content:   "server {\n  listen 80;\n  server_name old.example.com;\n}\n",
+				MountPath: "/etc/nginx/nginx.conf",
 			},
 		},
 	}
@@ -1462,8 +1462,8 @@ func TestDisplayDiff_NewConfigFile(t *testing.T) {
 			DesiredState: "running",
 			Configs: []api.ConfigEntry{
 				{
-					Content:          "new config content",
-					TargetVolumePath: "/etc/app/config.yaml",
+					Content:   "new config content",
+					MountPath: "/etc/app/config.yaml",
 				},
 			},
 		},
@@ -1536,8 +1536,8 @@ func TestDisplayDiff_MixedChanges(t *testing.T) {
 			DesiredState: "running",
 			Configs: []api.ConfigEntry{
 				{
-					Content:          "updated config",
-					TargetVolumePath: "/etc/app/app.conf",
+					Content:   "updated config",
+					MountPath: "/etc/app/app.conf",
 				},
 			},
 		},
@@ -1554,8 +1554,8 @@ func TestDisplayDiff_MixedChanges(t *testing.T) {
 		DesiredState: "running",
 		Configs: []api.ConfigEntry{
 			{
-				Content:          "old config",
-				TargetVolumePath: "/etc/app/app.conf",
+				Content:   "old config",
+				MountPath: "/etc/app/app.conf",
 			},
 		},
 	}

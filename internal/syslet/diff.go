@@ -291,7 +291,7 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 func addConfigOperations(plan *ApplyPlan, cfg *containerconfig.ConfigFileManager, container *api.ContainerSpec) {
 	// Add write operations for all configs in the api.
 	for _, cfgEntry := range container.Configs {
-		basename := filepath.Base(cfgEntry.TargetVolumePath)
+		basename := filepath.Base(cfgEntry.MountPath)
 		// Read existing content for diff display
 		oldContent, _ := cfg.Read(container.Name, basename)
 		plan.WriteConfigs = append(plan.WriteConfigs, ConfigFileWrite{
@@ -309,7 +309,7 @@ func addConfigOperations(plan *ApplyPlan, cfg *containerconfig.ConfigFileManager
 	}
 	specFiles := make(map[string]bool)
 	for _, ce := range container.Configs {
-		specFiles[filepath.Base(ce.TargetVolumePath)] = true
+		specFiles[filepath.Base(ce.MountPath)] = true
 	}
 	for _, f := range deployed {
 		if !specFiles[f] {
@@ -373,7 +373,7 @@ func summarizeContainer(container *api.ContainerSpec, isNew, unitChanged, config
 func configsChanged(cfg *containerconfig.ConfigFileManager, container *api.ContainerSpec) bool {
 	// Check if any spec configs differ from disk.
 	for _, ce := range container.Configs {
-		basename := filepath.Base(ce.TargetVolumePath)
+		basename := filepath.Base(ce.MountPath)
 		changed, err := cfg.IsChanged(container.Name, basename, ce.Content)
 		if err != nil || changed {
 			return true
@@ -383,7 +383,7 @@ func configsChanged(cfg *containerconfig.ConfigFileManager, container *api.Conta
 	deployed, _ := cfg.ListFiles(container.Name)
 	specFiles := make(map[string]bool)
 	for _, ce := range container.Configs {
-		specFiles[filepath.Base(ce.TargetVolumePath)] = true
+		specFiles[filepath.Base(ce.MountPath)] = true
 	}
 	for _, f := range deployed {
 		if !specFiles[f] {

@@ -115,12 +115,12 @@ func TestContainerSpec_Render_WithConfigs(t *testing.T) {
 		},
 		Configs: []ConfigEntry{
 			{
-				Content:          "config content",
-				TargetVolumePath: "/etc/nginx/nginx.conf",
+				Content:   "config content",
+				MountPath: "/etc/nginx/nginx.conf",
 			},
 			{
-				Content:          "another config",
-				TargetVolumePath: "/etc/app/config.yaml",
+				Content:   "another config",
+				MountPath: "/etc/app/config.yaml",
 			},
 		},
 	}

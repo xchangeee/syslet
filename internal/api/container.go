@@ -22,8 +22,8 @@ type ContainerSpec struct {
 
 // ConfigEntry defines a config file to mount into a container.
 type ConfigEntry struct {
-	Content          string `json:"content"`
-	TargetVolumePath string `json:"targetVolumePath"`
+	Content   string `json:"content"`
+	MountPath string `json:"mountPath"`
 }
 
 // Interface implementations
@@ -52,12 +52,12 @@ func (s *ContainerSpec) Render(containerConfigDir string) (RenderedUnit, error) 
 
 	// Add config bind-mount volumes.
 	for _, cfg := range s.Configs {
-		basename := filepath.Base(cfg.TargetVolumePath)
+		basename := filepath.Base(cfg.MountPath)
 		hostPath := filepath.Join(containerConfigDir, s.Name, basename)
 		opts = append(opts, UnitOption{
 			Section: "Container",
 			Name:    "Volume",
-			Value:   fmt.Sprintf("%s:%s:ro", hostPath, cfg.TargetVolumePath),
+			Value:   fmt.Sprintf("%s:%s:ro", hostPath, cfg.MountPath),
 		})
 	}
 
