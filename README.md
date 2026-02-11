@@ -33,7 +33,7 @@ Alternatively you can setup an ArgoCD-style workflow with all JSON specs in a gi
 
 Files not present in the current input (zip or directory) are pruned from the host. This means removing a spec and re-running syslet will stop the container and clean up its files.
 
-For volumes and networks, the spec's `reclaimPolicy` determins if syslet will also remove the podman volume or network from in addition to removing the unit files.
+For volumes and networks, the spec's `reclaimPolicy` determines if syslet will also remove the podman volume or network from in addition to removing the unit files.
 
 ## Getting started
 
