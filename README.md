@@ -6,13 +6,7 @@ For most single-node deployments, level-triggered systems (e.g., Kubernetes) do 
 
 syslet keeps a few things that I like about the Kubernetes user experience: Defining the desired state in a high-level JSON spec, a bit of validation to prevent bad config from being pushed, being able to push JSON specs to the remote system and not having to manually start or stop containers. It's implemented as an **edge-triggered desired-state reconciler**, e.g. syslet executes once per invocation and delegates the hard work to systemd and podman.
 
-Supported unit types:
-
-| Type | Startable | Notes |
-|------|-----------|-------|
-| container | Yes | Auto-generates `[Install]` section and `ContainerName`, supports config files |
-| volume | No | Auto-generates `VolumeName` |
-| network | No | Auto-generates `NetworkName` |
+Supported unit types: `container`, `volume,` `network`
 
 ## How it works
 
