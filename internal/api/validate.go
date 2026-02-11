@@ -18,6 +18,9 @@ func ValidateSpecs(specs []Spec) error {
 	if err := validateNoDuplicateConfigPaths(specs); err != nil {
 		return err
 	}
+	if err := validateDesiredState(specs); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -82,6 +85,29 @@ func validateNoDuplicateConfigPaths(specs []Spec) error {
 				return fmt.Errorf("container %q: duplicate config targetVolumePath %q", container.Name, cfg.TargetVolumePath)
 			}
 			configPaths[cfg.TargetVolumePath] = true
+		}
+	}
+	return nil
+}
+
+// validateDesiredState ensures that desiredState field only contains valid values.
+// Valid values are: "running", "stopped", or empty string (field is optional).
+// This prevents unexpected values that could lead to undefined behavior.
+// This is a pre-render check on the raw input data.
+func validateDesiredState(specs []Spec) error {
+	for _, s := range specs {
+		container, ok := s.(*ContainerSpec)
+		if !ok {
+			continue
+		}
+		// Empty string is valid (field is optional, omitempty in JSON)
+		if container.DesiredState == "" {
+			continue
+		}
+		// Convert to lowercase for case-insensitive comparison
+		state := strings.ToLower(container.DesiredState)
+		if state != "running" && state != "stopped" {
+			return fmt.Errorf("container %q: invalid desiredState %q (must be \"running\", \"stopped\", or omitted)", container.Name, container.DesiredState)
 		}
 	}
 	return nil
