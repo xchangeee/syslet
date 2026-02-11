@@ -140,7 +140,7 @@ Key points:
 
 ### 4. Deploy
 
-#### with `syslet-push`
+#### push with `syslet-push`
 
 ```sh
 # Deploy from a directory
@@ -153,28 +153,24 @@ cat specs.json | syslet-push --stdin web01
 `syslet-push` zips the spec files, copies them to the remote host, and runs syslet via SSH.
 The deployment host must be able to connect to the remote host via ssh public key authentication. password auth is not supported.
 
-#### manually
+#### push manually
+
+Using a zip file:
 
 ```sh
-# Option 1: Using a zip file
 zip -j /tmp/config.zip hosts/web01/*.json
 scp /tmp/config.zip web01:/etc/syslet/config.zip
 ssh web01 sudo syslet /etc/syslet/config.zip
+```
 
-# Option 2: Using a directory (useful for git repositories)
+Using a directory (useful for git repositories):
+
+```sh
 scp -r hosts/web01/ web01:/etc/syslet/hosts/web01/
 ssh web01 sudo syslet /etc/syslet/hosts/web01/
 ```
 
-Output looks like:
-
-```
-webapp-net.network                       changed    created
-webapp-data.volume                       changed    created
-webapp.container                         changed    created, started
-```
-
-#### GitOps with [webhookd](https://github.com/ncarlier/webhookd)
+#### with [webhookd](https://github.com/ncarlier/webhookd)
 
 Example webhookd workflow:
 
