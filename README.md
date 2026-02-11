@@ -27,11 +27,12 @@ syslet reads JSON specs from either a zip file or directory, validates them, and
    6. Start containers with `desiredState: "running"`
 5. **Exit** with status summary
 
-JSON specs can be updated either directly via SSH using `syslet-push`.
+JSON specs can be updated directly via SSH using `syslet-push`.
+Alternatively, you can setup an ArgoCD-style workflow with all JSON specs in a git repository and a [webhookd](https://github.com/ncarlier/webhookd) script to pull the git repository and run syslet on the checked out directory.
 
-Alternatively you can setup an ArgoCD-style workflow with all JSON specs in a git repository and a [webhookd](https://github.com/ncarlier/webhookd) script to pull the git repository and run syslet on the checked out directory.
-
-If a spec disappears from the input but the unit file on the host does not have this marker, syslet will skip the removal and leave the unit untouched. To prevent accidental deletion, units must be explicitly marked with `"removalAllowed": true` before they can be removed. Units marked as such and not present in the current input (zip or directory) are pruned from the host.
+To prevent accidental deletion, units must be explicitly marked with `"removalAllowed": true` before they can be removed.
+If a spec disappears from the input but the unit file on the host does not have this marker, syslet will not perform changes to this unit.
+Units already marked with `"removalAllowed": true` and not present in the current input (zip or directory) will be pruned from the host.
 
 Container units scheduled for removal are stopped if they are still running.
 
@@ -42,15 +43,17 @@ For volumes and networks, the spec's `reclaimPolicy` determines if syslet will a
 ### 1. Build
 
 ```sh
-make build
+make build-bin
 ```
 
-Requires Go 1.25+. This produces two binaries:
+Requires Go 1.25+. This produces to sets of binaries:
 
-- `build/syslet` — server-side binary that applies specs
-- `build/syslet-push` — client-side deployment tool
+- `build/syslet-<arch>` — server-side binary that applies specs
+- `build/syslet-push-<arch>` — client-side deployment tool
 
 ### 2. Install on the server
+
+Make sure podman is installed on the target server, e.g. run `dnf install podman`.
 
 Copy the `syslet` binary to the target server and ensure it's in PATH. syslet needs root access for systemd D-Bus operations.
 
@@ -131,12 +134,11 @@ Key points:
 - `desiredState` controls whether syslet starts (`running`) or stops (`stopped`) the container
 - `unit` maps 1:1 to systemd unit file sections and their options
 - unit properties `ContainerName`, `VolumeName`, and `NetworkName` are automatically set to match the spec `name` if not explicitly specified
-- For containers the `[Install]` section will be added when `desiredState: "running"` to enable auto-start on boot
-- For containers, `configs` define files to be bind-mounted into the container -- syslet writes them to `/etc/containers/config/<name>/` and injects the corresponding `Volume=` entries
+- For containers, when `desiredState: "running"` is set, `[Install]WantedBy=multi-user.target default.target` will be added to enable auto-start on boot
+- For containers, when `desiredState: "running"` is set, `[Service]Restart=Always` will be added so the container is restarted after crashes
+- For containers, `configs` define files to be bind-mounted into the container -- syslet writes them to `/etc/containers/config/<name>/` and injects read-only bind mounts into the quadlet
 
 ### 4. Deploy
-
-The deployment host must be able to connect to the remote host via ssh public key authentication. password auth is not supported.
 
 #### with `syslet-push`
 
@@ -149,6 +151,7 @@ cat specs.json | syslet-push --stdin web01
 ```
 
 `syslet-push` zips the spec files, copies them to the remote host, and runs syslet via SSH.
+The deployment host must be able to connect to the remote host via ssh public key authentication. password auth is not supported.
 
 #### manually
 
