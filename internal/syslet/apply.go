@@ -11,6 +11,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 
+	gounit "github.com/coreos/go-systemd/v22/unit"
 	"github.com/spf13/afero"
 )
 
@@ -325,15 +326,91 @@ func Diff(plan *ApplyPlan) {
 	DisplayDiff(plan)
 }
 
-// displayContentDiff prints a unified diff between old and new content.
+// displayContentDiff prints a semantic diff between old and new content.
+// For systemd unit files, parses the content into structured options and compares
+// them semantically, showing additions/removals with section context.
 func displayContentDiff(name, oldContent, newContent string) {
+	// Parse both contents into structured options
+	oldOpts, err := gounit.Deserialize(strings.NewReader(oldContent))
+	if err != nil {
+		// Fallback to text diff if parsing fails
+		displayTextDiff(name, oldContent, newContent)
+		return
+	}
+
+	newOpts, err := gounit.Deserialize(strings.NewReader(newContent))
+	if err != nil {
+		// Fallback to text diff if parsing fails
+		displayTextDiff(name, oldContent, newContent)
+		return
+	}
+
+	// Create maps for comparison: "section:name:value" -> count
+	oldMap := make(map[string]int)
+	newMap := make(map[string]int)
+
+	for _, opt := range oldOpts {
+		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
+		oldMap[key]++
+	}
+
+	for _, opt := range newOpts {
+		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
+		newMap[key]++
+	}
+
+	// Find differences
+	var additions, removals []api.UnitOption
+
+	// Find removals (in old but not in new, or fewer occurrences)
+	for _, opt := range oldOpts {
+		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
+		if oldMap[key] > newMap[key] {
+			removals = append(removals, api.UnitOption{
+				Section: opt.Section,
+				Name:    opt.Name,
+				Value:   opt.Value,
+			})
+			oldMap[key]-- // Track that we've processed one occurrence
+		}
+	}
+
+	// Find additions (in new but not in old, or more occurrences)
+	for _, opt := range newOpts {
+		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
+		if newMap[key] > oldMap[key] {
+			additions = append(additions, api.UnitOption{
+				Section: opt.Section,
+				Name:    opt.Name,
+				Value:   opt.Value,
+			})
+			newMap[key]-- // Track that we've processed one occurrence
+		}
+	}
+
+	if len(removals) == 0 && len(additions) == 0 {
+		return // No semantic changes
+	}
+
+	fmt.Printf("\n--- %s (current)\n", name)
+	fmt.Printf("+++ %s (new)\n", name)
+
+	for _, opt := range removals {
+		fmt.Printf("- [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
+	}
+	for _, opt := range additions {
+		fmt.Printf("+ [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
+	}
+}
+
+// displayTextDiff is a fallback for non-unit files or when parsing fails.
+func displayTextDiff(name, oldContent, newContent string) {
 	oldLines := strings.Split(oldContent, "\n")
 	newLines := strings.Split(newContent, "\n")
 
 	fmt.Printf("\n--- %s (current)\n", name)
 	fmt.Printf("+++ %s (new)\n", name)
 
-	// Simple line-by-line comparison
 	maxLen := len(oldLines)
 	if len(newLines) > maxLen {
 		maxLen = len(newLines)
