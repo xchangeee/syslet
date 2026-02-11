@@ -31,9 +31,11 @@ JSON specs can be updated either directly via SSH using `syslet-push`.
 
 Alternatively you can setup an ArgoCD-style workflow with all JSON specs in a git repository and a [webhookd](https://github.com/ncarlier/webhookd) script to pull the git repository and run syslet on the checked out directory.
 
-Files not present in the current input (zip or directory) are pruned from the host. This means removing a spec and re-running syslet will stop the container and clean up its files.
+If a spec disappears from the input but the unit file on the host does not have this marker, syslet will skip the removal and leave the unit untouched. To prevent accidental deletion, units must be explicitly marked with `"removalAllowed": true` before they can be removed. Units marked as such and not present in the current input (zip or directory) are pruned from the host.
 
-For volumes and networks, the spec's `reclaimPolicy` determines if syslet will also remove the podman volume or network from in addition to removing the unit files.
+Container units scheduled for removal are stopped if they are still running.
+
+For volumes and networks, the spec's `reclaimPolicy` determines if syslet will also remove the podman volume or network in addition to removing the unit files.
 
 ## Getting started
 
@@ -252,7 +254,8 @@ TODO add examples with local push and git ops
       "content": "file contents here",
       "targetVolumePath": "/path/in/container"
     }
-  ]
+  ],
+  "removalAllowed": false
 }
 ```
 
@@ -268,7 +271,9 @@ TODO add examples with local push and git ops
     "Volume": {
       "Label": "app=webapp"
     }
-  }
+  },
+  "reclaimPolicy": "Retain",
+  "removalAllowed": false
 }
 ```
 
@@ -285,7 +290,9 @@ TODO add examples with local push and git ops
       "Subnet": "10.89.0.0/24",
       "Gateway": "10.89.0.1"
     }
-  }
+  },
+  "reclaimPolicy": "Retain",
+  "removalAllowed": false
 }
 ```
 

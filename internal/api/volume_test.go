@@ -211,3 +211,107 @@ func TestVolumeSpec_ShouldDeleteOnRemoval_CaseInsensitive(t *testing.T) {
 		t.Error("expected ShouldDeleteOnRemoval to be case-insensitive")
 	}
 }
+
+func TestVolumeSpec_Render_WithRemovalAllowed(t *testing.T) {
+	spec := &VolumeSpec{
+		Name: "data",
+		Unit: map[string]map[string]UnitValue{
+			"Volume": {"Device": UV("tmpfs")},
+		},
+		RemovalAllowed: true,
+	}
+
+	rendered, err := spec.Render()
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+
+	// Verify RemovalAllowed is in X-Syslet section and comes first
+	if len(rendered.UnitOptions) == 0 {
+		t.Fatal("expected at least one unit option")
+	}
+	firstOpt := rendered.UnitOptions[0]
+	if firstOpt.Section != "X-Syslet" || firstOpt.Name != "RemovalAllowed" || firstOpt.Value != "true" {
+		t.Errorf("expected first option to be X-Syslet.RemovalAllowed=true, got %v.%v=%v",
+			firstOpt.Section, firstOpt.Name, firstOpt.Value)
+	}
+}
+
+func TestVolumeSpec_Render_WithoutRemovalAllowed(t *testing.T) {
+	spec := &VolumeSpec{
+		Name: "data",
+		Unit: map[string]map[string]UnitValue{
+			"Volume": {"Device": UV("tmpfs")},
+		},
+		RemovalAllowed: false,
+	}
+
+	rendered, err := spec.Render()
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+
+	// Verify X-Syslet.RemovalAllowed is NOT present
+	for _, opt := range rendered.UnitOptions {
+		if opt.Section == "X-Syslet" && opt.Name == "RemovalAllowed" {
+			t.Error("expected RemovalAllowed to not be rendered when false")
+		}
+	}
+}
+
+func TestVolumeSpec_ShouldRemoveOnPrune_WithMarker(t *testing.T) {
+	spec := &VolumeSpec{Name: "data"}
+
+	fs := afero.NewMemMapFs()
+	mockConn := &mockDBusConn{}
+	sd := systemd.NewClient(mockConn, fs)
+
+	// Create unit content with X-Syslet section
+	opts := []*gounit.UnitOption{
+		{Section: "X-Syslet", Name: "RemovalAllowed", Value: "true"},
+		{Section: "Volume", Name: "VolumeName", Value: "data"},
+	}
+	content := gounit.Serialize(opts)
+	contentBytes := new(bytes.Buffer)
+	_, _ = contentBytes.ReadFrom(content)
+
+	_ = sd.WriteUnitFile("data.volume", contentBytes.Bytes())
+
+	if !spec.ShouldRemoveOnPrune(sd) {
+		t.Error("expected ShouldRemoveOnPrune to return true when marker is present")
+	}
+}
+
+func TestVolumeSpec_ShouldRemoveOnPrune_WithoutMarker(t *testing.T) {
+	spec := &VolumeSpec{Name: "data"}
+
+	fs := afero.NewMemMapFs()
+	mockConn := &mockDBusConn{}
+	sd := systemd.NewClient(mockConn, fs)
+
+	// Create unit content without RemovalAllowed
+	opts := []*gounit.UnitOption{
+		{Section: "Volume", Name: "VolumeName", Value: "data"},
+	}
+	content := gounit.Serialize(opts)
+	contentBytes := new(bytes.Buffer)
+	_, _ = contentBytes.ReadFrom(content)
+
+	_ = sd.WriteUnitFile("data.volume", contentBytes.Bytes())
+
+	if spec.ShouldRemoveOnPrune(sd) {
+		t.Error("expected ShouldRemoveOnPrune to return false when marker is not present")
+	}
+}
+
+func TestVolumeSpec_ShouldRemoveOnPrune_FileNotFound(t *testing.T) {
+	spec := &VolumeSpec{Name: "nonexistent"}
+
+	fs := afero.NewMemMapFs()
+	mockConn := &mockDBusConn{}
+	sd := systemd.NewClient(mockConn, fs)
+
+	if spec.ShouldRemoveOnPrune(sd) {
+		t.Error("expected ShouldRemoveOnPrune to return false when file doesn't exist")
+	}
+}

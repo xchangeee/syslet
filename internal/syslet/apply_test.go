@@ -562,6 +562,7 @@ func TestApply_StaleUnitRemoval(t *testing.T) {
 		Unit: map[string]map[string]api.UnitValue{
 			"Container": {"Image": api.UV("redis:latest")},
 		},
+		RemovalAllowed: true, // Mark for removal
 	}
 	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
 	oldContent, _ := oldRendered.SerializeUnitOptions()
@@ -930,6 +931,7 @@ func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
 		Unit: map[string]map[string]api.UnitValue{
 			"Volume": {"Device": api.UV("tmpfs")},
 		},
+		RemovalAllowed: true, // Mark for removal
 	}
 	staleVolumeRendered, _ := staleVolumeSpec.Render()
 	staleVolumeContent, _ := staleVolumeRendered.SerializeUnitOptions()
@@ -940,6 +942,7 @@ func TestApply_StaleVolumeAndNetworkRemoval(t *testing.T) {
 		Unit: map[string]map[string]api.UnitValue{
 			"Network": {"Driver": api.UV("bridge")},
 		},
+		RemovalAllowed: true, // Mark for removal
 	}
 	staleNetworkRendered, _ := staleNetworkSpec.Render()
 	staleNetworkContent, _ := staleNetworkRendered.SerializeUnitOptions()
@@ -1008,8 +1011,9 @@ func TestApply_StaleVolumeWithReclaimPolicyDelete(t *testing.T) {
 
 	// Create stale volume WITH ReclaimPolicy=Delete
 	staleVolumeSpec := &api.VolumeSpec{
-		Name:          "olddata",
-		ReclaimPolicy: "Delete",
+		Name:           "olddata",
+		ReclaimPolicy:  "Delete",
+		RemovalAllowed: true, // Mark for removal
 		Unit: map[string]map[string]api.UnitValue{
 			"Volume": {"Device": api.UV("tmpfs")},
 		},
@@ -1061,8 +1065,9 @@ func TestApply_StaleNetworkWithReclaimPolicyDelete(t *testing.T) {
 
 	// Create stale network WITH ReclaimPolicy=Delete
 	staleNetworkSpec := &api.NetworkSpec{
-		Name:          "oldnet",
-		ReclaimPolicy: "Delete",
+		Name:           "oldnet",
+		ReclaimPolicy:  "Delete",
+		RemovalAllowed: true, // Mark for removal
 		Unit: map[string]map[string]api.UnitValue{
 			"Network": {"Driver": api.UV("bridge")},
 		},

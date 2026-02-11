@@ -1,17 +1,23 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
+	"strings"
+
+	"codeberg.org/xchangeee/syslet/internal/systemd"
+	gounit "github.com/coreos/go-systemd/v22/unit"
 )
 
 // ContainerSpec describes a container and maps to a .container quadlet file.
 // It includes container-specific configuration like desired state and config files.
 type ContainerSpec struct {
-	Name         string                          `json:"name"`
-	Unit         map[string]map[string]UnitValue `json:"unit"`
-	DesiredState string                          `json:"desiredState,omitempty"`
-	Configs      []ConfigEntry                   `json:"configs,omitempty"`
+	Name           string                          `json:"name"`
+	Unit           map[string]map[string]UnitValue `json:"unit"`
+	DesiredState   string                          `json:"desiredState,omitempty"`
+	Configs        []ConfigEntry                   `json:"configs,omitempty"`
+	RemovalAllowed bool                            `json:"removalAllowed,omitempty"`
 }
 
 // ConfigEntry defines a config file to mount into a container.
@@ -55,6 +61,12 @@ func (s *ContainerSpec) Render(containerConfigDir string) (RenderedUnit, error) 
 		})
 	}
 
+	// Add RemovalAllowed marker if set.
+	// This allows the unit to be removed when its spec is deleted from the input.
+	if s.RemovalAllowed {
+		opts = append([]UnitOption{{Section: "X-Syslet", Name: "RemovalAllowed", Value: "true"}}, opts...)
+	}
+
 	// Add [Install] section only when desiredState is "running".
 	// This ensures containers with desiredState "stopped" won't auto-start on boot.
 	if s.DesiredState == "running" {
@@ -66,4 +78,28 @@ func (s *ContainerSpec) Render(containerConfigDir string) (RenderedUnit, error) 
 	}
 
 	return RenderedUnit{Spec: s, UnitOptions: opts}, nil
+}
+
+// ShouldRemoveOnPrune checks if the installed unit file has RemovalAllowed=true.
+// Returns true only if the marker is present, false otherwise (safe default).
+// This is the counterpart to Render(), which writes the RemovalAllowed marker.
+func (s *ContainerSpec) ShouldRemoveOnPrune(sd *systemd.Client) bool {
+	content, err := sd.ReadUnitFile(s.FullUnitName())
+	if err != nil {
+		return false
+	}
+
+	// Parse unit file using systemd library.
+	opts, err := gounit.Deserialize(bytes.NewReader(content))
+	if err != nil {
+		return false
+	}
+
+	// Look for RemovalAllowed=true in X-Syslet section.
+	for _, opt := range opts {
+		if opt.Section == "X-Syslet" && opt.Name == "RemovalAllowed" {
+			return strings.EqualFold(opt.Value, "true")
+		}
+	}
+	return false
 }

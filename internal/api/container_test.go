@@ -1,9 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"codeberg.org/xchangeee/syslet/internal/systemd"
+	gounit "github.com/coreos/go-systemd/v22/unit"
+	"github.com/spf13/afero"
 )
 
 func TestContainerSpec_GetMethods(t *testing.T) {
@@ -263,5 +268,133 @@ func TestContainerSpec_Unmarshal_InvalidUnit_ArrayWithNumber(t *testing.T) {
 	err := json.Unmarshal(jsonData, &spec)
 	if err == nil {
 		t.Error("expected unmarshal to fail with array of numbers, but it succeeded")
+	}
+}
+
+func TestContainerSpec_Render_WithRemovalAllowed(t *testing.T) {
+	spec := &ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]UnitValue{
+			"Container": {"Image": UV("nginx:latest")},
+		},
+		RemovalAllowed: true,
+	}
+
+	rendered, err := spec.Render("/etc/containers/config")
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+
+	// Verify RemovalAllowed is in X-Syslet section and comes first
+	if len(rendered.UnitOptions) == 0 {
+		t.Fatal("expected at least one unit option")
+	}
+	firstOpt := rendered.UnitOptions[0]
+	if firstOpt.Section != "X-Syslet" || firstOpt.Name != "RemovalAllowed" || firstOpt.Value != "true" {
+		t.Errorf("expected first option to be X-Syslet.RemovalAllowed=true, got %v.%v=%v",
+			firstOpt.Section, firstOpt.Name, firstOpt.Value)
+	}
+}
+
+func TestContainerSpec_Render_WithoutRemovalAllowed(t *testing.T) {
+	spec := &ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]UnitValue{
+			"Container": {"Image": UV("nginx:latest")},
+		},
+		RemovalAllowed: false,
+	}
+
+	rendered, err := spec.Render("/etc/containers/config")
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+
+	// Verify X-Syslet.RemovalAllowed is NOT present
+	for _, opt := range rendered.UnitOptions {
+		if opt.Section == "X-Syslet" && opt.Name == "RemovalAllowed" {
+			t.Error("expected RemovalAllowed to not be rendered when false")
+		}
+	}
+}
+
+func TestContainerSpec_ShouldRemoveOnPrune_WithMarker(t *testing.T) {
+	spec := &ContainerSpec{Name: "webapp"}
+
+	// Create a unit file with RemovalAllowed=true
+	fs := afero.NewMemMapFs()
+	mockConn := &mockDBusConn{}
+	sd := systemd.NewClient(mockConn, fs)
+
+	// Create unit content with X-Syslet section
+	opts := []*gounit.UnitOption{
+		{Section: "X-Syslet", Name: "RemovalAllowed", Value: "true"},
+		{Section: "Container", Name: "ContainerName", Value: "webapp"},
+	}
+	content := gounit.Serialize(opts)
+	contentBytes := new(bytes.Buffer)
+	_, _ = contentBytes.ReadFrom(content)
+
+	_ = sd.WriteUnitFile("webapp.container", contentBytes.Bytes())
+
+	if !spec.ShouldRemoveOnPrune(sd) {
+		t.Error("expected ShouldRemoveOnPrune to return true when marker is present")
+	}
+}
+
+func TestContainerSpec_ShouldRemoveOnPrune_WithoutMarker(t *testing.T) {
+	spec := &ContainerSpec{Name: "webapp"}
+
+	fs := afero.NewMemMapFs()
+	mockConn := &mockDBusConn{}
+	sd := systemd.NewClient(mockConn, fs)
+
+	// Create unit content without RemovalAllowed
+	opts := []*gounit.UnitOption{
+		{Section: "Container", Name: "ContainerName", Value: "webapp"},
+	}
+	content := gounit.Serialize(opts)
+	contentBytes := new(bytes.Buffer)
+	_, _ = contentBytes.ReadFrom(content)
+
+	_ = sd.WriteUnitFile("webapp.container", contentBytes.Bytes())
+
+	if spec.ShouldRemoveOnPrune(sd) {
+		t.Error("expected ShouldRemoveOnPrune to return false when marker is not present")
+	}
+}
+
+func TestContainerSpec_ShouldRemoveOnPrune_FileNotFound(t *testing.T) {
+	spec := &ContainerSpec{Name: "nonexistent"}
+
+	fs := afero.NewMemMapFs()
+	mockConn := &mockDBusConn{}
+	sd := systemd.NewClient(mockConn, fs)
+
+	if spec.ShouldRemoveOnPrune(sd) {
+		t.Error("expected ShouldRemoveOnPrune to return false when file doesn't exist")
+	}
+}
+
+func TestContainerSpec_ShouldRemoveOnPrune_CaseInsensitive(t *testing.T) {
+	spec := &ContainerSpec{Name: "webapp"}
+
+	fs := afero.NewMemMapFs()
+	mockConn := &mockDBusConn{}
+	sd := systemd.NewClient(mockConn, fs)
+
+	// Create unit content with uppercase "TRUE"
+	opts := []*gounit.UnitOption{
+		{Section: "X-Syslet", Name: "RemovalAllowed", Value: "TRUE"},
+		{Section: "Container", Name: "ContainerName", Value: "webapp"},
+	}
+	content := gounit.Serialize(opts)
+	contentBytes := new(bytes.Buffer)
+	_, _ = contentBytes.ReadFrom(content)
+
+	_ = sd.WriteUnitFile("webapp.container", contentBytes.Bytes())
+
+	if !spec.ShouldRemoveOnPrune(sd) {
+		t.Error("expected ShouldRemoveOnPrune to be case-insensitive")
 	}
 }

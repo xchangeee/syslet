@@ -152,6 +152,7 @@ func diffSimple(sd *systemd.Client, plan *ApplyPlan, r api.RenderedUnit) {
 
 // findStaleUnits scans /etc/containers/systemd/ for unit files that are not
 // in the current spec set. Adds prune operations to the plan.
+// Units are only removed if they have the RemovalAllowed marker set.
 func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, specNames map[string]bool) error {
 	for _, ext := range []string{".container", ".volume", ".network"} {
 		files, err := sd.ListUnitFiles(ext)
@@ -163,6 +164,33 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 				continue
 			}
 
+			name := strings.TrimSuffix(fn, ext)
+
+			// Check if removal is allowed by reading the installed unit file.
+			// This is a safety mechanism to prevent accidental deletion of units.
+			var removalAllowed bool
+			switch ext {
+			case ".container":
+				spec := &api.ContainerSpec{Name: name}
+				removalAllowed = spec.ShouldRemoveOnPrune(sd)
+			case ".volume":
+				spec := &api.VolumeSpec{Name: name}
+				removalAllowed = spec.ShouldRemoveOnPrune(sd)
+			case ".network":
+				spec := &api.NetworkSpec{Name: name}
+				removalAllowed = spec.ShouldRemoveOnPrune(sd)
+			}
+
+			if !removalAllowed {
+				// Skip removal - unit not marked for removal.
+				plan.Results = append(plan.Results, ApplyResult{
+					fullName: fn,
+					status:   "skipped",
+					message:  "not marked for removal (removalAllowed not set)",
+				})
+				continue
+			}
+
 			// If it's a container, check if it's running so we stop it first.
 			if ext == ".container" {
 				state, err := sd.ContainerState(ctx, fn)
@@ -171,25 +199,22 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 				}
 
 				// Add operation to delete config directory.
-				containerName := strings.TrimSuffix(fn, ".container")
 				plan.DeleteConfigDirs = append(plan.DeleteConfigDirs, ConfigDirDelete{
-					containerName: containerName,
+					containerName: name,
 				})
 			}
 
 			// For volumes and networks, check if reclaim policy is Delete.
-			if ext == ".volume" || ext == ".network" {
-				name := strings.TrimSuffix(fn, ext)
-				if ext == ".volume" {
-					spec := &api.VolumeSpec{Name: name}
-					if spec.ShouldDeleteOnRemoval(sd) {
-						plan.DeleteVolumes = append(plan.DeleteVolumes, VolumeDeleteOp{name: name})
-					}
-				} else {
-					spec := &api.NetworkSpec{Name: name}
-					if spec.ShouldDeleteOnRemoval(sd) {
-						plan.DeleteNetworks = append(plan.DeleteNetworks, NetworkDeleteOp{name: name})
-					}
+			switch ext {
+			case ".volume":
+				spec := &api.VolumeSpec{Name: name}
+				if spec.ShouldDeleteOnRemoval(sd) {
+					plan.DeleteVolumes = append(plan.DeleteVolumes, VolumeDeleteOp{name: name})
+				}
+			case ".network":
+				spec := &api.NetworkSpec{Name: name}
+				if spec.ShouldDeleteOnRemoval(sd) {
+					plan.DeleteNetworks = append(plan.DeleteNetworks, NetworkDeleteOp{name: name})
 				}
 			}
 
