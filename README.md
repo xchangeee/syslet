@@ -186,7 +186,7 @@ Generate a deploy key on the server:
    chmod 600 /etc/syslet/deploykey
    ```
 
-Add the public key (`/etc/syslet/deploykey.pub`) to your git repository as a deploy key with read-only access
+Add the public key (`/etc/syslet/deploykey.pub`) to your git repository as a deploy key with read-only access.
 
 Test the connection:
 
