@@ -136,7 +136,7 @@ Key points:
 
 The deployment host must be able to connect to the remote host via ssh public key authentication. password auth is not supported.
 
-Use the `syslet-push` command:
+#### with `syslet-push`
 
 ```sh
 # Deploy from a directory
@@ -148,7 +148,7 @@ cat specs.json | syslet-push --stdin web01
 
 `syslet-push` zips the spec files, copies them to the remote host, and runs syslet via SSH.
 
-Alternatively, deploy manually:
+#### manually
 
 ```sh
 # Option 1: Using a zip file
@@ -169,9 +169,7 @@ webapp-data.volume                       changed    created
 webapp.container                         changed    created, started
 ```
 
-#### GitOps automation
-
-syslet is designed for GitOps workflows. Store your specs in version control and automate deployments on git push using [webhookd](https://github.com/ncarlier/webhookd) or similar webhook receivers.
+#### GitOps with [webhookd](https://github.com/ncarlier/webhookd)
 
 Example webhookd workflow:
 
@@ -180,72 +178,55 @@ Example webhookd workflow:
 3. **webhookd script** pulls the latest specs and runs `syslet`
 4. **Containers update** automatically to match the desired state
 
-Example webhookd script (`/etc/webhookd/scripts/deploy-syslet.sh`):
+Generate a deploy key on the server:
+
+   ```bash
+   mkdir -p /etc/syslet
+   ssh-keygen -t ed25519 -f /etc/syslet/deploykey -N "" -C "syslet-deploy"
+   chmod 600 /etc/syslet/deploykey
+   ```
+
+Add the public key (`/etc/syslet/deploykey.pub`) to your git repository as a deploy key with read-only access
+
+Test the connection:
+
+  ```bash
+  ssh -i /etc/syslet/deploykey -T git@git.example.com
+  ```
+
+Add webhookd script (`/etc/webhookd/scripts/deploy-syslet.sh`):
 
 ```bash
 #!/bin/bash
-cd /etc/syslet/repo
-git pull origin main
+set -e
 
-# Option 1: Use directory directly (simpler, no zipping needed)
+# Use SSH URL for private repositories with deploy key authentication
+REPO_URL="git@git.example.com:your-org/your-syslet-specs.git"
+REPO_DIR="/etc/syslet/repo"
+REPO_BRANCH="main"
+DEPLOY_KEY="/etc/syslet/deploykey"
+
+# Configure git to use the deploy key
+export GIT_SSH_COMMAND="ssh -i $DEPLOY_KEY -o StrictHostKeyChecking=accept-new"
+
+# Clone repo if not present, otherwise pull latest changes
+if [ ! -d "$REPO_DIR/.git" ]; then
+    mkdir -p "$(dirname "$REPO_DIR")"
+    git clone "$REPO_URL" "$REPO_DIR"
+fi
+
+cd "$REPO_DIR"
+git pull origin "$REPO_BRANCH"
 syslet hosts/$(hostname)/
-
-# Option 2: Use zip file (if you prefer)
-# zip -j /etc/syslet/config.zip hosts/$(hostname)/*.json
-# syslet /etc/syslet/config.zip
 ```
-
-This enables continuous deployment: push to git, containers update automatically. Combined with CUE for validation, you get type-safe infrastructure deployments with full audit history.
 
 #### Using CUE for better ergonomics
 
-While syslet only accepts JSON, writing raw JSON by hand can be verbose and error-prone. [CUE](https://cuelang.org/) provides a better authoring experience with:
+While syslet only accepts JSON, writing raw JSON by hand can be verbose and error-prone. [CUE](https://cuelang.org/) provides a better authoring experience.
 
-- **Type safety and validation** — catch errors before deployment
-- **Schema definitions** — define reusable templates for common patterns
-- **Reduced boilerplate** — defaults, computed values, and composition
-- **Comments and documentation** — unlike JSON
+Example CUE spec:
 
-Example CUE workflow:
-
-```cue
-// specs.cue
-package syslet
-
-#Container: {
-    name: string
-    type: "container"
-    desiredState: "running" | "stopped"
-    unit: Container: {
-        Image: string
-        PublishPort?: [...string]
-        Volume?: [...string]
-        Network?: [...string]
-    }
-    configs?: [...{
-        content: string
-        targetVolumePath: string
-    }]
-}
-
-webapp: #Container & {
-    name: "webapp"
-    unit: Container: {
-        Image: "docker.io/library/nginx:latest"
-        PublishPort: ["8080:80"]
-        Volume: ["webapp-data.volume:/data"]
-        Network: ["webapp-net.network"]
-    }
-}
-```
-
-Generate JSON and deploy:
-
-```sh
-cue export specs.cue | syslet-push --stdin web01
-```
-
-This gives you validation, defaults, and better maintainability while still producing the JSON that syslet expects.
+TODO add examples with local push and git ops
 
 ## Reference
 
