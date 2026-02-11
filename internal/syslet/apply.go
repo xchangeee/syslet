@@ -3,7 +3,9 @@ package syslet
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
 	"strings"
 
 	"codeberg.org/xchangeee/syslet/internal/api"
@@ -11,6 +13,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 
+	"github.com/aymanbagabas/go-udiff"
 	gounit "github.com/coreos/go-systemd/v22/unit"
 	"github.com/spf13/afero"
 )
@@ -323,25 +326,37 @@ func recordError(plan *ApplyPlan, fullName, message string) {
 // Diff displays what would change based on a pre-built plan
 // without actually applying the changes.
 func Diff(plan *ApplyPlan) {
-	DisplayDiff(plan)
+	DisplayDiff(os.Stdout, plan)
 }
 
 // displayContentDiff prints a semantic diff between old and new content.
 // For systemd unit files, parses the content into structured options and compares
 // them semantically, showing additions/removals with section context.
-func displayContentDiff(name, oldContent, newContent string) {
+// For config files, uses text-based unified diff.
+func displayContentDiff(w io.Writer, name, oldContent, newContent string) {
+	// Only use semantic diff for systemd unit files (not config files)
+	isUnitFile := strings.HasSuffix(name, ".container") ||
+		strings.HasSuffix(name, ".volume") ||
+		strings.HasSuffix(name, ".network")
+
+	if !isUnitFile {
+		// Config files: use text diff
+		displayTextDiff(w, name, oldContent, newContent)
+		return
+	}
+
 	// Parse both contents into structured options
 	oldOpts, err := gounit.Deserialize(strings.NewReader(oldContent))
 	if err != nil {
 		// Fallback to text diff if parsing fails
-		displayTextDiff(name, oldContent, newContent)
+		displayTextDiff(w, name, oldContent, newContent)
 		return
 	}
 
 	newOpts, err := gounit.Deserialize(strings.NewReader(newContent))
 	if err != nil {
 		// Fallback to text diff if parsing fails
-		displayTextDiff(name, oldContent, newContent)
+		displayTextDiff(w, name, oldContent, newContent)
 		return
 	}
 
@@ -392,151 +407,117 @@ func displayContentDiff(name, oldContent, newContent string) {
 		return // No semantic changes
 	}
 
-	fmt.Printf("\n--- %s (current)\n", name)
-	fmt.Printf("+++ %s (new)\n", name)
+	_, _ = fmt.Fprintf(w, "\n--- %s (current)\n", name)
+	_, _ = fmt.Fprintf(w, "+++ %s (new)\n", name)
 
 	for _, opt := range removals {
-		fmt.Printf("- [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
+		_, _ = fmt.Fprintf(w, "- [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
 	}
 	for _, opt := range additions {
-		fmt.Printf("+ [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
+		_, _ = fmt.Fprintf(w, "+ [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
 	}
 }
 
 // displayTextDiff is a fallback for non-unit files or when parsing fails.
-func displayTextDiff(name, oldContent, newContent string) {
-	oldLines := strings.Split(oldContent, "\n")
-	newLines := strings.Split(newContent, "\n")
-
-	fmt.Printf("\n--- %s (current)\n", name)
-	fmt.Printf("+++ %s (new)\n", name)
-
-	maxLen := len(oldLines)
-	if len(newLines) > maxLen {
-		maxLen = len(newLines)
-	}
-
-	for i := 0; i < maxLen; i++ {
-		var oldLine, newLine string
-		if i < len(oldLines) {
-			oldLine = oldLines[i]
-		}
-		if i < len(newLines) {
-			newLine = newLines[i]
-		}
-
-		if oldLine != newLine {
-			if oldLine != "" {
-				fmt.Printf("-%s\n", oldLine)
-			}
-			if newLine != "" {
-				fmt.Printf("+%s\n", newLine)
-			}
-		}
+// Uses unified diff format for better readability.
+func displayTextDiff(w io.Writer, name, oldContent, newContent string) {
+	diff := udiff.Unified(name+" (current)", name+" (new)", oldContent, newContent)
+	if diff != "" {
+		_, _ = fmt.Fprint(w, diff)
 	}
 }
 
 // DisplayDiff prints a human-readable diff showing what would change.
 // It shows operations that would be performed and the final status of each unit.
-func DisplayDiff(plan *ApplyPlan) {
+func DisplayDiff(w io.Writer, plan *ApplyPlan) {
 	// Print operations that would be performed
 	hasChanges := false
 
 	if len(plan.StopContainers) > 0 {
 		hasChanges = true
-		fmt.Println("\nContainers to stop:")
+		_, _ = fmt.Fprintln(w, "\nContainers to stop:")
 		for _, op := range plan.StopContainers {
-			fmt.Printf("  - %s\n", op.fullName)
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullName)
 		}
 	}
 
 	if len(plan.WriteConfigs) > 0 {
 		hasChanges = true
-		fmt.Println("\nConfig file changes:")
+		_, _ = fmt.Fprintln(w, "\nConfig file changes:")
 		for _, op := range plan.WriteConfigs {
-			if op.oldContent == "" {
-				fmt.Printf("  - %s/%s (new file)\n", op.containerName, op.filename)
-			} else if op.oldContent != op.content {
-				fmt.Printf("  - %s/%s (modified)\n", op.containerName, op.filename)
-				displayContentDiff(fmt.Sprintf("%s/%s", op.containerName, op.filename), op.oldContent, op.content)
-			}
+			displayContentDiff(w, fmt.Sprintf("%s/%s", op.containerName, op.filename), op.oldContent, op.content)
 		}
 	}
 
 	if len(plan.DeleteConfigs) > 0 {
 		hasChanges = true
-		fmt.Println("\nConfig files to delete:")
+		_, _ = fmt.Fprintln(w, "\nConfig files to delete:")
 		for _, op := range plan.DeleteConfigs {
-			fmt.Printf("  - %s/%s\n", op.containerName, op.filename)
+			_, _ = fmt.Fprintf(w, "  - %s/%s\n", op.containerName, op.filename)
 		}
 	}
 
 	if len(plan.DeleteConfigDirs) > 0 {
 		hasChanges = true
-		fmt.Println("\nConfig directories to delete:")
+		_, _ = fmt.Fprintln(w, "\nConfig directories to delete:")
 		for _, op := range plan.DeleteConfigDirs {
-			fmt.Printf("  - %s/\n", op.containerName)
+			_, _ = fmt.Fprintf(w, "  - %s/\n", op.containerName)
 		}
 	}
 
 	if len(plan.WriteUnits) > 0 {
 		hasChanges = true
-		fmt.Println("\nUnit file changes:")
+		_, _ = fmt.Fprintln(w, "\nUnit file changes:")
 		for _, op := range plan.WriteUnits {
-			if op.oldContent == "" {
-				fmt.Printf("  - %s (new file)\n", op.fullName)
-			} else if op.oldContent != op.content {
-				fmt.Printf("  - %s (modified)\n", op.fullName)
-				displayContentDiff(op.fullName, op.oldContent, op.content)
-			}
+			displayContentDiff(w, op.fullName, op.oldContent, op.content)
 		}
 	}
 
 	if len(plan.DeleteUnits) > 0 {
 		hasChanges = true
-		fmt.Println("\nUnit files to delete:")
+		_, _ = fmt.Fprintln(w, "\nUnit files to delete:")
 		for _, op := range plan.DeleteUnits {
-			fmt.Printf("  - %s\n", op.fullName)
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullName)
 		}
 	}
 
 	if len(plan.DeleteVolumes) > 0 {
 		hasChanges = true
-		fmt.Println("\nPodman volumes to delete:")
+		_, _ = fmt.Fprintln(w, "\nPodman volumes to delete:")
 		for _, op := range plan.DeleteVolumes {
-			fmt.Printf("  - %s\n", op.name)
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.name)
 		}
 	}
 
 	if len(plan.DeleteNetworks) > 0 {
 		hasChanges = true
-		fmt.Println("\nPodman networks to delete:")
+		_, _ = fmt.Fprintln(w, "\nPodman networks to delete:")
 		for _, op := range plan.DeleteNetworks {
-			fmt.Printf("  - %s\n", op.name)
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.name)
 		}
 	}
 
 	if plan.NeedsReload {
 		hasChanges = true
-		fmt.Println("\nSystemd daemon-reload: required")
+		_, _ = fmt.Fprintln(w, "\nSystemd daemon-reload: required")
 	}
 
 	if len(plan.StartContainers) > 0 {
 		hasChanges = true
-		fmt.Println("\nContainers to start:")
+		_, _ = fmt.Fprintln(w, "\nContainers to start:")
 		for _, op := range plan.StartContainers {
-			fmt.Printf("  - %s\n", op.fullName)
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullName)
 		}
 	}
 
 	// Print summary of all units
-	fmt.Println("\nSummary:")
-	fmt.Printf("%-40s %-10s %s\n", "UNIT", "STATUS", "CHANGES")
+	_, _ = fmt.Fprintln(w, "\nSummary:")
+	_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", "UNIT", "STATUS", "CHANGES")
 	for _, result := range plan.Results {
-		fmt.Printf("%-40s %-10s %s\n", result.fullName, result.status, result.message)
+		_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", result.fullName, result.status, result.message)
 	}
 
 	if !hasChanges {
-		fmt.Println("\nNo changes detected. All units are up to date.")
+		_, _ = fmt.Fprintln(w, "\nNo changes detected. All units are up to date.")
 	}
 }

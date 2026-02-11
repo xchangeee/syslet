@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 
 	"codeberg.org/xchangeee/syslet/internal/api"
@@ -1273,4 +1274,348 @@ func testApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Clien
 		return err
 	}
 	return Apply(ctx, testLogger(), fs, sd, mockPodman, plan)
+}
+
+// TestDisplayDiff_ConfigFileChanges tests that config file diffs are displayed using unified diff format.
+func TestDisplayDiff_ConfigFileChanges(t *testing.T) {
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
+			},
+			DesiredState: "running",
+			Configs: []api.ConfigEntry{
+				{
+					Content:          "server {\n  listen 8080;\n  server_name new.example.com;\n}\n",
+					TargetVolumePath: "/etc/nginx/nginx.conf",
+				},
+			},
+		},
+	}
+
+	// Old spec with different config content
+	oldSpec := &api.ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("nginx:latest")},
+		},
+		DesiredState: "running",
+		Configs: []api.ConfigEntry{
+			{
+				Content:          "server {\n  listen 80;\n  server_name old.example.com;\n}\n",
+				TargetVolumePath: "/etc/nginx/nginx.conf",
+			},
+		},
+	}
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, _, _, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": oldContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	// Write existing config file
+	cfg := containerconfig.NewConfigFileManager(fs)
+	_ = cfg.Write("webapp", "nginx.conf", "server {\n  listen 80;\n  server_name old.example.com;\n}\n")
+
+	// Build plan
+	plan, err := BuildPlan(ctx, fs, sd, zipPath)
+	if err != nil {
+		t.Fatalf("BuildPlan failed: %v", err)
+	}
+
+	// Verify plan has config file changes
+	if len(plan.WriteConfigs) != 1 {
+		t.Fatalf("expected 1 config write operation, got %d", len(plan.WriteConfigs))
+	}
+
+	configOp := plan.WriteConfigs[0]
+	if configOp.oldContent == "" {
+		t.Error("config operation should have oldContent for diff")
+	}
+	if configOp.oldContent == configOp.content {
+		t.Error("config oldContent and new content should be different")
+	}
+
+	// Capture diff output
+	var buf bytes.Buffer
+	DisplayDiff(&buf, plan)
+	output := buf.String()
+
+	// Verify output contains config file diff markers
+	if !strings.Contains(output, "Config file changes:") {
+		t.Error("output should contain 'Config file changes:' header")
+	}
+	if !strings.Contains(output, "webapp/nginx.conf (modified)") {
+		t.Error("output should show modified config file")
+	}
+
+	// Verify unified diff format is used (should contain --- and +++ markers)
+	if !strings.Contains(output, "---") || !strings.Contains(output, "+++") {
+		t.Error("output should contain unified diff markers (--- and +++)")
+	}
+
+	// Verify actual diff content shows the changes
+	if !strings.Contains(output, "listen 80") || !strings.Contains(output, "listen 8080") {
+		t.Error("output should show the actual content changes")
+	}
+	if !strings.Contains(output, "old.example.com") || !strings.Contains(output, "new.example.com") {
+		t.Error("output should show the server name changes")
+	}
+}
+
+// TestDisplayDiff_UnitFileChanges tests that unit file diffs use semantic diff format.
+func TestDisplayDiff_UnitFileChanges(t *testing.T) {
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {
+					"Image": api.UV("nginx:alpine"), // Changed
+				},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	// Old spec with different image
+	oldSpec := &api.ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {
+				"Image": api.UV("nginx:latest"),
+			},
+		},
+		DesiredState: "running",
+	}
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, _, _, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": oldContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	// Build plan
+	plan, err := BuildPlan(ctx, fs, sd, zipPath)
+	if err != nil {
+		t.Fatalf("BuildPlan failed: %v", err)
+	}
+
+	// Verify plan has unit file changes
+	if len(plan.WriteUnits) != 1 {
+		t.Fatalf("expected 1 unit write operation, got %d", len(plan.WriteUnits))
+	}
+
+	unitOp := plan.WriteUnits[0]
+	if unitOp.oldContent == "" {
+		t.Error("unit operation should have oldContent for diff")
+	}
+	if unitOp.oldContent == unitOp.content {
+		t.Error("unit oldContent and new content should be different")
+	}
+
+	// Capture diff output
+	var buf bytes.Buffer
+	DisplayDiff(&buf, plan)
+	output := buf.String()
+
+	// Verify output contains unit file diff markers
+	if !strings.Contains(output, "Unit file changes:") {
+		t.Error("output should contain 'Unit file changes:' header")
+	}
+	if !strings.Contains(output, "webapp.container (modified)") {
+		t.Error("output should show modified unit file")
+	}
+
+	// Verify semantic diff format is used (should contain [Section] markers)
+	if !strings.Contains(output, "[Container]") {
+		t.Error("output should contain semantic diff with [Container] section")
+	}
+
+	// Verify the actual image change is shown
+	if !strings.Contains(output, "nginx:latest") || !strings.Contains(output, "nginx:alpine") {
+		t.Error("output should show the image change from nginx:latest to nginx:alpine")
+	}
+}
+
+// TestDisplayDiff_NewConfigFile tests that new config files are properly labeled.
+func TestDisplayDiff_NewConfigFile(t *testing.T) {
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
+			},
+			DesiredState: "running",
+			Configs: []api.ConfigEntry{
+				{
+					Content:          "new config content",
+					TargetVolumePath: "/etc/app/config.yaml",
+				},
+			},
+		},
+	}
+
+	// Old spec without any configs
+	oldSpec := &api.ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {"Image": api.UV("nginx:latest")},
+		},
+		DesiredState: "running",
+	}
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, _, _, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": oldContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	// Build plan
+	plan, err := BuildPlan(ctx, fs, sd, zipPath)
+	if err != nil {
+		t.Fatalf("BuildPlan failed: %v", err)
+	}
+
+	// Verify plan has config file write with empty oldContent (new file)
+	if len(plan.WriteConfigs) != 1 {
+		t.Fatalf("expected 1 config write operation, got %d", len(plan.WriteConfigs))
+	}
+
+	configOp := plan.WriteConfigs[0]
+	if configOp.oldContent != "" {
+		t.Errorf("new config file should have empty oldContent, got: %q", configOp.oldContent)
+	}
+
+	// Capture diff output
+	var buf bytes.Buffer
+	DisplayDiff(&buf, plan)
+	output := buf.String()
+
+	// Verify new file is labeled correctly
+	if !strings.Contains(output, "webapp/config.yaml (new file)") {
+		t.Error("output should show config.yaml as a new file")
+	}
+
+	// New files should not show a diff (no old content to compare)
+	// They should just be listed as new
+	if !strings.Contains(output, "Config file changes:") {
+		t.Error("output should contain config file changes section")
+	}
+}
+
+// TestDisplayDiff_MixedChanges tests diff display with both config and unit file changes.
+func TestDisplayDiff_MixedChanges(t *testing.T) {
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {
+					"Image": api.UV("nginx:alpine"), // Unit changed
+				},
+			},
+			DesiredState: "running",
+			Configs: []api.ConfigEntry{
+				{
+					Content:          "updated config",
+					TargetVolumePath: "/etc/app/app.conf",
+				},
+			},
+		},
+	}
+
+	// Old spec with different unit and config
+	oldSpec := &api.ContainerSpec{
+		Name: "webapp",
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {
+				"Image": api.UV("nginx:latest"),
+			},
+		},
+		DesiredState: "running",
+		Configs: []api.ConfigEntry{
+			{
+				Content:          "old config",
+				TargetVolumePath: "/etc/app/app.conf",
+			},
+		},
+	}
+	oldRendered, _ := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := oldRendered.SerializeUnitOptions()
+
+	ctx, fs, sd, _, _, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container": oldContent,
+		},
+		existingState: map[string]string{
+			"webapp.service": "active",
+		},
+	})
+
+	// Write existing config
+	cfg := containerconfig.NewConfigFileManager(fs)
+	_ = cfg.Write("webapp", "app.conf", "old config")
+
+	// Build plan
+	plan, err := BuildPlan(ctx, fs, sd, zipPath)
+	if err != nil {
+		t.Fatalf("BuildPlan failed: %v", err)
+	}
+
+	// Verify plan has both config and unit changes
+	if len(plan.WriteConfigs) != 1 {
+		t.Errorf("expected 1 config write, got %d", len(plan.WriteConfigs))
+	}
+	if len(plan.WriteUnits) != 1 {
+		t.Errorf("expected 1 unit write, got %d", len(plan.WriteUnits))
+	}
+
+	// Capture diff output
+	var buf bytes.Buffer
+	DisplayDiff(&buf, plan)
+	output := buf.String()
+
+	// Verify both config and unit file changes are shown
+	if !strings.Contains(output, "Config file changes:") {
+		t.Error("output should contain config file changes section")
+	}
+	if !strings.Contains(output, "Unit file changes:") {
+		t.Error("output should contain unit file changes section")
+	}
+
+	// Verify config file shows unified diff
+	if !strings.Contains(output, "webapp/app.conf (modified)") {
+		t.Error("output should show modified config file")
+	}
+
+	// Verify unit file shows semantic diff
+	if !strings.Contains(output, "webapp.container (modified)") {
+		t.Error("output should show modified unit file")
+	}
+
+	// Config files should use text diff (unified format)
+	// Unit files should use semantic diff (section-based format)
+	if !strings.Contains(output, "[Container]") {
+		t.Error("unit file should show semantic diff with [Container] section")
+	}
 }

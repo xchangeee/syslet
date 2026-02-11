@@ -106,8 +106,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Created zip: %s\n", tmpZipPath)
-
 	// Create remote directory
 	if err := runCommand("ssh", host, "mkdir -p /etc/syslet"); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating remote directory: %v\n", err)
