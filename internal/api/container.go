@@ -67,9 +67,15 @@ func (s *ContainerSpec) Render(containerConfigDir string) (RenderedUnit, error) 
 		opts = append([]UnitOption{{Section: "X-Syslet", Name: "RemovalAllowed", Value: "true"}}, opts...)
 	}
 
-	// Add [Install] section only when desiredState is "running".
-	// This ensures containers with desiredState "stopped" won't auto-start on boot.
+	// Add [Install] section and Restart policy when desiredState is "running".
+	// This ensures containers with desiredState "stopped" won't auto-start on boot
+	// and running containers will automatically restart if they exit.
 	if s.DesiredState == "running" {
+		opts = append(opts, UnitOption{
+			Section: "Service",
+			Name:    "Restart",
+			Value:   "always",
+		})
 		opts = append(opts, UnitOption{
 			Section: "Install",
 			Name:    "WantedBy",

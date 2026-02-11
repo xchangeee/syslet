@@ -65,6 +65,17 @@ func TestContainerSpec_Render_BasicContainer(t *testing.T) {
 	if !hasInstall {
 		t.Error("expected Install section for running container")
 	}
+
+	// Verify Restart=always is added for running state
+	hasRestart := false
+	for _, opt := range rendered.UnitOptions {
+		if opt.Section == "Service" && opt.Name == "Restart" && opt.Value == "always" {
+			hasRestart = true
+		}
+	}
+	if !hasRestart {
+		t.Error("expected Restart=always in Service section for running container")
+	}
 }
 
 func TestContainerSpec_Render_DesiredStateStopped(t *testing.T) {
@@ -85,6 +96,13 @@ func TestContainerSpec_Render_DesiredStateStopped(t *testing.T) {
 	for _, opt := range rendered.UnitOptions {
 		if opt.Section == "Install" {
 			t.Error("expected no Install section for stopped container")
+		}
+	}
+
+	// Verify Restart is NOT added for stopped state
+	for _, opt := range rendered.UnitOptions {
+		if opt.Section == "Service" && opt.Name == "Restart" {
+			t.Error("expected no Restart in Service section for stopped container")
 		}
 	}
 }
