@@ -20,6 +20,7 @@ const (
 	SpecTypeContainer SpecType = "container"
 	SpecTypeVolume    SpecType = "volume"
 	SpecTypeNetwork   SpecType = "network"
+	SpecTypeBuild     SpecType = "build"
 )
 
 // Spec is the interface implemented by all spec types.
@@ -155,6 +156,12 @@ func unmarshalSpec(data []byte) (Spec, error) {
 		return &s, nil
 	case "network":
 		var s NetworkSpec
+		if err := json.Unmarshal(data, &s); err != nil {
+			return nil, err
+		}
+		return &s, nil
+	case "build":
+		var s BuildSpec
 		if err := json.Unmarshal(data, &s); err != nil {
 			return nil, err
 		}

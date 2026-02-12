@@ -71,6 +71,30 @@ type NetworkDeleteOp struct {
 	name string
 }
 
+// BuildFileWrite represents a build context file to write.
+type BuildFileWrite struct {
+	buildName  string
+	filename   string
+	content    string
+	oldContent string // empty if new file
+}
+
+// BuildFileDelete represents a build context file to delete.
+type BuildFileDelete struct {
+	buildName string
+	filename  string
+}
+
+// BuildDirDelete represents a build context directory to delete entirely.
+type BuildDirDelete struct {
+	buildName string
+}
+
+// ImageDeleteOp represents an image that needs to be deleted via podman.
+type ImageDeleteOp struct {
+	tag string
+}
+
 // ApplyResult tracks the outcome for a single unit (for summary reporting).
 type ApplyResult struct {
 	fullName string
@@ -86,10 +110,14 @@ type ApplyPlan struct {
 	WriteConfigs     []ConfigFileWrite
 	DeleteConfigs    []ConfigFileDelete
 	DeleteConfigDirs []ConfigDirDelete
+	WriteBuildFiles  []BuildFileWrite
+	DeleteBuildFiles []BuildFileDelete
+	DeleteBuildDirs  []BuildDirDelete
 	WriteUnits       []UnitFileWrite
 	DeleteUnits      []UnitFileDelete
 	DeleteVolumes    []VolumeDeleteOp
 	DeleteNetworks   []NetworkDeleteOp
+	DeleteImages     []ImageDeleteOp
 	StartContainers  []StartOp
 
 	// set during diff if daemon-reload is needed
@@ -114,9 +142,10 @@ func BuildPlan(ctx context.Context, fs afero.Fs, sd *systemd.Client, path string
 	}
 
 	cfg := containerconfig.NewConfigFileManager(fs)
+	buildMgr := containerconfig.NewBuildFileManager(fs)
 
 	// Render all specs to intermediate unit options.
-	var containers, volumes, networks []api.RenderedUnit
+	var containers, volumes, networks, builds []api.RenderedUnit
 	specNames := make(map[string]bool)
 
 	for _, s := range specs {
@@ -142,12 +171,18 @@ func BuildPlan(ctx context.Context, fs afero.Fs, sd *systemd.Client, path string
 				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
 			}
 			networks = append(networks, r)
+		case api.SpecTypeBuild:
+			r, err = s.(*api.BuildSpec).Render(buildMgr.BaseDirectory())
+			if err != nil {
+				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
+			}
+			builds = append(builds, r)
 		}
 		specNames[s.FullUnitName()] = true
 	}
 
 	// Post-render validation: check rendered units and cross-references.
-	if err := api.ValidateRenderedUnits(containers, volumes, networks); err != nil {
+	if err := api.ValidateRenderedUnits(containers, volumes, networks, builds); err != nil {
 		return nil, fmt.Errorf("post-render validation: %w", err)
 	}
 
@@ -173,6 +208,13 @@ func BuildPlan(ctx context.Context, fs afero.Fs, sd *systemd.Client, path string
 		}
 		networks[i].Content = content
 	}
+	for i := range builds {
+		content, err := builds[i].SerializeUnitOptions()
+		if err != nil {
+			return nil, fmt.Errorf("serializing %s: %w", builds[i].Spec.GetName(), err)
+		}
+		builds[i].Content = content
+	}
 
 	// Build the apply plan by diffing all specs.
 	plan := &ApplyPlan{}
@@ -192,8 +234,15 @@ func BuildPlan(ctx context.Context, fs afero.Fs, sd *systemd.Client, path string
 		diffSimple(sd, plan, r)
 	}
 
+	// Diff builds (unit files + build context files).
+	for _, r := range builds {
+		if err := diffBuild(sd, buildMgr, plan, r); err != nil {
+			return nil, fmt.Errorf("diffing build %s: %w", r.Spec.GetName(), err)
+		}
+	}
+
 	// Find installed files that are NOT in the current spec set (stale → prune).
-	if err := findStaleUnits(ctx, sd, plan, specNames); err != nil {
+	if err := findStaleUnits(ctx, sd, plan, specNames, specs); err != nil {
 		return nil, fmt.Errorf("finding stale units: %w", err)
 	}
 
@@ -210,6 +259,7 @@ func BuildPlan(ctx context.Context, fs afero.Fs, sd *systemd.Client, path string
 //  7. Start containers that should be running
 func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, pc podman.Interface, plan *ApplyPlan) error {
 	cfg := containerconfig.NewConfigFileManager(fs)
+	buildMgr := containerconfig.NewBuildFileManager(fs)
 
 	// Execute in strict global order (4 phases).
 
@@ -243,6 +293,27 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 		}
 	}
 
+	// Write and delete build context files.
+	for _, op := range plan.WriteBuildFiles {
+		logger.Info("writing build file", "build", op.buildName, "file", op.filename)
+		if err := buildMgr.Write(op.buildName, op.filename, op.content); err != nil {
+			logger.Error("failed to write build file", "build", op.buildName, "file", op.filename, "error", err)
+			recordError(plan, op.buildName+".build", fmt.Sprintf("failed to write build file %s: %v", op.filename, err))
+		}
+	}
+	for _, op := range plan.DeleteBuildFiles {
+		logger.Info("removing stale build file", "build", op.buildName, "file", op.filename)
+		if err := buildMgr.RemoveFile(op.buildName, op.filename); err != nil {
+			logger.Error("failed to remove stale build file", "build", op.buildName, "file", op.filename, "error", err)
+		}
+	}
+	for _, op := range plan.DeleteBuildDirs {
+		logger.Info("removing build context directory", "build", op.buildName)
+		if err := buildMgr.RemoveAll(op.buildName); err != nil {
+			logger.Error("failed to remove build context dir", "build", op.buildName, "error", err)
+		}
+	}
+
 	// Phase 3: Write and delete unit files.
 	for _, op := range plan.WriteUnits {
 		logger.Info("writing unit file", "unit", op.fullName)
@@ -269,6 +340,12 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 		logger.Info("deleting podman network", "name", op.name)
 		if err := pc.DeleteNetwork(ctx, op.name); err != nil {
 			logger.Error("failed to delete network", "name", op.name, "error", err)
+		}
+	}
+	for _, op := range plan.DeleteImages {
+		logger.Info("deleting podman image", "tag", op.tag)
+		if err := pc.DeleteImage(ctx, op.tag); err != nil {
+			logger.Error("failed to delete image", "tag", op.tag, "error", err)
 		}
 	}
 
@@ -465,6 +542,30 @@ func DisplayDiff(w io.Writer, plan *ApplyPlan) {
 		}
 	}
 
+	if len(plan.WriteBuildFiles) > 0 {
+		hasChanges = true
+		_, _ = fmt.Fprintln(w, "\nBuild context file changes:")
+		for _, op := range plan.WriteBuildFiles {
+			displayContentDiff(w, fmt.Sprintf("%s/%s", op.buildName, op.filename), op.oldContent, op.content)
+		}
+	}
+
+	if len(plan.DeleteBuildFiles) > 0 {
+		hasChanges = true
+		_, _ = fmt.Fprintln(w, "\nBuild context files to delete:")
+		for _, op := range plan.DeleteBuildFiles {
+			_, _ = fmt.Fprintf(w, "  - %s/%s\n", op.buildName, op.filename)
+		}
+	}
+
+	if len(plan.DeleteBuildDirs) > 0 {
+		hasChanges = true
+		_, _ = fmt.Fprintln(w, "\nBuild context directories to delete:")
+		for _, op := range plan.DeleteBuildDirs {
+			_, _ = fmt.Fprintf(w, "  - %s/\n", op.buildName)
+		}
+	}
+
 	if len(plan.WriteUnits) > 0 {
 		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nUnit file changes:")
@@ -494,6 +595,14 @@ func DisplayDiff(w io.Writer, plan *ApplyPlan) {
 		_, _ = fmt.Fprintln(w, "\nPodman networks to delete:")
 		for _, op := range plan.DeleteNetworks {
 			_, _ = fmt.Fprintf(w, "  - %s\n", op.name)
+		}
+	}
+
+	if len(plan.DeleteImages) > 0 {
+		hasChanges = true
+		_, _ = fmt.Fprintln(w, "\nPodman images to delete:")
+		for _, op := range plan.DeleteImages {
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.tag)
 		}
 	}
 

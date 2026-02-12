@@ -14,6 +14,7 @@ import (
 type Interface interface {
 	DeleteVolume(ctx context.Context, name string) error
 	DeleteNetwork(ctx context.Context, name string) error
+	DeleteImage(ctx context.Context, tag string) error
 }
 
 // Client wraps podman CLI operations for managing volumes and networks.
@@ -46,6 +47,18 @@ func (c *Client) DeleteNetwork(ctx context.Context, name string) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("podman network rm %s failed: %w (output: %s)", name, err, string(output))
+	}
+	return nil
+}
+
+// DeleteImage executes 'podman rmi <tag>' to delete an image.
+// This is used to clean up built images when their build unit is removed
+// and ReclaimPolicy is set to "Delete".
+func (c *Client) DeleteImage(ctx context.Context, tag string) error {
+	cmd := exec.CommandContext(ctx, "podman", "rmi", tag)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("podman rmi %s failed: %w (output: %s)", tag, err, string(output))
 	}
 	return nil
 }

@@ -12,6 +12,8 @@ import (
 const (
 	// DefaultContainerConfigDir is where bind-mounted container config files are stored.
 	DefaultContainerConfigDir = "/etc/containers/config"
+	// DefaultBuildContextDir is where build context files (Containerfile + sources) are stored.
+	DefaultBuildContextDir = "/etc/containers/builds"
 )
 
 // ConfigFileManager handles per-container config file operations.
@@ -24,6 +26,13 @@ type ConfigFileManager struct {
 // NewConfigFileManager creates a config manager with the default base path.
 func NewConfigFileManager(fs afero.Fs) *ConfigFileManager {
 	return &ConfigFileManager{fs: fs, baseDir: DefaultContainerConfigDir}
+}
+
+// NewBuildFileManager creates a config manager for build context files.
+// Build context files include the Containerfile and any additional files
+// referenced in COPY/ADD instructions.
+func NewBuildFileManager(fs afero.Fs) *ConfigFileManager {
+	return &ConfigFileManager{fs: fs, baseDir: DefaultBuildContextDir}
 }
 
 func (m *ConfigFileManager) BaseDirectory() string {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,22 +25,31 @@ func ValidateSpecs(specs []Spec) error {
 	if err := validateNoXSysletSection(specs); err != nil {
 		return err
 	}
+	if err := validateBuildSpecs(specs); err != nil {
+		return err
+	}
 	return nil
 }
 
 // ValidateRenderedUnits performs post-render validation on rendered unit options.
 // This checks that cross-references between specs are valid after flattening
-// unit options. It verifies that volumes and networks referenced by containers
+// unit options. It verifies that volumes, networks, and builds referenced by containers
 // actually exist, and that there are no conflicting volume mount paths.
 // Uses pre-rendered unit options to avoid re-flattening during validation.
-func ValidateRenderedUnits(containers, volumes, networks []RenderedUnit) error {
+func ValidateRenderedUnits(containers, volumes, networks, builds []RenderedUnit) error {
 	if err := validateVolumeReferences(containers, volumes); err != nil {
 		return err
 	}
 	if err := validateNetworkReferences(containers, networks); err != nil {
 		return err
 	}
+	if err := validateBuildReferences(containers, builds); err != nil {
+		return err
+	}
 	if err := validateNoVolumeConflicts(containers); err != nil {
+		return err
+	}
+	if err := validateBuildImageTags(builds); err != nil {
 		return err
 	}
 	return nil
@@ -239,4 +249,110 @@ func parseNetworkReference(value string) string {
 		return strings.TrimSuffix(value, ".network")
 	}
 	return ""
+}
+
+// parseBuildReference extracts the build name from an Image= entry.
+// Returns the build name (without extension) if it references a build unit
+// (e.g. "myapp.build" → "myapp").
+// Returns "" otherwise.
+func parseBuildReference(value string) string {
+	if strings.HasSuffix(value, ".build") {
+		return strings.TrimSuffix(value, ".build")
+	}
+	return ""
+}
+
+// validateBuildSpecs performs build-specific pre-render validation.
+// Checks that Containerfile is present, filenames are valid, and no duplicates exist.
+func validateBuildSpecs(specs []Spec) error {
+	for _, s := range specs {
+		build, ok := s.(*BuildSpec)
+		if !ok {
+			continue
+		}
+
+		// Containerfile is required
+		if build.Containerfile == "" {
+			return fmt.Errorf("build %q: containerfile field is required", build.Name)
+		}
+
+		// Validate config filenames (no absolute paths, no ..)
+		for _, ce := range build.Configs {
+			if ce.Filename == "" {
+				return fmt.Errorf("build %q: config filename cannot be empty", build.Name)
+			}
+			if filepath.IsAbs(ce.Filename) {
+				return fmt.Errorf("build %q: config filename cannot be absolute path: %s", build.Name, ce.Filename)
+			}
+			if strings.Contains(ce.Filename, "..") {
+				return fmt.Errorf("build %q: config filename cannot contain '..': %s", build.Name, ce.Filename)
+			}
+		}
+
+		// Validate no duplicate filenames (including Containerfile)
+		filenames := map[string]bool{"Containerfile": true}
+		for _, ce := range build.Configs {
+			if filenames[ce.Filename] {
+				return fmt.Errorf("build %q: duplicate filename: %s", build.Name, ce.Filename)
+			}
+			filenames[ce.Filename] = true
+		}
+	}
+	return nil
+}
+
+// validateBuildReferences checks that all builds referenced by containers
+// (via Image= entries pointing to .build units) exist as build specs.
+// This is a post-render check that uses pre-rendered unit options.
+func validateBuildReferences(containers, builds []RenderedUnit) error {
+	buildNames := make(map[string]bool)
+	for _, b := range builds {
+		buildNames[b.Spec.GetName()] = true
+	}
+
+	for _, c := range containers {
+		container, ok := c.Spec.(*ContainerSpec)
+		if !ok {
+			continue
+		}
+		for _, o := range c.UnitOptions {
+			if o.Section == "Container" && o.Name == "Image" {
+				buildRef := parseBuildReference(o.Value)
+				if buildRef != "" && !buildNames[buildRef] {
+					return fmt.Errorf("container %q: references undefined build %q", container.Name, buildRef)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// validateBuildImageTags checks that all build units have a required ImageTag
+// and that it starts with the expected prefix "localhost/{buildName}:".
+// This is a post-render check that uses pre-rendered unit options.
+func validateBuildImageTags(builds []RenderedUnit) error {
+	for _, b := range builds {
+		buildName := b.Spec.GetName()
+
+		// ImageTag is required
+		imageTag := ""
+		for _, opt := range b.UnitOptions {
+			if opt.Section == "Build" && opt.Name == "ImageTag" {
+				imageTag = opt.Value
+				break
+			}
+		}
+
+		if imageTag == "" {
+			return fmt.Errorf("build %q: ImageTag is required in Build section", buildName)
+		}
+
+		// ImageTag must start with localhost/{buildName}:
+		expectedPrefix := fmt.Sprintf("localhost/%s:", buildName)
+		if !strings.HasPrefix(imageTag, expectedPrefix) {
+			return fmt.Errorf("build %q: ImageTag must start with %q, got %q",
+				buildName, expectedPrefix, imageTag)
+		}
+	}
+	return nil
 }

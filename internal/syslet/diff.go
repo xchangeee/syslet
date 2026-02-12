@@ -202,11 +202,167 @@ func diffSimple(sd *systemd.Client, plan *ApplyPlan, r api.RenderedUnit) {
 	})
 }
 
+// diffBuild computes the diff for a build spec, including build context file changes.
+// Similar to diffSimple but also tracks changes to Containerfile and additional build files.
+func diffBuild(sd *systemd.Client, buildMgr *containerconfig.ConfigFileManager, plan *ApplyPlan, r api.RenderedUnit) error {
+	build, ok := r.Spec.(*api.BuildSpec)
+	if !ok {
+		return fmt.Errorf("diffBuild called with non-build spec")
+	}
+
+	fn := r.Spec.FullUnitName()
+
+	// Check unit file changes.
+	isNew, unitChanged, _, oldContent, err := checkUnitFileChanged(sd, fn, r.Content)
+	if err != nil {
+		return err
+	}
+
+	// Check build context changes (Containerfile + config files).
+	buildContextChanged := false
+	if isNew {
+		buildContextChanged = build.Containerfile != "" || len(build.Configs) > 0
+	} else {
+		buildContextChanged = buildFilesChanged(buildMgr, build)
+	}
+
+	// Add unit write if changed.
+	if unitChanged {
+		plan.WriteUnits = append(plan.WriteUnits, UnitFileWrite{
+			fullName:   fn,
+			content:    r.Content,
+			oldContent: oldContent,
+		})
+		plan.NeedsReload = true
+	}
+
+	// Add build file operations if context changed.
+	if buildContextChanged {
+		addBuildFileOps(buildMgr, plan, build)
+	}
+
+	// Record result for summary.
+	status := "unchanged"
+	message := "up to date"
+	if isNew {
+		status = "created"
+		message = "created"
+	} else if unitChanged || buildContextChanged {
+		status = "updated"
+		if unitChanged && buildContextChanged {
+			message = "unit and build context updated"
+		} else if unitChanged {
+			message = "unit updated"
+		} else {
+			message = "build context updated"
+		}
+	}
+	plan.Results = append(plan.Results, ApplyResult{
+		fullName: fn,
+		status:   status,
+		message:  message,
+	})
+
+	return nil
+}
+
+// buildFilesChanged checks if any build context files (Containerfile + configs) have changed.
+// Returns true if any file is new, modified, or if stale files exist on disk.
+func buildFilesChanged(buildMgr *containerconfig.ConfigFileManager, build *api.BuildSpec) bool {
+	// Check if Containerfile changed.
+	changed, err := buildMgr.IsChanged(build.Name, "Containerfile", build.Containerfile)
+	if err != nil || changed {
+		return true
+	}
+
+	// Check each config file.
+	for _, ce := range build.Configs {
+		changed, err := buildMgr.IsChanged(build.Name, ce.Filename, ce.Content)
+		if err != nil || changed {
+			return true
+		}
+	}
+
+	// Check for stale files (on disk but not in spec).
+	deployed, _ := buildMgr.ListFiles(build.Name)
+	specFiles := map[string]bool{"Containerfile": true}
+	for _, ce := range build.Configs {
+		specFiles[ce.Filename] = true
+	}
+	for _, f := range deployed {
+		if !specFiles[f] {
+			return true // Stale file exists
+		}
+	}
+
+	return false
+}
+
+// addBuildFileOps adds build file write and delete operations to the plan.
+// This includes the Containerfile and any additional build context files.
+// Reads existing content for diff display.
+func addBuildFileOps(buildMgr *containerconfig.ConfigFileManager, plan *ApplyPlan, build *api.BuildSpec) {
+	// Write Containerfile.
+	oldContainerfile, _ := buildMgr.Read(build.Name, "Containerfile")
+	plan.WriteBuildFiles = append(plan.WriteBuildFiles, BuildFileWrite{
+		buildName:  build.Name,
+		filename:   "Containerfile",
+		content:    build.Containerfile,
+		oldContent: oldContainerfile,
+	})
+
+	// Write config files.
+	for _, ce := range build.Configs {
+		oldContent, _ := buildMgr.Read(build.Name, ce.Filename)
+		plan.WriteBuildFiles = append(plan.WriteBuildFiles, BuildFileWrite{
+			buildName:  build.Name,
+			filename:   ce.Filename,
+			content:    ce.Content,
+			oldContent: oldContent,
+		})
+	}
+
+	// Delete stale files (on disk but not in spec).
+	deployed, _ := buildMgr.ListFiles(build.Name)
+	specFiles := map[string]bool{"Containerfile": true}
+	for _, ce := range build.Configs {
+		specFiles[ce.Filename] = true
+	}
+	for _, f := range deployed {
+		if !specFiles[f] {
+			plan.DeleteBuildFiles = append(plan.DeleteBuildFiles, BuildFileDelete{
+				buildName: build.Name,
+				filename:  f,
+			})
+		}
+	}
+}
+
+// extractImageTagFromUnit reads a .build unit file and extracts the ImageTag value.
+// Returns empty string if the unit file can't be read or ImageTag is not found.
+func extractImageTagFromUnit(sd *systemd.Client, fullUnitName string) string {
+	content, err := sd.ReadUnitFile(fullUnitName)
+	if err != nil {
+		return ""
+	}
+	opts, err := gounit.Deserialize(bytes.NewReader(content))
+	if err != nil {
+		return ""
+	}
+	for _, opt := range opts {
+		if opt.Section == "Build" && opt.Name == "ImageTag" {
+			return opt.Value
+		}
+	}
+	return ""
+}
+
 // findStaleUnits scans /etc/containers/systemd/ for unit files that are not
 // in the current spec set. Adds prune operations to the plan.
 // Units are only removed if they have the RemovalAllowed marker set.
-func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, specNames map[string]bool) error {
-	for _, ext := range []string{".container", ".volume", ".network"} {
+// Build units are implicitly removable when not referenced by any container.
+func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, specNames map[string]bool, specs []api.Spec) error {
+	for _, ext := range []string{".container", ".volume", ".network", ".build"} {
 		files, err := sd.ListUnitFiles(ext)
 		if err != nil {
 			return err
@@ -231,6 +387,28 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 			case ".network":
 				spec := &api.NetworkSpec{Name: name}
 				removalAllowed = spec.ShouldRemoveOnPrune(sd)
+			case ".build":
+				// Builds are implicitly removable if not referenced by any container
+				buildReferenced := false
+				for _, s := range specs {
+					if c, ok := s.(*api.ContainerSpec); ok {
+						// Check if any Image= field references this build
+						if imageOpts, ok := c.GetUnit()["Container"]; ok {
+							if imageVal, ok := imageOpts["Image"]; ok {
+								for _, v := range imageVal.Values() {
+									if strings.TrimSuffix(v, ".build") == name {
+										buildReferenced = true
+										break
+									}
+								}
+							}
+						}
+						if buildReferenced {
+							break
+						}
+					}
+				}
+				removalAllowed = !buildReferenced
 			}
 
 			if !removalAllowed {
@@ -256,7 +434,7 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 				})
 			}
 
-			// For volumes and networks, check if reclaim policy is Delete.
+			// For volumes, networks, and builds, check if reclaim policy is Delete.
 			switch ext {
 			case ".volume":
 				spec := &api.VolumeSpec{Name: name}
@@ -267,6 +445,19 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 				spec := &api.NetworkSpec{Name: name}
 				if spec.ShouldDeleteOnRemoval(sd) {
 					plan.DeleteNetworks = append(plan.DeleteNetworks, NetworkDeleteOp{name: name})
+				}
+			case ".build":
+				// Delete build context directory
+				plan.DeleteBuildDirs = append(plan.DeleteBuildDirs, BuildDirDelete{buildName: name})
+
+				// If reclaim policy is Delete, schedule image deletion
+				spec := &api.BuildSpec{Name: name}
+				if spec.ShouldDeleteOnRemoval(sd) {
+					// Extract ImageTag from unit file to delete correct image
+					imageTag := extractImageTagFromUnit(sd, fn)
+					if imageTag != "" {
+						plan.DeleteImages = append(plan.DeleteImages, ImageDeleteOp{tag: imageTag})
+					}
 				}
 			}
 

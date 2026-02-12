@@ -85,12 +85,14 @@ func (m *mockDBusConn) setUnitState(serviceName string, activeState string) {
 type mockPodmanClient struct {
 	deletedVolumes  []string
 	deletedNetworks []string
+	deletedImages   []string
 }
 
 func newMockPodmanClient() *mockPodmanClient {
 	return &mockPodmanClient{
 		deletedVolumes:  []string{},
 		deletedNetworks: []string{},
+		deletedImages:   []string{},
 	}
 }
 
@@ -101,6 +103,11 @@ func (m *mockPodmanClient) DeleteVolume(ctx context.Context, name string) error 
 
 func (m *mockPodmanClient) DeleteNetwork(ctx context.Context, name string) error {
 	m.deletedNetworks = append(m.deletedNetworks, name)
+	return nil
+}
+
+func (m *mockPodmanClient) DeleteImage(ctx context.Context, tag string) error {
+	m.deletedImages = append(m.deletedImages, tag)
 	return nil
 }
 
