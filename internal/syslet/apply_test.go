@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"testing"
 
 	"codeberg.org/xchangeee/syslet/internal/api"
@@ -1356,25 +1355,31 @@ func TestDisplayDiff_ConfigFileChanges(t *testing.T) {
 	DisplayDiff(&buf, plan)
 	output := buf.String()
 
-	// Verify output contains config file diff markers
-	if !strings.Contains(output, "Config file changes:") {
-		t.Error("output should contain 'Config file changes:' header")
-	}
-	if !strings.Contains(output, "webapp/nginx.conf (modified)") {
-		t.Error("output should show modified config file")
-	}
+	expected := `
+Containers to stop:
+  - webapp.container
 
-	// Verify unified diff format is used (should contain --- and +++ markers)
-	if !strings.Contains(output, "---") || !strings.Contains(output, "+++") {
-		t.Error("output should contain unified diff markers (--- and +++)")
-	}
+Config file changes:
+--- webapp/nginx.conf (current)
++++ webapp/nginx.conf (new)
+@@ -1,4 +1,4 @@
+ server {
+-  listen 80;
++  listen 8080;
+-  server_name old.example.com;
++  server_name new.example.com;
+ }
 
-	// Verify actual diff content shows the changes
-	if !strings.Contains(output, "listen 80") || !strings.Contains(output, "listen 8080") {
-		t.Error("output should show the actual content changes")
-	}
-	if !strings.Contains(output, "old.example.com") || !strings.Contains(output, "new.example.com") {
-		t.Error("output should show the server name changes")
+Containers to start:
+  - webapp.container
+
+Summary:
+UNIT                                     STATUS     CHANGES
+webapp.container                         updated    config updated, restarted (desired: running)
+`
+
+	if output != expected {
+		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", expected, output)
 	}
 }
 
@@ -1439,22 +1444,29 @@ func TestDisplayDiff_UnitFileChanges(t *testing.T) {
 	DisplayDiff(&buf, plan)
 	output := buf.String()
 
-	// Verify output contains unit file diff markers
-	if !strings.Contains(output, "Unit file changes:") {
-		t.Error("output should contain 'Unit file changes:' header")
-	}
-	if !strings.Contains(output, "webapp.container (modified)") {
-		t.Error("output should show modified unit file")
-	}
+	expected := `
+Containers to stop:
+  - webapp.container
 
-	// Verify semantic diff format is used (should contain [Section] markers)
-	if !strings.Contains(output, "[Container]") {
-		t.Error("output should contain semantic diff with [Container] section")
-	}
+Unit file changes:
 
-	// Verify the actual image change is shown
-	if !strings.Contains(output, "nginx:latest") || !strings.Contains(output, "nginx:alpine") {
-		t.Error("output should show the image change from nginx:latest to nginx:alpine")
+--- webapp.container (current)
++++ webapp.container (new)
+- [Container] Image=nginx:latest
++ [Container] Image=nginx:alpine
+
+Systemd daemon-reload: required
+
+Containers to start:
+  - webapp.container
+
+Summary:
+UNIT                                     STATUS     CHANGES
+webapp.container                         updated    unit updated, restarted (desired: running)
+`
+
+	if output != expected {
+		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", expected, output)
 	}
 }
 
@@ -1518,15 +1530,35 @@ func TestDisplayDiff_NewConfigFile(t *testing.T) {
 	DisplayDiff(&buf, plan)
 	output := buf.String()
 
-	// Verify new file is labeled correctly
-	if !strings.Contains(output, "webapp/config.yaml (new file)") {
-		t.Error("output should show config.yaml as a new file")
-	}
+	expected := `
+Containers to stop:
+  - webapp.container
 
-	// New files should not show a diff (no old content to compare)
-	// They should just be listed as new
-	if !strings.Contains(output, "Config file changes:") {
-		t.Error("output should contain config file changes section")
+Config file changes:
+--- webapp/config.yaml (current)
++++ webapp/config.yaml (new)
+@@ -0,0 +1 @@
++new config content
+\ No newline at end of file
+
+Unit file changes:
+
+--- webapp.container (current)
++++ webapp.container (new)
++ [Container] Volume=/etc/containers/config/webapp/config.yaml:/etc/app/config.yaml:ro
+
+Systemd daemon-reload: required
+
+Containers to start:
+  - webapp.container
+
+Summary:
+UNIT                                     STATUS     CHANGES
+webapp.container                         updated    unit updated, config updated, restarted (desired: running)
+`
+
+	if output != expected {
+		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", expected, output)
 	}
 }
 
@@ -1602,27 +1634,37 @@ func TestDisplayDiff_MixedChanges(t *testing.T) {
 	DisplayDiff(&buf, plan)
 	output := buf.String()
 
-	// Verify both config and unit file changes are shown
-	if !strings.Contains(output, "Config file changes:") {
-		t.Error("output should contain config file changes section")
-	}
-	if !strings.Contains(output, "Unit file changes:") {
-		t.Error("output should contain unit file changes section")
-	}
+	expected := `
+Containers to stop:
+  - webapp.container
 
-	// Verify config file shows unified diff
-	if !strings.Contains(output, "webapp/app.conf (modified)") {
-		t.Error("output should show modified config file")
-	}
+Config file changes:
+--- webapp/app.conf (current)
++++ webapp/app.conf (new)
+@@ -1 +1 @@
+-old config
+\ No newline at end of file
++updated config
+\ No newline at end of file
 
-	// Verify unit file shows semantic diff
-	if !strings.Contains(output, "webapp.container (modified)") {
-		t.Error("output should show modified unit file")
-	}
+Unit file changes:
 
-	// Config files should use text diff (unified format)
-	// Unit files should use semantic diff (section-based format)
-	if !strings.Contains(output, "[Container]") {
-		t.Error("unit file should show semantic diff with [Container] section")
+--- webapp.container (current)
++++ webapp.container (new)
+- [Container] Image=nginx:latest
++ [Container] Image=nginx:alpine
+
+Systemd daemon-reload: required
+
+Containers to start:
+  - webapp.container
+
+Summary:
+UNIT                                     STATUS     CHANGES
+webapp.container                         updated    unit updated, config updated, restarted (desired: running)
+`
+
+	if output != expected {
+		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", expected, output)
 	}
 }
