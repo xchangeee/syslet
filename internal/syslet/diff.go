@@ -77,6 +77,22 @@ func checkUnitFileChanged(sd *systemd.Client, fullUnitName, newContent string) (
 	return false, contentChanged, restartRequired, oldContent, nil
 }
 
+// hasServiceTypeOneshot checks if a unit file has [Service]Type=oneshot.
+// Units with Type=oneshot should not be started or stopped directly by syslet.
+func hasServiceTypeOneshot(content string) bool {
+	opts, err := gounit.Deserialize(bytes.NewReader([]byte(content)))
+	if err != nil {
+		return false
+	}
+
+	for _, opt := range opts {
+		if opt.Section == "Service" && opt.Name == "Type" && strings.EqualFold(opt.Value, "oneshot") {
+			return true
+		}
+	}
+	return false
+}
+
 // diffContainer computes the diff for a container spec, including config
 // changes and start/stop decisions based on desired state and runtime state.
 func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig.ConfigFileManager, plan *ApplyPlan, r api.RenderedUnit) error {
@@ -99,9 +115,12 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 		configChanged = configsChanged(cfg, container)
 	}
 
+	// Check if this is a oneshot service. If so, we should not start or stop it.
+	isOneshot := hasServiceTypeOneshot(r.Content)
+
 	// Query runtime state.
 	var isRunning bool
-	if !isNew {
+	if !isNew && !isOneshot {
 		state, err := sd.ContainerState(ctx, fn)
 		if err != nil {
 			return fmt.Errorf("querying state of %s: %w", fn, err)
@@ -113,21 +132,24 @@ func diffContainer(ctx context.Context, sd *systemd.Client, cfg *containerconfig
 	needsStop := false
 	needsStart := false
 
-	// If unit (excluding metadata) or config changed and currently running, need to stop first.
-	// Note: we use restartRequired (not unitChanged) to ignore metadata-only changes
-	// like X-Syslet fields or Unit.Description.
-	if (restartRequired || configChanged) && isRunning {
-		needsStop = true
-	}
-
-	switch strings.ToLower(container.DesiredState) {
-	case "running":
-		if !isRunning || needsStop {
-			needsStart = true
-		}
-	case "stopped":
-		if isRunning {
+	// Skip start/stop logic for oneshot services.
+	if !isOneshot {
+		// If unit (excluding metadata) or config changed and currently running, need to stop first.
+		// Note: we use restartRequired (not unitChanged) to ignore metadata-only changes
+		// like X-Syslet fields or Unit.Description.
+		if (restartRequired || configChanged) && isRunning {
 			needsStop = true
+		}
+
+		switch strings.ToLower(container.DesiredState) {
+		case "running":
+			if !isRunning || needsStop {
+				needsStart = true
+			}
+		case "stopped":
+			if isRunning {
+				needsStop = true
+			}
 		}
 	}
 
@@ -422,10 +444,17 @@ func findStaleUnits(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, sp
 			}
 
 			// If it's a container, check if it's running so we stop it first.
+			// Skip stopping oneshot services.
 			if ext == ".container" {
-				state, err := sd.ContainerState(ctx, fn)
-				if err == nil && (state.ActiveState == "active" || state.ActiveState == "activating") {
-					plan.StopContainers = append(plan.StopContainers, StopOp{fullName: fn})
+				// Read the unit file to check if it's a oneshot service.
+				unitContent, err := sd.ReadUnitFile(fn)
+				isOneshot := err == nil && hasServiceTypeOneshot(string(unitContent))
+
+				if !isOneshot {
+					state, err := sd.ContainerState(ctx, fn)
+					if err == nil && (state.ActiveState == "active" || state.ActiveState == "activating") {
+						plan.StopContainers = append(plan.StopContainers, StopOp{fullName: fn})
+					}
 				}
 
 				// Add operation to delete config directory.

@@ -1562,6 +1562,197 @@ webapp.container                         updated    unit updated, config updated
 	}
 }
 
+// TestApply_OneshotService_NoStartOrStop tests that containers with [Service]Type=oneshot
+// are not started or stopped by syslet, even when the unit file changes.
+func TestApply_OneshotService_NoStartOrStop(t *testing.T) {
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "oneshot-container",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {
+					"Image": api.UV("alpine:latest"),
+				},
+				"Service": {
+					"Type": api.UV("oneshot"),
+				},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
+
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify unit file was created
+	if !sd.UnitFileExists("oneshot-container.container") {
+		t.Error("unit file was not created")
+	}
+
+	// Verify container was NOT started (oneshot services should not be started by syslet)
+	if len(mockConn.started) != 0 {
+		t.Errorf("expected no starts for oneshot service, got: %v", mockConn.started)
+	}
+
+	// Verify no stops
+	if len(mockConn.stopped) != 0 {
+		t.Errorf("expected no stops, got: %v", mockConn.stopped)
+	}
+
+	// Verify reload was called
+	if !mockConn.reloaded {
+		t.Error("expected daemon-reload to be called")
+	}
+}
+
+// TestApply_OneshotService_UnitChanged_NoRestart tests that oneshot containers
+// are not restarted even when their unit file changes.
+func TestApply_OneshotService_UnitChanged_NoRestart(t *testing.T) {
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "oneshot-container",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {
+					"Image": api.UV("alpine:edge"), // Changed image
+				},
+				"Service": {
+					"Type": api.UV("oneshot"),
+				},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	// Create old unit content with different image but same oneshot type
+	oldSpec := &api.ContainerSpec{
+		Name: "oneshot-container",
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {
+				"Image": api.UV("alpine:latest"),
+			},
+			"Service": {
+				"Type": api.UV("oneshot"),
+			},
+		},
+		DesiredState: "running",
+	}
+	rendered, err := oldSpec.Render(containerconfig.DefaultContainerConfigDir)
+	if err != nil {
+		t.Fatalf("failed to render old spec: %v", err)
+	}
+	oldContent, err := rendered.SerializeUnitOptions()
+	if err != nil {
+		t.Fatalf("failed to serialize old unit: %v", err)
+	}
+
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"oneshot-container.container": oldContent,
+		},
+		existingState: map[string]string{
+			"oneshot-container.service": "inactive", // oneshot services are typically inactive
+		},
+	})
+
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify unit file was updated
+	if !sd.UnitFileExists("oneshot-container.container") {
+		t.Error("unit file should exist")
+	}
+
+	// Verify container was NOT stopped or started (oneshot services should not be managed)
+	if len(mockConn.stopped) != 0 {
+		t.Errorf("expected no stops for oneshot service, got: %v", mockConn.stopped)
+	}
+	if len(mockConn.started) != 0 {
+		t.Errorf("expected no starts for oneshot service, got: %v", mockConn.started)
+	}
+
+	// Verify reload was called (unit changed)
+	if !mockConn.reloaded {
+		t.Error("expected daemon-reload to be called")
+	}
+}
+
+// TestApply_OneshotService_Pruning_NoStop tests that stale oneshot containers
+// are not stopped during pruning.
+func TestApply_OneshotService_Pruning_NoStop(t *testing.T) {
+	// Spec with one container, and a stale oneshot container will be pruned
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {
+					"Image": api.UV("nginx:latest"),
+				},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	webappRendered, _ := specs[0].(*api.ContainerSpec).Render(containerconfig.DefaultContainerConfigDir)
+	webappContent, _ := webappRendered.SerializeUnitOptions()
+
+	// Create existing oneshot container that should be pruned
+	staleSpec := &api.ContainerSpec{
+		Name: "old-oneshot",
+		Unit: map[string]map[string]api.UnitValue{
+			"Container": {
+				"Image": api.UV("alpine:latest"),
+			},
+			"Service": {
+				"Type": api.UV("oneshot"),
+			},
+		},
+		RemovalAllowed: true, // Mark for removal
+	}
+	rendered, _ := staleSpec.Render(containerconfig.DefaultContainerConfigDir)
+	oldContent, _ := rendered.SerializeUnitOptions()
+
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{
+		specs: specs,
+		existingUnits: map[string]string{
+			"webapp.container":      webappContent,
+			"old-oneshot.container": oldContent,
+		},
+		existingState: map[string]string{
+			"webapp.service":      "active",
+			"old-oneshot.service": "inactive",
+		},
+	})
+
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Verify stale oneshot unit was removed
+	if sd.UnitFileExists("old-oneshot.container") {
+		t.Error("stale oneshot unit should be removed")
+	}
+
+	// Verify webapp was not affected
+	if !sd.UnitFileExists("webapp.container") {
+		t.Error("webapp container should still exist")
+	}
+
+	// Verify oneshot container was NOT stopped (oneshot services should not be stopped)
+	// but we should verify that ONLY old-oneshot was not stopped (webapp should not be stopped either since it's unchanged)
+	if len(mockConn.stopped) != 0 {
+		t.Errorf("expected no stops (webapp unchanged, old-oneshot is oneshot), got: %v", mockConn.stopped)
+	}
+
+	// Verify reload was called
+	if !mockConn.reloaded {
+		t.Error("expected daemon-reload to be called")
+	}
+}
+
 // TestDisplayDiff_MixedChanges tests diff display with both config and unit file changes.
 func TestDisplayDiff_MixedChanges(t *testing.T) {
 	specs := []api.Spec{
