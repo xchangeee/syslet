@@ -22,8 +22,8 @@ type BuildFileEntry struct {
 type BuildSpec struct {
 	Name          string                          `json:"name"`
 	Unit          map[string]map[string]UnitValue `json:"unit"`
-	Containerfile string                          `json:"containerfile"`        // Required: Containerfile content
-	Configs       []BuildFileEntry                `json:"configs,omitempty"`    // Optional: Additional build context files
+	Containerfile string                          `json:"containerfile"`           // Required: Containerfile content
+	Configs       []BuildFileEntry                `json:"configs,omitempty"`       // Optional: Additional build context files
 	ReclaimPolicy string                          `json:"reclaimPolicy,omitempty"` // "Delete" removes image on unit removal
 }
 
