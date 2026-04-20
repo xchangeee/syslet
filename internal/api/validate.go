@@ -66,18 +66,22 @@ func validateSpecNamesNotEmpty(specs []Spec) error {
 	return nil
 }
 
-// validateNoDuplicateNames ensures no two specs share the same name,
-// regardless of type. Each unit must have a globally unique name.
+// validateNoDuplicateNames ensures no two specs of the same type share the same
+// name. Names are scoped per type, so the same name may appear across different
+// unit types without conflict.
 // This is a pre-render check on the raw input data.
 func validateNoDuplicateNames(specs []Spec) error {
-	allNames := make(map[string]SpecType)
+	type key struct {
+		specType SpecType
+		name     string
+	}
+	seen := make(map[key]struct{})
 	for _, s := range specs {
-		name := s.GetName()
-		specType := s.GetType()
-		if existing, ok := allNames[name]; ok {
-			return fmt.Errorf("duplicate unit name %q (type %s and %s)", name, existing, specType)
+		k := key{s.GetType(), s.GetName()}
+		if _, ok := seen[k]; ok {
+			return fmt.Errorf("duplicate unit name %q for type %s", k.name, k.specType)
 		}
-		allNames[name] = specType
+		seen[k] = struct{}{}
 	}
 	return nil
 }
