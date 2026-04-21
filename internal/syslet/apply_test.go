@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/containerconfig"
@@ -1263,6 +1264,180 @@ func TestApply_AllConfigsRemoved_DeletesConfigDirectory(t *testing.T) {
 	}
 	if len(mockConn.started) != 1 || mockConn.started[0] != "webapp.service" {
 		t.Errorf("expected webapp to be started, got: %v", mockConn.started)
+	}
+}
+
+// TestContainerNameRe verifies the regex used to extract container names from
+// quadlet-generator journal messages.
+func TestContainerNameRe(t *testing.T) {
+	tests := []struct {
+		msg      string
+		expected []string
+	}{
+		{"webapp.container: Invalid key 'Foo' in section Container", []string{"webapp.container"}},
+		{"foobar-server.container: Unknown section [Bad]", []string{"foobar-server.container"}},
+		{"foo_bar.container: error", []string{"foo_bar.container"}},
+		{"Failed to load /etc/containers/systemd/my-app.container: error", []string{"my-app.container"}},
+		{"no container name here", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.msg, func(t *testing.T) {
+			got := containerNameRe.FindAllString(tt.msg, -1)
+			if len(got) != len(tt.expected) {
+				t.Errorf("got %v, want %v", got, tt.expected)
+				return
+			}
+			for i := range got {
+				if got[i] != tt.expected[i] {
+					t.Errorf("got %v, want %v", got, tt.expected)
+				}
+			}
+		})
+	}
+}
+
+func TestCollectQuadletErrors_ContainerNameExtracted(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+	sd := systemd.NewClientWithPaths(newMockDBusConn(), fs, "/etc/containers/systemd")
+	sd.WithJournalReader(&systemd.MockJournalReader{
+		Messages: []string{"listmonk-server.container: Invalid key 'BadKey' in section Container"},
+	})
+
+	failed := collectQuadletErrors(ctx, testLogger(), sd, time.Now())
+
+	if !failed["listmonk-server.container"] {
+		t.Errorf("expected listmonk-server.container in failed set, got: %v", failed)
+	}
+	if len(failed) != 1 {
+		t.Errorf("expected exactly 1 failed container, got: %v", failed)
+	}
+}
+
+func TestCollectQuadletErrors_MultipleMessages(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+	sd := systemd.NewClientWithPaths(newMockDBusConn(), fs, "/etc/containers/systemd")
+	sd.WithJournalReader(&systemd.MockJournalReader{
+		Messages: []string{
+			"foo.container: Invalid key 'X'",
+			"bar-app.container: Unknown section [Bad]",
+		},
+	})
+
+	failed := collectQuadletErrors(ctx, testLogger(), sd, time.Now())
+
+	if !failed["foo.container"] {
+		t.Error("expected foo.container in failed set")
+	}
+	if !failed["bar-app.container"] {
+		t.Error("expected bar-app.container in failed set")
+	}
+	if len(failed) != 2 {
+		t.Errorf("expected 2 failed containers, got: %v", failed)
+	}
+}
+
+func TestCollectQuadletErrors_OnlyFirstContainerPerLine(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+	sd := systemd.NewClientWithPaths(newMockDBusConn(), fs, "/etc/containers/systemd")
+	sd.WithJournalReader(&systemd.MockJournalReader{
+		Messages: []string{"foo.container and bar.container both failed"},
+	})
+
+	failed := collectQuadletErrors(ctx, testLogger(), sd, time.Now())
+
+	if !failed["foo.container"] {
+		t.Error("expected foo.container (first match) in failed set")
+	}
+	if failed["bar.container"] {
+		t.Error("bar.container should not be in failed set (only first match per line is used)")
+	}
+}
+
+func TestCollectQuadletErrors_NoContainerName_EmptySet(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+	sd := systemd.NewClientWithPaths(newMockDBusConn(), fs, "/etc/containers/systemd")
+	sd.WithJournalReader(&systemd.MockJournalReader{
+		Messages: []string{"Failed to read directory /etc/containers/systemd: Permission denied"},
+	})
+
+	failed := collectQuadletErrors(ctx, testLogger(), sd, time.Now())
+
+	if len(failed) != 0 {
+		t.Errorf("expected no failed containers for nameless message, got: %v", failed)
+	}
+}
+
+func TestCollectQuadletErrors_JournalError_EmptySet(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+	sd := systemd.NewClientWithPaths(newMockDBusConn(), fs, "/etc/containers/systemd")
+	sd.WithJournalReader(&systemd.MockJournalReader{
+		Err: fmt.Errorf("journal unavailable"),
+	})
+
+	failed := collectQuadletErrors(ctx, testLogger(), sd, time.Now())
+
+	if len(failed) != 0 {
+		t.Errorf("expected empty set when journal errors, got: %v", failed)
+	}
+}
+
+func TestApply_QuadletGeneratorError_SkipsStart(t *testing.T) {
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
+	sd.WithJournalReader(&systemd.MockJournalReader{
+		Messages: []string{"webapp.container: Invalid key 'BadKey' in section Container"},
+	})
+
+	err := testApply(t, ctx, fs, sd, mockPodman, zipPath)
+
+	if err == nil {
+		t.Error("expected Apply to return an error when quadlet generation fails")
+	}
+	if len(mockConn.started) != 0 {
+		t.Errorf("expected no starts when quadlet generator failed, got: %v", mockConn.started)
+	}
+}
+
+func TestApply_QuadletGeneratorError_OtherContainer_DoesNotAffectStart(t *testing.T) {
+	specs := []api.Spec{
+		&api.ContainerSpec{
+			Name: "webapp",
+			Unit: map[string]map[string]api.UnitValue{
+				"Container": {"Image": api.UV("nginx:latest")},
+			},
+			DesiredState: "running",
+		},
+	}
+
+	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
+	sd.WithJournalReader(&systemd.MockJournalReader{
+		Messages: []string{
+			"other-app.container: Invalid key 'BadKey'",
+			"Failed to read directory: Permission denied",
+		},
+	})
+
+	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// webapp has no quadlet error — it should still be started
+	if len(mockConn.started) != 1 || mockConn.started[0] != "webapp.service" {
+		t.Errorf("expected webapp.service to be started, got: %v", mockConn.started)
 	}
 }
 

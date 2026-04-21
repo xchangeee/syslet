@@ -6,10 +6,13 @@ package systemd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/spf13/afero"
@@ -19,6 +22,40 @@ const (
 	// QuadletUnitDir is where Podman quadlet files live.
 	QuadletUnitDir = "/etc/containers/systemd"
 )
+
+// JournalReader reads journal entries produced during a daemon-reload. It is
+// injectable so tests can provide a mock without spawning a real journalctl.
+type JournalReader interface {
+	// QuadletErrorsSince returns all messages logged by quadlet-generator
+	// after the given time, or nil if none were found.
+	QuadletErrorsSince(ctx context.Context, since time.Time) ([]string, error)
+}
+
+// journalctlReader is the real JournalReader that shells out to journalctl.
+type journalctlReader struct{}
+
+func (r *journalctlReader) QuadletErrorsSince(ctx context.Context, since time.Time) ([]string, error) {
+	sinceStr := since.Local().Format("2006-01-02 15:04:05")
+	cmd := exec.CommandContext(ctx,
+		"journalctl", "-b", "-t", "quadlet-generator",
+		"--since="+sinceStr, "-o", "cat", "--no-pager",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		// journalctl is not present on non-Linux hosts; treat as no entries.
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("journalctl: %w", err)
+	}
+	var lines []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines, nil
+}
 
 // DBusConn abstracts the systemd D-Bus connection for dependency injection.
 type DBusConn interface {
@@ -34,6 +71,7 @@ type Client struct {
 	conn           DBusConn
 	fs             afero.Fs
 	quadletUnitDir string
+	journal        JournalReader
 }
 
 // UnitState holds the runtime state of a unit.
@@ -53,6 +91,7 @@ func NewClient(conn DBusConn, fs afero.Fs) *Client {
 		conn:           conn,
 		fs:             fs,
 		quadletUnitDir: QuadletUnitDir,
+		journal:        &journalctlReader{},
 	}
 }
 
@@ -62,7 +101,19 @@ func NewClientWithPaths(conn DBusConn, fs afero.Fs, quadletDir string) *Client {
 		conn:           conn,
 		fs:             fs,
 		quadletUnitDir: quadletDir,
+		journal:        &journalctlReader{},
 	}
+}
+
+// WithJournalReader replaces the journal reader (for testing).
+func (c *Client) WithJournalReader(jr JournalReader) *Client {
+	c.journal = jr
+	return c
+}
+
+// QuadletErrorsSince returns messages logged by quadlet-generator after since.
+func (c *Client) QuadletErrorsSince(ctx context.Context, since time.Time) ([]string, error) {
+	return c.journal.QuadletErrorsSince(ctx, since)
 }
 
 // Close closes the D-Bus connection.

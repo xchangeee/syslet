@@ -2,6 +2,7 @@ package systemd
 
 import (
 	"context"
+	"time"
 )
 
 // MockDBusConn is a test helper that implements DBusConn for testing.
@@ -88,4 +89,14 @@ func (m *MockDBusConn) SetUnitState(serviceName string, activeState string) {
 		ActiveState: activeState,
 		Enabled:     true,
 	}
+}
+
+// MockJournalReader is a test stub for JournalReader.
+type MockJournalReader struct {
+	Messages []string
+	Err      error
+}
+
+func (m *MockJournalReader) QuadletErrorsSince(_ context.Context, _ time.Time) ([]string, error) {
+	return m.Messages, m.Err
 }

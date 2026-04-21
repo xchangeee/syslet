@@ -6,7 +6,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
+	"time"
 
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/containerconfig"
@@ -350,15 +352,23 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 	}
 
 	// Single daemon-reload if needed.
+	var quadletFailed map[string]bool
 	if plan.NeedsReload {
+		reloadTime := time.Now()
 		logger.Info("daemon-reload")
 		if err := sd.DaemonReload(ctx); err != nil {
 			logger.Error("daemon-reload failed", "error", err)
 		}
+		quadletFailed = collectQuadletErrors(ctx, logger, sd, reloadTime)
 	}
 
 	// Phase 4: Start containers that need starting.
 	for _, op := range plan.StartContainers {
+		if quadletFailed[op.fullName] {
+			logger.Error("skipping start: quadlet generator failed to process unit", "unit", op.fullName)
+			recordError(plan, op.fullName, "quadlet generator failed to process unit file")
+			continue
+		}
 		logger.Info("starting", "unit", op.fullName)
 		if err := sd.StartContainer(ctx, op.fullName); err != nil {
 			logger.Error("failed to start", "unit", op.fullName, "error", err)
@@ -378,6 +388,33 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 		}
 	}
 	return nil
+}
+
+// containerNameRe matches quadlet container unit names in journal messages,
+// e.g. "listmonk-server.container" or "webapp.container".
+var containerNameRe = regexp.MustCompile(`[a-zA-Z0-9][a-zA-Z0-9_-]*\.container`)
+
+// collectQuadletErrors queries the journal for quadlet-generator messages since
+// the given time and returns the set of container unit names that failed to
+// generate. Errors are logged as warnings; callers receive an empty set on
+// failure so the start phase can still proceed.
+func collectQuadletErrors(ctx context.Context, logger *slog.Logger, sd *systemd.Client, since time.Time) map[string]bool {
+	failed := make(map[string]bool)
+	messages, err := sd.QuadletErrorsSince(ctx, since)
+	if err != nil {
+		logger.Warn("could not read quadlet-generator errors from journal", "error", err)
+		return failed
+	}
+	for _, msg := range messages {
+		name := containerNameRe.FindString(msg)
+		if name != "" {
+			logger.Error("quadlet generator error", "unit", name, "message", msg)
+			failed[name] = true
+		} else {
+			logger.Error("quadlet generator error", "message", msg)
+		}
+	}
+	return failed
 }
 
 // recordError adds an error result to the plan.
