@@ -315,3 +315,139 @@ func TestContainerConfigMountPaths_PathTraversal_ReturnsError(t *testing.T) {
 		t.Errorf("error should mention '..', got: %v", err)
 	}
 }
+
+func TestValidateSecretKeyNames_ValidKey_ReturnsNil(t *testing.T) {
+	s := model.PodmanSecret{Name: "db", Keys: []string{"password", "username", "db-host"}}
+	if err := SecretKeyNames(s); err != nil {
+		t.Errorf("SecretKeyNames() unexpected error: %v", err)
+	}
+}
+
+func TestValidateSecretKeyNames_InvalidChars_ReturnsError(t *testing.T) {
+	cases := []struct {
+		name string
+		keys []string
+	}{
+		{"uppercase", []string{"Password"}},
+		{"underscore", []string{"db_password"}},
+		{"dot", []string{"db.password"}},
+		{"space", []string{"db password"}},
+		{"empty", []string{""}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := model.PodmanSecret{Name: "db", Keys: tc.keys}
+			if err := SecretKeyNames(s); err == nil {
+				t.Errorf("SecretKeyNames() should error for keys %v, got nil", tc.keys)
+			}
+		})
+	}
+}
+
+func TestValidateSecretReferences_ValidRef_ReturnsNil(t *testing.T) {
+	secrets := []model.PodmanSecret{{Name: "db", Keys: []string{"password"}}}
+	container := model.NewContainerUnit(
+		model.ContainerUnitRef("webapp"),
+		model.UnitOptions{
+			"Container": {
+				model.SectionKey("Image"):  model.UV("nginx:latest"),
+				model.SectionKey("Secret"): model.UV("db-password"),
+			},
+		},
+		"", nil, false,
+	)
+	validator := SecretReferences(secrets)
+	if err := validator([]model.Unit{container}); err != nil {
+		t.Errorf("SecretReferences() unexpected error: %v", err)
+	}
+}
+
+func TestValidateSecretReferences_SpecAbsent_ReturnsError(t *testing.T) {
+	secrets := []model.PodmanSecret{{Name: "db", Keys: []string{"password"}}}
+	container := model.NewContainerUnit(
+		model.ContainerUnitRef("webapp"),
+		model.UnitOptions{
+			"Container": {
+				model.SectionKey("Image"):  model.UV("nginx:latest"),
+				model.SectionKey("Secret"): model.UV("cache-password"),
+			},
+		},
+		"", nil, false,
+	)
+	validator := SecretReferences(secrets)
+	if err := validator([]model.Unit{container}); err == nil {
+		t.Error("SecretReferences() should error for absent spec")
+	}
+}
+
+func TestValidateSecretReferences_KeyAbsent_ReturnsError(t *testing.T) {
+	secrets := []model.PodmanSecret{{Name: "db", Keys: []string{"password"}}}
+	container := model.NewContainerUnit(
+		model.ContainerUnitRef("webapp"),
+		model.UnitOptions{
+			"Container": {
+				model.SectionKey("Image"):  model.UV("nginx:latest"),
+				model.SectionKey("Secret"): model.UV("db-username"),
+			},
+		},
+		"", nil, false,
+	)
+	validator := SecretReferences(secrets)
+	if err := validator([]model.Unit{container}); err == nil {
+		t.Error("SecretReferences() should error for absent key")
+	}
+}
+
+func TestValidateSecretReferences_ParsesNameBeforeComma(t *testing.T) {
+	secrets := []model.PodmanSecret{{Name: "db", Keys: []string{"password"}}}
+	container := model.NewContainerUnit(
+		model.ContainerUnitRef("webapp"),
+		model.UnitOptions{
+			"Container": {
+				model.SectionKey("Image"):  model.UV("nginx:latest"),
+				model.SectionKey("Secret"): model.UV("db-password,uid=0,gid=0"),
+			},
+		},
+		"", nil, false,
+	)
+	validator := SecretReferences(secrets)
+	if err := validator([]model.Unit{container}); err != nil {
+		t.Errorf("SecretReferences() unexpected error: %v", err)
+	}
+}
+
+func TestPreRender_WithSecretInvalidKey_ReturnsError(t *testing.T) {
+	secrets := []model.PodmanSecret{{Name: "db", Keys: []string{"INVALID_KEY"}}}
+	units := []model.Unit{model.NewContainerUnit(model.ContainerUnitRef("app"), nil, "", nil, false)}
+	if err := PreRender(units, secrets); err == nil {
+		t.Error("PreRender() should error for secret with invalid key name")
+	}
+}
+
+func TestPreRender_WithSecretBadReference_ReturnsError(t *testing.T) {
+	secrets := []model.PodmanSecret{{Name: "db", Keys: []string{"password"}}}
+	container := model.NewContainerUnit(
+		model.ContainerUnitRef("app"),
+		model.UnitOptions{
+			"Container": {model.SectionKey("Secret"): model.UV("db-missing")},
+		},
+		"", nil, false,
+	)
+	if err := PreRender([]model.Unit{container}, secrets); err == nil {
+		t.Error("PreRender() should error for container referencing unknown secret key")
+	}
+}
+
+func TestPreRender_WithValidSecrets_ReturnsNil(t *testing.T) {
+	secrets := []model.PodmanSecret{{Name: "db", Keys: []string{"password"}}}
+	container := model.NewContainerUnit(
+		model.ContainerUnitRef("app"),
+		model.UnitOptions{
+			"Container": {model.SectionKey("Secret"): model.UV("db-password")},
+		},
+		"", nil, false,
+	)
+	if err := PreRender([]model.Unit{container}, secrets); err != nil {
+		t.Errorf("PreRender() unexpected error: %v", err)
+	}
+}

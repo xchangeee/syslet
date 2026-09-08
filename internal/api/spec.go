@@ -81,12 +81,23 @@ type RawBuildFileEntry struct {
 	Content  string `json:"content"`
 }
 
+// RawSecretSpec is the JSON deserialization target for a secret spec file.
+// Ciphertext holds the raw SOPS-encrypted YAML file content as a plain string
+// (not base64) so spec authors can embed the SOPS YAML text directly. Conversion
+// to model.Ciphertext ([]byte) happens in the loader.
+type RawSecretSpec struct {
+	Type       string `json:"type"`
+	Name       string `json:"name"`
+	Ciphertext string `json:"ciphertext"`
+}
+
 // LoadResult groups the deserialized raw specs by type.
 type LoadResult struct {
 	Containers []RawContainerSpec
 	Volumes    []RawVolumeSpec
 	Networks   []RawNetworkSpec
 	Builds     []RawBuildSpec
+	Secrets    []RawSecretSpec
 }
 
 // LoadSpecsFS reads specs from either a zip file or a directory, auto-detecting by trying
@@ -170,7 +181,7 @@ func LoadSpecsZip(fs afero.Fs, zipPath string) (LoadResult, error) {
 }
 
 func (r LoadResult) empty() bool {
-	return len(r.Containers) == 0 && len(r.Volumes) == 0 && len(r.Networks) == 0 && len(r.Builds) == 0
+	return len(r.Containers) == 0 && len(r.Volumes) == 0 && len(r.Networks) == 0 && len(r.Builds) == 0 && len(r.Secrets) == 0
 }
 
 // unmarshalInto peeks at the type field and appends the deserialized spec to the correct slice.
@@ -207,6 +218,12 @@ func unmarshalInto(data []byte, filename string, result *LoadResult) error {
 			return err
 		}
 		result.Builds = append(result.Builds, s)
+	case "secret", "Secret":
+		var s RawSecretSpec
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		result.Secrets = append(result.Secrets, s)
 	default:
 		return fmt.Errorf("unknown spec type %q in %s", peek.Type, filename)
 	}

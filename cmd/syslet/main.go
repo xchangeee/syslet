@@ -8,10 +8,18 @@
 //
 // If no path is given, defaults to /etc/syslet/config.zip.
 // The path can be either a zip file or a directory containing .json spec files.
+//
+// Optional daemon config is read from /etc/syslet/syslet.json:
+//
+//	{"sshKeyPath": "/etc/ssh/ssh_host_ed25519_key"}
+//
+// When sshKeyPath is set, syslet derives an age identity from the key and uses
+// it to decrypt SOPS-encrypted secret specs.
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -19,14 +27,50 @@ import (
 	"os/signal"
 	"syscall"
 
+	sysletage "codeberg.org/xchangeee/syslet/internal/age"
 	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/podman"
+	"codeberg.org/xchangeee/syslet/internal/sops"
 	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"github.com/spf13/afero"
 )
 
 const defaultConfigPath = "/etc/syslet/config.zip"
+const daemonConfigPath = "/etc/syslet/syslet.json"
+
+// ageKeyFilePath is the append-only cache of derived age private keys.
+// Old keys are kept across SSH key rotations so previously-encrypted secrets
+// remain decryptable.
+const ageKeyFilePath = "/var/lib/syslet/key.txt"
+
+// daemonConfig holds optional daemon-level configuration read from daemonConfigPath.
+type daemonConfig struct {
+	SSHKeyPath string `json:"sshKeyPath"`
+}
+
+// defaultSSHKeyPath is used when syslet.json is absent or does not set sshKeyPath.
+const defaultSSHKeyPath = "/etc/ssh/ssh_host_ed25519_key"
+
+// loadDaemonConfig reads daemonConfigPath. Returns a config with defaults applied
+// when the file does not exist, so syslet works without a config file.
+func loadDaemonConfig(fs afero.Fs) (daemonConfig, error) {
+	data, err := afero.ReadFile(fs, daemonConfigPath)
+	if os.IsNotExist(err) {
+		return daemonConfig{SSHKeyPath: defaultSSHKeyPath}, nil
+	}
+	if err != nil {
+		return daemonConfig{}, fmt.Errorf("reading %s: %w", daemonConfigPath, err)
+	}
+	var cfg daemonConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return daemonConfig{}, fmt.Errorf("parsing %s: %w", daemonConfigPath, err)
+	}
+	if cfg.SSHKeyPath == "" {
+		cfg.SSHKeyPath = defaultSSHKeyPath
+	}
+	return cfg, nil
+}
 
 func main() {
 	diffFlag := flag.Bool("diff", false, "Show what would change without applying (dry-run)")
@@ -43,6 +87,13 @@ func main() {
 	defer cancel()
 
 	fs := afero.NewOsFs()
+
+	cfg, err := loadDaemonConfig(fs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
 	mgrs := filestore.FileManagers{
 		Config: filestore.NewContainerConfigFileStore(fs),
 		Build:  filestore.NewBuildContextFileStore(fs),
@@ -61,7 +112,24 @@ func main() {
 
 	pc := podman.New()
 
-	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, jr, sq, sa, configPath)
+	// Build the decryptor when the SSH key exists. If the key is absent (e.g. the
+	// host has no ed25519 key and no config override), we skip silently — the plan
+	// phase will emit an error only if secrets are actually present in the spec.
+	var decryptor *sops.Decryptor
+	if _, statErr := fs.Stat(cfg.SSHKeyPath); statErr == nil {
+		ageKey, err := sysletage.IdentityFromSSHKey(fs, cfg.SSHKeyPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: deriving age identity from SSH key: %v\n", err)
+			os.Exit(1)
+		}
+		if _, err := sysletage.AppendToKeyFile(fs, ageKeyFilePath, ageKey); err != nil {
+			fmt.Fprintf(os.Stderr, "error: updating age key file: %v\n", err)
+			os.Exit(1)
+		}
+		decryptor = sops.NewDecryptor(ageKeyFilePath)
+	}
+
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, jr, sq, sa, pc, decryptor, configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

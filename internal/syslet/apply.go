@@ -98,6 +98,19 @@ func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr syst
 			"build", op.build)
 	}
 
+	// Delete then upsert podman secrets. Deletes run first so a key rename
+	// (delete old + upsert new) never leaves both names present simultaneously.
+	for _, op := range plan.DeletePodmanSecrets {
+		r.exec("deleting podman secret",
+			func() error { return pc.DeleteSecret(ctx, op.Name) },
+			"name", op.Name)
+	}
+	for _, op := range plan.UpsertPodmanSecrets {
+		r.exec("upserting podman secret",
+			func() error { return pc.UpsertSecret(ctx, op.Name, op.Value, op.Labels) },
+			"name", op.Name)
+	}
+
 	// Phase 3: Write and delete unit files.
 	for _, op := range plan.WriteFsQuadletUnitFiles {
 		r.execUnit("writing unit file", op.fullUnitName,

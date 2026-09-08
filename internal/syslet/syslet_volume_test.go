@@ -13,7 +13,7 @@ import (
 func buildTestPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, zipPath string) (*ApplyPlan, error) {
 	t.Helper()
 	mgrs := newTestFileManagers(fs)
-	return BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, zipPath)
+	return BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
 }
 
 func makeVolumeSpecWithDelete(name, device string) *model.VolumeUnit {

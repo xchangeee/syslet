@@ -13,7 +13,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 )
 
-func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *filestore.ContainerConfigFileStore, plan *ApplyPlan, r render.RenderedUnit, changedNetworks map[model.NetworkUnitRef]bool, changedBuilds map[model.BuildUnitRef]bool, changedVolumes map[model.VolumeUnitRef]bool) {
+func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *filestore.ContainerConfigFileStore, plan *ApplyPlan, r render.RenderedUnit, changedNetworks map[model.NetworkUnitRef]bool, changedBuilds map[model.BuildUnitRef]bool, changedVolumes map[model.VolumeUnitRef]bool, changedSecrets map[string]bool) {
 	container, ok := r.Unit.(*model.ContainerUnit)
 	if !ok {
 		panic("buildPlanUnitContainer called with non-container spec")
@@ -35,6 +35,9 @@ func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *file
 	}
 	if containerReferencesChangedVolume(r.UnitOptions, changedVolumes) {
 		changes.markVolumeChanged()
+	}
+	if containerReferencesChangedSecret(r.UnitOptions, changedSecrets) {
+		changes.markSecretChanged()
 	}
 
 	unitRef := container.TypedUnitRef()
@@ -183,6 +186,7 @@ type containerChanges struct {
 	networkChanged    bool // a referenced network is being recreated this plan pass
 	buildChanged      bool // a referenced build image is being rebuilt this plan pass
 	volumeChanged     bool // a referenced volume is being recreated this plan pass
+	secretChanged     bool // a referenced secret is being upserted this plan pass
 }
 
 type containerAction int
@@ -200,11 +204,12 @@ func (c *containerChanges) markConfigDirChanged()  { c.configDirChanged = true }
 func (c *containerChanges) markNetworkChanged()    { c.networkChanged = true }
 func (c *containerChanges) markBuildChanged()      { c.buildChanged = true }
 func (c *containerChanges) markVolumeChanged()     { c.volumeChanged = true }
+func (c *containerChanges) markSecretChanged()     { c.secretChanged = true }
 
 // planLifecycle converts detected changes and current runtime state into a single action.
 // Exactly one action is returned; reload and stop/start are mutually exclusive by construction.
 func (c containerChanges) planLifecycle(isRunning bool) containerAction {
-	needsRestart := (c.meaningfullyChanged || c.configFileChanged || c.networkChanged || c.buildChanged || c.volumeChanged) && isRunning
+	needsRestart := (c.meaningfullyChanged || c.configFileChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged) && isRunning
 	switch {
 	case needsRestart && c.desiredState == model.DesiredStateRunning:
 		return actionRestart
@@ -220,7 +225,7 @@ func (c containerChanges) planLifecycle(isRunning bool) containerAction {
 }
 
 func (c containerChanges) recordResult(plan *ApplyPlan, action containerAction) {
-	anyChange := c.isChanged || c.configFileChanged || c.configDirChanged || c.networkChanged || c.buildChanged || c.volumeChanged || action != actionNone
+	anyChange := c.isChanged || c.configFileChanged || c.configDirChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged || action != actionNone
 	var status OperationStatus
 	var parts []string
 	if c.isNew {
@@ -249,6 +254,9 @@ func (c containerChanges) recordResult(plan *ApplyPlan, action containerAction) 
 	}
 	if c.volumeChanged {
 		parts = append(parts, "volume recreated")
+	}
+	if c.secretChanged {
+		parts = append(parts, "secret updated")
 	}
 	switch action {
 	case actionRestart:
@@ -304,6 +312,19 @@ func containerReferencesChangedNetwork(opts []gounit.UnitOption, changedNetworks
 			if changedNetworks[model.NetworkUnitRef(before)] {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// containerReferencesChangedSecret reports whether any Secret= entry in opts
+// references a podman secret that is being upserted in this plan pass.
+// Secret= format: "<specname>-<key>[,opt=val...]" — the secret name is before the first comma.
+func containerReferencesChangedSecret(opts []gounit.UnitOption, changedSecrets map[string]bool) bool {
+	for _, val := range render.FindOptValues(opts, render.SectionContainer, render.KeyContainerSecret) {
+		secretName, _, _ := strings.Cut(val, ",")
+		if changedSecrets[secretName] {
+			return true
 		}
 	}
 	return false

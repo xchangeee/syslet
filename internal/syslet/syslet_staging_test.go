@@ -32,7 +32,7 @@ func TestStaging_AllUnitTypes_StagedWhenVolumeChanges(t *testing.T) {
 
 	gen := &recordingQuadletGenerator{fs: fs}
 	mgrs := newTestFileManagers(fs)
-	if _, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, &systemd.MockSystemdAnalyzeRunner{}, zipPath); err != nil {
+	if _, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath); err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
 

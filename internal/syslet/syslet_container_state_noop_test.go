@@ -61,7 +61,7 @@ func TestApply_Container_UnitReordered_NoAction(t *testing.T) {
 	})
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}

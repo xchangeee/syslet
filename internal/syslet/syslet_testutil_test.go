@@ -93,7 +93,7 @@ func renderContainerWithStore(t *testing.T, store *filestore.ContainerConfigFile
 func testApplyWithMgrs(t *testing.T, ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, mockPodman podman.Interface, zipPath string) error {
 	t.Helper()
 	jr := &systemd.MockJournalReader{}
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, jr, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, jr, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
 	if err != nil {
 		return err
 	}
@@ -275,11 +275,20 @@ func renderBuild(t *testing.T, fs afero.Fs, spec *model.BuildUnit) string {
 
 // --- Mock types ---
 
+type upsertedSecret struct {
+	name   string
+	value  model.Plaintext
+	labels map[string]string
+}
+
 // mockPodmanClient implements podman.Interface for testing.
 type mockPodmanClient struct {
 	deletedVolumes  []string
 	deletedNetworks []string
 	deletedImages   []string
+	upsertedSecrets []upsertedSecret
+	deletedSecrets  []string
+	existingSecrets []podman.PodmanSecretMeta
 }
 
 func newMockPodmanClient() *mockPodmanClient {
@@ -303,6 +312,20 @@ func (m *mockPodmanClient) DeleteNetwork(ctx context.Context, name string) error
 func (m *mockPodmanClient) DeleteImage(ctx context.Context, tag string) error {
 	m.deletedImages = append(m.deletedImages, tag)
 	return nil
+}
+
+func (m *mockPodmanClient) UpsertSecret(_ context.Context, name string, value model.Plaintext, labels map[string]string) error {
+	m.upsertedSecrets = append(m.upsertedSecrets, upsertedSecret{name: name, value: value, labels: labels})
+	return nil
+}
+
+func (m *mockPodmanClient) DeleteSecret(_ context.Context, name string) error {
+	m.deletedSecrets = append(m.deletedSecrets, name)
+	return nil
+}
+
+func (m *mockPodmanClient) ListSecrets(_ context.Context) ([]podman.PodmanSecretMeta, error) {
+	return m.existingSecrets, nil
 }
 
 // --- Test fixture and setup ---
@@ -498,7 +521,7 @@ func testApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Clien
 	if len(jr) > 0 {
 		journalReader = jr[0]
 	}
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, journalReader, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, journalReader, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
 	if err != nil {
 		return err
 	}

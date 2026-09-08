@@ -12,6 +12,94 @@ import (
 	"github.com/spf13/afero"
 )
 
+// TestDisplayPlan_SecretChanges verifies that DisplayPlan groups secret upserts and
+// deletes by spec name, showing plaintext new values and "(secret)" for old values.
+func TestDisplayPlan_SecretChanges(t *testing.T) {
+	tests := []struct {
+		name       string
+		upserts    []UpsertPodmanSecretOp
+		deletes    []DeletePodmanSecretOp
+		wantOutput string
+	}{
+		{
+			name: "UpsertAndDelete",
+			upserts: []UpsertPodmanSecretOp{
+				{SpecName: "myapp", Name: "myapp-db-password", Value: model.Plaintext("s3cr3t"), Labels: map[string]string{"syslet/hash": "abc123"}},
+				{SpecName: "myapp", Name: "myapp-api-key", Value: model.Plaintext("newkey"), Labels: map[string]string{"syslet/hash": "def456"}},
+			},
+			deletes: []DeletePodmanSecretOp{
+				{SpecName: "myapp", Name: "myapp-old-token"},
+			},
+			wantOutput: `
+Secret changes (myapp):
+- old-token=(secret)
++ db-password=s3cr3t
++ api-key=newkey
+
+Summary:
+UNIT                                     STATUS     CHANGES
+`,
+		},
+		{
+			name: "UpsertOnly",
+			upserts: []UpsertPodmanSecretOp{
+				{SpecName: "infra", Name: "infra-cert", Value: model.Plaintext("pem-data"), Labels: map[string]string{"syslet/hash": "aaa"}},
+			},
+			wantOutput: `
+Secret changes (infra):
++ cert=pem-data
+
+Summary:
+UNIT                                     STATUS     CHANGES
+`,
+		},
+		{
+			name: "DeleteOnly",
+			deletes: []DeletePodmanSecretOp{
+				{SpecName: "infra", Name: "infra-old-cert"},
+			},
+			wantOutput: `
+Secret changes (infra):
+- old-cert=(secret)
+
+Summary:
+UNIT                                     STATUS     CHANGES
+`,
+		},
+		{
+			name: "MultipleSpecs",
+			upserts: []UpsertPodmanSecretOp{
+				{SpecName: "app1", Name: "app1-token", Value: model.Plaintext("tok1"), Labels: map[string]string{"syslet/hash": "h1"}},
+				{SpecName: "app2", Name: "app2-key", Value: model.Plaintext("key2"), Labels: map[string]string{"syslet/hash": "h2"}},
+			},
+			wantOutput: `
+Secret changes (app1):
++ token=tok1
+
+Secret changes (app2):
++ key=key2
+
+Summary:
+UNIT                                     STATUS     CHANGES
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := &ApplyPlan{
+				UpsertPodmanSecrets: tt.upserts,
+				DeletePodmanSecrets: tt.deletes,
+			}
+			var buf bytes.Buffer
+			DisplayPlan(&buf, plan)
+			if got := buf.String(); got != tt.wantOutput {
+				t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", tt.wantOutput, got)
+			}
+		})
+	}
+}
+
 // TestValidationErrorsInPlan verifies that ValidateUnits failures are recorded
 // in the plan (not returned as a fatal error), and that DisplayPlan suppresses
 // the diff when the plan contains errors.
@@ -32,7 +120,7 @@ func TestValidationErrorsInPlan(t *testing.T) {
 	})
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
 	if err != nil {
 		t.Fatalf("BuildPlan returned fatal error (want nil): %v", err)
 	}
@@ -82,7 +170,7 @@ func TestStagingErrorsSuppressDiff(t *testing.T) {
 	}
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, az, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, az, nil, nil, zipPath)
 	if err != nil {
 		t.Fatalf("BuildPlan returned fatal error: %v", err)
 	}
@@ -123,7 +211,7 @@ func TestDisplayDiff_ConfigDir(t *testing.T) {
 
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFile)
 
-	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, zipPath)
+	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -173,7 +261,7 @@ func TestDisplayDiff_ConfigDir_ModeChange(t *testing.T) {
 
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFile)
 
-	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, zipPath)
+	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -346,7 +434,7 @@ webapp.container                         updated    unit updated, config updated
 			}
 
 			mgrs := newTestFileManagers(fs)
-			plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, zipPath)
+			plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
 			if err != nil {
 				t.Fatalf("BuildPlan failed: %v", err)
 			}

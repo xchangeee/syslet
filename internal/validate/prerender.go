@@ -5,11 +5,14 @@ package validate
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/render"
 )
+
+var secretKeyRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 // CollectionValidator validates a collection of specs.
 type CollectionValidator func([]model.Unit) error
@@ -17,12 +20,19 @@ type CollectionValidator func([]model.Unit) error
 // UnitValidator validates an individual spec.
 type UnitValidator func(model.Unit) error
 
-// PreRender performs pre-render validation on raw input data.
-func PreRender(specs []model.Unit) error {
+// PreRender performs pre-render validation on raw input data, including secret
+// key name format and container Secret= reference resolution.
+func PreRender(units []model.Unit, secrets []model.PodmanSecret) error {
+	for _, s := range secrets {
+		if err := SecretKeyNames(s); err != nil {
+			return err
+		}
+	}
 	return validateUnits(
-		specs,
+		units,
 		[]CollectionValidator{
 			NoDuplicateNames,
+			SecretReferences(secrets),
 		},
 		[]UnitValidator{
 			SpecNameNotEmpty,
@@ -228,4 +238,62 @@ func BuildConfigFilenames(unit model.Unit) error {
 		}
 	}
 	return nil
+}
+
+// SecretKeyNames validates that all key names in a PodmanSecret match [a-z0-9-]+.
+// Keys are plaintext in SOPS YAML so this check runs pre-decryption.
+func SecretKeyNames(secret model.PodmanSecret) error {
+	for _, k := range secret.Keys {
+		if !secretKeyRe.MatchString(k) {
+			return fmt.Errorf("secret %q: key %q must match [a-z0-9-]", secret.Name, k)
+		}
+	}
+	return nil
+}
+
+// SecretReferences returns a CollectionValidator that checks every container
+// Secret= option against the known set of secret specs and their keys.
+// Runs pre-decryption: key names are plaintext in SOPS YAML.
+func SecretReferences(secrets []model.PodmanSecret) CollectionValidator {
+	// valid holds every legal "specname-key" string for O(1) lookup.
+	valid := make(map[string]bool)
+	// specNames is used only in the error path to distinguish "spec absent" from "key absent".
+	specNames := make(map[string]bool)
+	for _, s := range secrets {
+		specNames[s.Name] = true
+		for _, k := range s.Keys {
+			valid[s.Name+"-"+k] = true
+		}
+	}
+
+	return func(units []model.Unit) error {
+		for _, unit := range units {
+			container, ok := unit.(*model.ContainerUnit)
+			if !ok {
+				continue
+			}
+			secretRefs, ok := container.Options()[render.SectionContainer][model.SectionKey("Secret")]
+			if !ok {
+				continue
+			}
+			for _, ref := range secretRefs.Values() {
+				secretName := ref
+				if before, _, ok := strings.Cut(ref, ","); ok {
+					secretName = before
+				}
+				if valid[secretName] {
+					continue
+				}
+				// Determine whether a spec name is a prefix (key absent) or not (spec absent).
+				for specName := range specNames {
+					if strings.HasPrefix(secretName, specName+"-") {
+						key := secretName[len(specName)+1:]
+						return fmt.Errorf("container %q: Secret=%s: key %q not found in secret %q", container.Ref(), ref, key, specName)
+					}
+				}
+				return fmt.Errorf("container %q: Secret=%s: no SecretSpec found for this reference", container.Ref(), ref)
+			}
+		}
+		return nil
+	}
 }

@@ -26,6 +26,7 @@ const (
 	KeyContainerImage        model.SectionKey = "Image"
 	KeyContainerNetwork      model.SectionKey = "Network"
 	KeyContainerVolume       model.SectionKey = "Volume"
+	KeyContainerSecret       model.SectionKey = "Secret"
 	KeyVolumeName            model.SectionKey = "VolumeName"
 	KeyNetworkName           model.SectionKey = "NetworkName"
 	KeyBuildFile             model.SectionKey = "File"

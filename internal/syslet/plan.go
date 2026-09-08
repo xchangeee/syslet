@@ -15,7 +15,9 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/loader"
 	"codeberg.org/xchangeee/syslet/internal/model"
+	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/render"
+	"codeberg.org/xchangeee/syslet/internal/sops"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/util"
 	"codeberg.org/xchangeee/syslet/internal/validate"
@@ -44,6 +46,7 @@ type ApplyPlan struct {
 	DeleteFsContainerConfigFiles []DeleteFsContainerConfigFileOp
 	DeleteFsContainerConfigDirs  []DeleteFsContainerConfigDirsOp
 	DeleteFsContainerConfigs     []DeleteFsContainerConfigOp
+	DeletePodmanSecrets          []DeletePodmanSecretOp
 	DeletePodmanVolumes          []DeletePodmanVolumeOp
 	DeletePodmanNetworks         []DeletePodmanNetworkOp
 	DeletePodmanImages           []DeletePodmanImageOp
@@ -51,6 +54,7 @@ type ApplyPlan struct {
 	WriteFsBuildContextFiles     []WriteFsBuildContextFileOp
 	WriteFsContainerConfigFiles  []WriteFsContainerConfigFileOp
 	WriteFsContainerConfigDirs   []WriteFsContainerConfigDirOp
+	UpsertPodmanSecrets          []UpsertPodmanSecretOp
 	ReloadSystemdServices        []ReloadSystemdServiceOp
 	StartSystemdServices         []StartSystemdServiceOp
 
@@ -89,6 +93,13 @@ type DeleteFsContainerConfigDirsOp struct {
 type DeleteFsContainerConfigFileOp struct {
 	container        model.ContainerUnitRef
 	internalFilename string
+}
+
+// DeletePodmanSecretOp removes a podman secret that is no longer in the desired spec.
+// Name is the full podman secret name (<specname>-<key>).
+type DeletePodmanSecretOp struct {
+	SpecName string
+	Name     string
 }
 
 type DeletePodmanVolumeOp struct {
@@ -140,6 +151,18 @@ type WriteFsContainerConfigDirOp struct {
 	files     []model.ContainerConfigFile
 	oldFiles  map[string]string
 	oldModes  map[string]os.FileMode
+}
+
+// UpsertPodmanSecretOp creates or replaces a single podman secret entry.
+// Name is the full podman secret name (<specname>-<key>); SpecName is used for
+// grouping in the diff display. Value is the decrypted plaintext, populated during
+// the plan phase and must never be logged or serialized. Labels are passed through
+// to podman secret create verbatim (e.g. {"syslet/hash": "<sha>"}).
+type UpsertPodmanSecretOp struct {
+	SpecName string
+	Name     string
+	Value    model.Plaintext
+	Labels   map[string]string
 }
 
 // ReloadSystemdServiceOp triggers systemctl reload on a running container's service.
@@ -223,6 +246,14 @@ func (p *ApplyPlan) DeletePodmanImage(tag model.ImageTag) {
 	p.DeletePodmanImages = append(p.DeletePodmanImages, DeletePodmanImageOp{tag: tag})
 }
 
+func (p *ApplyPlan) UpsertPodmanSecret(specName, name string, value model.Plaintext, labels map[string]string) {
+	p.UpsertPodmanSecrets = append(p.UpsertPodmanSecrets, UpsertPodmanSecretOp{SpecName: specName, Name: name, Value: value, Labels: labels})
+}
+
+func (p *ApplyPlan) DeletePodmanSecret(specName, name string) {
+	p.DeletePodmanSecrets = append(p.DeletePodmanSecrets, DeletePodmanSecretOp{SpecName: specName, Name: name})
+}
+
 func (p *ApplyPlan) RecordResult(fn model.FullUnitName, status OperationStatus, message string) {
 	p.Results = append(p.Results, ApplyResult{fullUnitName: fn, status: status, message: message})
 }
@@ -261,8 +292,9 @@ func (p *ApplyPlan) RecordError(name model.FullUnitName, message string) {
 
 // BuildPlan reads specs, validates them, builds an execution plan by diffing against
 // the installed state, and runs pre-flight staging validation on any unit files
-// that would be written.
-func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, jr systemd.JournalReader, gen systemd.QuadletGeneratorRunner, az systemd.SystemdAnalyzeRunner, path string) (*ApplyPlan, error) {
+// that would be written. pc and decryptor are required for secret support: pass
+// nil for both when the caller does not manage secrets.
+func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, jr systemd.JournalReader, gen systemd.QuadletGeneratorRunner, az systemd.SystemdAnalyzeRunner, pc podman.Interface, decryptor *sops.Decryptor, path string) (*ApplyPlan, error) {
 	raw, err := api.LoadSpecsFS(fs, path)
 	if err != nil {
 		return nil, err
@@ -271,10 +303,14 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 	if err != nil {
 		return nil, err
 	}
+	secrets, err := loader.ParseSecrets(raw)
+	if err != nil {
+		return nil, err
+	}
 
 	plan := &ApplyPlan{}
 
-	if err := validate.PreRender(units); err != nil {
+	if err := validate.PreRender(units, secrets); err != nil {
 		plan.RecordGenericError(fmt.Sprintf("pre-render validation: %v", err))
 		return plan, nil
 	}
@@ -301,8 +337,14 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 	for _, r := range result.Builds {
 		buildPlanUnitBuild(sd, mgrs.Build, plan, r, changedBuilds)
 	}
+	// Secrets must be diffed before containers so that containers referencing
+	// a changed secret can be scheduled for restart in the same pass.
+	changedSecrets := buildPlanSecrets(ctx, pc, decryptor, plan, secrets)
+	if plan.HasErrors() {
+		return plan, nil
+	}
 	for _, r := range result.Containers {
-		buildPlanUnitContainer(ctx, sd, mgrs.Config, plan, r, changedNetworks, changedBuilds, changedVolumes)
+		buildPlanUnitContainer(ctx, sd, mgrs.Config, plan, r, changedNetworks, changedBuilds, changedVolumes, changedSecrets)
 	}
 
 	stale, err := loadStaleUnits(sd, result.UnitNames)

@@ -9,6 +9,11 @@ import (
 	gounit "github.com/coreos/go-systemd/v22/unit"
 )
 
+// secretKey extracts the key portion from a full podman secret name "<specname>-<key>".
+func secretKey(specName, fullName string) string {
+	return strings.TrimPrefix(fullName, specName+"-")
+}
+
 // DisplayPlan prints a human-readable diff showing what would change.
 // It shows operations that would be performed and the final status of each unit.
 // If the plan has any errors (validation or per-unit), only those errors are
@@ -135,6 +140,38 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan) {
 		_, _ = fmt.Fprintln(w, "\nUnit files to delete:")
 		for _, op := range plan.DeleteFsQuadletUnitFiles {
 			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullUnitName)
+		}
+	}
+
+	if len(plan.UpsertPodmanSecrets) > 0 || len(plan.DeletePodmanSecrets) > 0 {
+		hasChanges = true
+		// Collect ordered spec names while preserving first-seen order.
+		seen := make(map[string]bool)
+		var specOrder []string
+		for _, op := range plan.DeletePodmanSecrets {
+			if !seen[op.SpecName] {
+				seen[op.SpecName] = true
+				specOrder = append(specOrder, op.SpecName)
+			}
+		}
+		for _, op := range plan.UpsertPodmanSecrets {
+			if !seen[op.SpecName] {
+				seen[op.SpecName] = true
+				specOrder = append(specOrder, op.SpecName)
+			}
+		}
+		for _, specName := range specOrder {
+			_, _ = fmt.Fprintf(w, "\nSecret changes (%s):\n", specName)
+			for _, op := range plan.DeletePodmanSecrets {
+				if op.SpecName == specName {
+					_, _ = fmt.Fprintf(w, "- %s=(secret)\n", secretKey(specName, op.Name))
+				}
+			}
+			for _, op := range plan.UpsertPodmanSecrets {
+				if op.SpecName == specName {
+					_, _ = fmt.Fprintf(w, "+ %s=%s\n", secretKey(specName, op.Name), op.Value)
+				}
+			}
 		}
 	}
 

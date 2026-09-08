@@ -10,7 +10,30 @@ import (
 
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/model"
+	"codeberg.org/xchangeee/syslet/internal/sops"
+	"codeberg.org/xchangeee/syslet/internal/util"
 )
+
+// ParseSecrets converts raw secret specs into domain PodmanSecret values.
+// It reads key names from the SOPS YAML metadata without decrypting, and
+// computes the content hash used for change detection during the plan phase.
+func ParseSecrets(raw api.LoadResult) ([]model.PodmanSecret, error) {
+	secrets := make([]model.PodmanSecret, 0, len(raw.Secrets))
+	for _, r := range raw.Secrets {
+		ct := model.Ciphertext(r.Ciphertext)
+		keys, err := sops.ExtractKeys(ct)
+		if err != nil {
+			return nil, fmt.Errorf("secret %q: extracting keys: %w", r.Name, err)
+		}
+		secrets = append(secrets, model.PodmanSecret{
+			Name:        r.Name,
+			Ciphertext:  ct,
+			Keys:        keys,
+			ContentHash: util.SHA256Hex([]byte(r.Ciphertext)),
+		})
+	}
+	return secrets, nil
+}
 
 // convert transforms a LoadResult of raw specs into a flat slice of domain Spec values.
 func Parse(raw api.LoadResult) ([]model.Unit, error) {
