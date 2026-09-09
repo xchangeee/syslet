@@ -31,10 +31,11 @@ func TestDisplayPlan_SecretChanges(t *testing.T) {
 				{SpecName: "myapp", Name: "myapp-old-token"},
 			},
 			wantOutput: `
-Secret changes (myapp):
-- old-token=(secret)
-+ db-password=s3cr3t
-+ api-key=newkey
+Secret changes:
+  myapp:
+    - old-token=(secret)
+    + db-password=s3cr3t
+    + api-key=newkey
 
 Summary:
 UNIT                                     STATUS     CHANGES
@@ -46,8 +47,9 @@ UNIT                                     STATUS     CHANGES
 				{SpecName: "infra", Name: "infra-cert", Value: model.Plaintext("pem-data"), Labels: map[string]string{"syslet/hash": "aaa"}},
 			},
 			wantOutput: `
-Secret changes (infra):
-+ cert=pem-data
+Secret changes:
+  infra:
+    + cert=pem-data
 
 Summary:
 UNIT                                     STATUS     CHANGES
@@ -59,8 +61,9 @@ UNIT                                     STATUS     CHANGES
 				{SpecName: "infra", Name: "infra-old-cert"},
 			},
 			wantOutput: `
-Secret changes (infra):
-- old-cert=(secret)
+Secret changes:
+  infra:
+    - old-cert=(secret)
 
 Summary:
 UNIT                                     STATUS     CHANGES
@@ -73,11 +76,11 @@ UNIT                                     STATUS     CHANGES
 				{SpecName: "app2", Name: "app2-key", Value: model.Plaintext("key2"), Labels: map[string]string{"syslet/hash": "h2"}},
 			},
 			wantOutput: `
-Secret changes (app1):
-+ token=tok1
-
-Secret changes (app2):
-+ key=key2
+Secret changes:
+  app1:
+    + token=tok1
+  app2:
+    + key=key2
 
 Summary:
 UNIT                                     STATUS     CHANGES
@@ -301,9 +304,6 @@ func TestDisplayDiff(t *testing.T) {
 				model.NewContainerFileMount("/etc/nginx/nginx.conf", "server {\n  listen 80;\n  server_name old.example.com;\n}\n", 0)),
 			preWriteConfig: map[string]string{"/etc/nginx/nginx.conf": "server {\n  listen 80;\n  server_name old.example.com;\n}\n"},
 			wantOutput: `
-Services to stop:
-  - webapp.container
-
 Config file changes:
 --- webapp:/etc/nginx/nginx.conf (current)
 +++ webapp:/etc/nginx/nginx.conf (new)
@@ -314,6 +314,9 @@ Config file changes:
 -  server_name old.example.com;
 +  server_name new.example.com;
  }
+
+Services to stop:
+  - webapp.container
 
 Containers to start:
   - webapp.container
@@ -328,15 +331,16 @@ webapp.container                         updated    config updated, restarted (d
 			spec:    makeContainerSpec("webapp", "nginx:alpine", model.DesiredStateRunning),
 			oldSpec: makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning),
 			wantOutput: `
-Services to stop:
-  - webapp.container
-
 Unit file changes:
 
---- webapp.container (current)
-+++ webapp.container (new)
-- [Container] Image=nginx:latest
-+ [Container] Image=nginx:alpine
+--- webapp.container
+changed:
+  [Container] Image
+    old: nginx:latest
+    new: nginx:alpine
+
+Services to stop:
+  - webapp.container
 
 Systemd daemon-reload: required
 
@@ -354,8 +358,11 @@ webapp.container                         updated    unit updated, restarted (des
 				model.NewContainerFileMount("/etc/app/config.yaml", "new config content", 0)),
 			oldSpec: makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning),
 			wantOutput: `
-Services to stop:
-  - webapp.container
+Unit file changes:
+
+--- webapp.container
+added:
+  [Container] Volume=/etc/containers/config/webapp/config.yaml-4f166d9b:/etc/app/config.yaml:ro,Z
 
 Config file changes:
 --- webapp:/etc/app/config.yaml (current)
@@ -364,11 +371,8 @@ Config file changes:
 +new config content
 \ No newline at end of file
 
-Unit file changes:
-
---- webapp.container (current)
-+++ webapp.container (new)
-+ [Container] Volume=/etc/containers/config/webapp/config.yaml-4f166d9b:/etc/app/config.yaml:ro,Z
+Services to stop:
+  - webapp.container
 
 Systemd daemon-reload: required
 
@@ -388,8 +392,13 @@ webapp.container                         updated    unit updated, config updated
 				model.NewContainerFileMount("/etc/app/app.conf", "old config", 0)),
 			preWriteConfig: map[string]string{"/etc/app/app.conf": "old config"},
 			wantOutput: `
-Services to stop:
-  - webapp.container
+Unit file changes:
+
+--- webapp.container
+changed:
+  [Container] Image
+    old: nginx:latest
+    new: nginx:alpine
 
 Config file changes:
 --- webapp:/etc/app/app.conf (current)
@@ -400,12 +409,8 @@ Config file changes:
 +updated config
 \ No newline at end of file
 
-Unit file changes:
-
---- webapp.container (current)
-+++ webapp.container (new)
-- [Container] Image=nginx:latest
-+ [Container] Image=nginx:alpine
+Services to stop:
+  - webapp.container
 
 Systemd daemon-reload: required
 

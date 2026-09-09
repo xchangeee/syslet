@@ -1,10 +1,13 @@
 package syslet
 
 import (
+	"cmp"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
+	"codeberg.org/xchangeee/syslet/internal/model"
 	"github.com/aymanbagabas/go-udiff"
 	gounit "github.com/coreos/go-systemd/v22/unit"
 )
@@ -32,17 +35,26 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan) {
 		return
 	}
 
-	// Print operations that would be performed
 	hasChanges := false
 
-	if len(plan.StopSystemdServices) > 0 {
+	// 1. Unit file changes
+	if len(plan.WriteFsQuadletUnitFiles) > 0 {
 		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nServices to stop:")
-		for _, op := range plan.StopSystemdServices {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.ref.FullName())
+		_, _ = fmt.Fprintln(w, "\nUnit file changes:")
+		for _, op := range plan.WriteFsQuadletUnitFiles {
+			displayContentDiff(w, string(op.fullUnitName), op.oldContent, op.content)
 		}
 	}
 
+	if len(plan.DeleteFsQuadletUnitFiles) > 0 {
+		hasChanges = true
+		_, _ = fmt.Fprintln(w, "\nUnit files to delete:")
+		for _, op := range plan.DeleteFsQuadletUnitFiles {
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullUnitName)
+		}
+	}
+
+	// 2. Config file changes
 	if len(plan.WriteFsContainerConfigFiles) > 0 {
 		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nConfig file changes:")
@@ -70,12 +82,12 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan) {
 		}
 	}
 
+	// 3. ConfigDir changes
 	if len(plan.WriteFsContainerConfigDirs) > 0 {
 		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nConfigDir changes:")
 		for _, op := range plan.WriteFsContainerConfigDirs {
 			_, _ = fmt.Fprintf(w, "  %s:%s → version %d\n", op.container, op.mountPath, op.version)
-			// Collect all filenames: new files and any old files that are being removed.
 			seen := make(map[string]bool, len(op.files))
 			for _, f := range op.files {
 				seen[f.Name] = true
@@ -100,6 +112,7 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan) {
 		}
 	}
 
+	// Build context changes (grouped with file changes)
 	if len(plan.WriteFsBuildContextFiles) > 0 {
 		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nBuild context file changes:")
@@ -127,25 +140,9 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan) {
 		}
 	}
 
-	if len(plan.WriteFsQuadletUnitFiles) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nUnit file changes:")
-		for _, op := range plan.WriteFsQuadletUnitFiles {
-			displayContentDiff(w, string(op.fullUnitName), op.oldContent, op.content)
-		}
-	}
-
-	if len(plan.DeleteFsQuadletUnitFiles) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nUnit files to delete:")
-		for _, op := range plan.DeleteFsQuadletUnitFiles {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullUnitName)
-		}
-	}
-
+	// 4. Secret changes
 	if len(plan.UpsertPodmanSecrets) > 0 || len(plan.DeletePodmanSecrets) > 0 {
 		hasChanges = true
-		// Collect ordered spec names while preserving first-seen order.
 		seen := make(map[string]bool)
 		var specOrder []string
 		for _, op := range plan.DeletePodmanSecrets {
@@ -160,18 +157,45 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan) {
 				specOrder = append(specOrder, op.SpecName)
 			}
 		}
+		_, _ = fmt.Fprintln(w, "\nSecret changes:")
 		for _, specName := range specOrder {
-			_, _ = fmt.Fprintf(w, "\nSecret changes (%s):\n", specName)
+			label := specName
+			if label == "" {
+				label = "(orphaned)"
+			}
+			_, _ = fmt.Fprintf(w, "  %s:\n", label)
 			for _, op := range plan.DeletePodmanSecrets {
 				if op.SpecName == specName {
-					_, _ = fmt.Fprintf(w, "- %s=(secret)\n", secretKey(specName, op.Name))
+					_, _ = fmt.Fprintf(w, "    - %s=(secret)\n", secretKey(specName, op.Name))
 				}
 			}
 			for _, op := range plan.UpsertPodmanSecrets {
 				if op.SpecName == specName {
-					_, _ = fmt.Fprintf(w, "+ %s=%s\n", secretKey(specName, op.Name), op.Value)
+					_, _ = fmt.Fprintf(w, "    + %s=%s\n", secretKey(specName, op.Name), op.Value)
 				}
 			}
+		}
+	}
+
+	// 5. Systemd actions
+	if len(plan.StopSystemdServices) > 0 {
+		hasChanges = true
+		_, _ = fmt.Fprintln(w, "\nServices to stop:")
+		for _, op := range plan.StopSystemdServices {
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.ref.FullName())
+		}
+	}
+
+	if plan.NeedsReload() {
+		hasChanges = true
+		_, _ = fmt.Fprintln(w, "\nSystemd daemon-reload: required")
+	}
+
+	if len(plan.StartSystemdServices) > 0 {
+		hasChanges = true
+		_, _ = fmt.Fprintln(w, "\nContainers to start:")
+		for _, op := range plan.StartSystemdServices {
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.ref.FullName())
 		}
 	}
 
@@ -199,20 +223,7 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan) {
 		}
 	}
 
-	if plan.NeedsReload() {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nSystemd daemon-reload: required")
-	}
-
-	if len(plan.StartSystemdServices) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nContainers to start:")
-		for _, op := range plan.StartSystemdServices {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.ref.FullName())
-		}
-	}
-
-	// Print summary of all units
+	// Summary
 	_, _ = fmt.Fprintln(w, "\nSummary:")
 	_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", "UNIT", "STATUS", "CHANGES")
 	for _, result := range plan.Results {
@@ -234,84 +245,123 @@ func DisplayResults(w io.Writer, plan *ApplyPlan) {
 	}
 }
 
-// displayContentDiff prints a semantic diff between old and new content.
-// For systemd unit files, parses the content into structured options and compares
-// them semantically, showing additions/removals with section context.
-// For config files, uses text-based unified diff.
+// displayContentDiff prints a structured diff between old and new unit file content.
+// For systemd unit files it groups changes into added/changed/removed blocks.
+// For config files it falls back to unified text diff.
 func displayContentDiff(w io.Writer, name, oldContent, newContent string) {
-	// Only use semantic diff for systemd unit files (not config files)
-	isUnitFile := strings.HasSuffix(name, ".container") ||
-		strings.HasSuffix(name, ".volume") ||
-		strings.HasSuffix(name, ".network")
-
-	if !isUnitFile {
-		// Config files: use text diff
+	_, err := model.ParseFullUnitName(model.FullUnitName(name))
+	if err != nil {
 		displayTextDiff(w, name, oldContent, newContent)
 		return
 	}
 
-	// Parse both contents into structured options
 	oldOpts, err := gounit.Deserialize(strings.NewReader(oldContent))
 	if err != nil {
-		// Fallback to text diff if parsing fails
 		displayTextDiff(w, name, oldContent, newContent)
 		return
 	}
 
 	newOpts, err := gounit.Deserialize(strings.NewReader(newContent))
 	if err != nil {
-		// Fallback to text diff if parsing fails
 		displayTextDiff(w, name, oldContent, newContent)
 		return
 	}
 
-	// Create maps for comparison: "section:name:value" -> count
-	oldMap := make(map[string]int)
-	newMap := make(map[string]int)
-
-	for _, opt := range oldOpts {
-		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
-		oldMap[key]++
+	oldCount := make(map[string]int)
+	newCount := make(map[string]int)
+	optKey := func(opt *gounit.UnitOption) string {
+		return fmt.Sprintf("%s\x00%s\x00%s", opt.Section, opt.Name, opt.Value)
 	}
-
+	for _, opt := range oldOpts {
+		oldCount[optKey(opt)]++
+	}
 	for _, opt := range newOpts {
-		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
-		newMap[key]++
+		newCount[optKey(opt)]++
 	}
 
-	// Find differences
-	var additions, removals []*gounit.UnitOption
-
-	// Find removals (in old but not in new, or fewer occurrences)
+	var removals, additions []*gounit.UnitOption
 	for _, opt := range oldOpts {
-		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
-		if oldMap[key] > newMap[key] {
+		k := optKey(opt)
+		if oldCount[k] > newCount[k] {
 			removals = append(removals, opt)
-			oldMap[key]-- // Track that we've processed one occurrence
+			oldCount[k]--
 		}
 	}
-
-	// Find additions (in new but not in old, or more occurrences)
 	for _, opt := range newOpts {
-		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
-		if newMap[key] > oldMap[key] {
+		k := optKey(opt)
+		if newCount[k] > oldCount[k] {
 			additions = append(additions, opt)
-			newMap[key]-- // Track that we've processed one occurrence
+			newCount[k]--
 		}
 	}
 
 	if len(removals) == 0 && len(additions) == 0 {
-		return // No semantic changes
+		return
 	}
 
-	_, _ = fmt.Fprintf(w, "\n--- %s (current)\n", name)
-	_, _ = fmt.Fprintf(w, "+++ %s (new)\n", name)
-
+	// Identify "changed" entries: same [section] key appears exactly once in
+	// both removals and additions, meaning only the value was updated.
+	type skKey struct{ section, name string }
+	removedBySK := make(map[skKey][]*gounit.UnitOption)
+	addedBySK := make(map[skKey][]*gounit.UnitOption)
 	for _, opt := range removals {
-		_, _ = fmt.Fprintf(w, "- [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
+		sk := skKey{opt.Section, opt.Name}
+		removedBySK[sk] = append(removedBySK[sk], opt)
 	}
 	for _, opt := range additions {
-		_, _ = fmt.Fprintf(w, "+ [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
+		sk := skKey{opt.Section, opt.Name}
+		addedBySK[sk] = append(addedBySK[sk], opt)
+	}
+
+	type changedEntry struct{ section, name, oldVal, newVal string }
+	var changed []changedEntry
+	changedKeys := make(map[skKey]bool)
+	for sk, rems := range removedBySK {
+		if adds := addedBySK[sk]; len(rems) == 1 && len(adds) == 1 {
+			changed = append(changed, changedEntry{sk.section, sk.name, rems[0].Value, adds[0].Value})
+			changedKeys[sk] = true
+		}
+	}
+	slices.SortFunc(changed, func(a, b changedEntry) int {
+		if n := cmp.Compare(a.section, b.section); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.name, b.name)
+	})
+
+	var pureAdded, pureRemoved []*gounit.UnitOption
+	for _, opt := range additions {
+		if !changedKeys[skKey{opt.Section, opt.Name}] {
+			pureAdded = append(pureAdded, opt)
+		}
+	}
+	for _, opt := range removals {
+		if !changedKeys[skKey{opt.Section, opt.Name}] {
+			pureRemoved = append(pureRemoved, opt)
+		}
+	}
+
+	_, _ = fmt.Fprintf(w, "\n--- %s\n", name)
+
+	if len(pureAdded) > 0 {
+		_, _ = fmt.Fprintln(w, "added:")
+		for _, opt := range pureAdded {
+			_, _ = fmt.Fprintf(w, "  [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
+		}
+	}
+	if len(changed) > 0 {
+		_, _ = fmt.Fprintln(w, "changed:")
+		for _, e := range changed {
+			_, _ = fmt.Fprintf(w, "  [%s] %s\n", e.section, e.name)
+			_, _ = fmt.Fprintf(w, "    old: %s\n", e.oldVal)
+			_, _ = fmt.Fprintf(w, "    new: %s\n", e.newVal)
+		}
+	}
+	if len(pureRemoved) > 0 {
+		_, _ = fmt.Fprintln(w, "removed:")
+		for _, opt := range pureRemoved {
+			_, _ = fmt.Fprintf(w, "  [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
+		}
 	}
 }
 
