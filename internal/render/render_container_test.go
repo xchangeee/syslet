@@ -164,6 +164,44 @@ func TestContainerSpec_Render_RestartForcedForRunning(t *testing.T) {
 	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestart, "always")
 }
 
+// TestRenderContainer_RenderedContent_IsCanonicallyOrdered verifies that two logically
+// identical units produce byte-for-byte identical Content regardless of which sections
+// the user defined versus which ones syslet injected as overrides. Without a canonical
+// sort before serialization, user-defined sections appear in alphabetical order (via
+// flattenUnitOptions) while syslet-injected sections get prepended, causing different
+// section orderings and spurious "unit updated" events on every deploy.
+func TestRenderContainer_RenderedContent_IsCanonicallyOrdered(t *testing.T) {
+	resolve := testContainerResolve("/etc/containers/config")
+
+	// All sections explicitly provided by the user — flattenUnitOptions sorts them alphabetically.
+	optsWithAll := model.UnitOptions{
+		SectionContainer: {model.SectionKey("Image"): model.UV("nginx:latest")},
+		SectionInstall:   {model.SectionKey("WantedBy"): model.UV(InstallMultiUserTarget)},
+		SectionService:   {model.SectionKey("Restart"): model.UV(ServiceRestartAlways)},
+		SectionXSyslet:   {model.SectionKey("RemovalAllowed"): model.UV("false")},
+	}
+	// Only Container defined — syslet injects Install, Service, X-Syslet as prepended overrides.
+	optsContainerOnly := model.UnitOptions{
+		SectionContainer: {model.SectionKey("Image"): model.UV("nginx:latest")},
+	}
+
+	spec1 := model.NewContainerUnit(model.ContainerUnitRef("webapp"), optsWithAll, model.DesiredStateRunning, nil, false)
+	spec2 := model.NewContainerUnit(model.ContainerUnitRef("webapp"), optsContainerOnly, model.DesiredStateRunning, nil, false)
+
+	ru1, err := RenderContainer(spec1, resolve)
+	if err != nil {
+		t.Fatalf("RenderContainer spec1: %v", err)
+	}
+	ru2, err := RenderContainer(spec2, resolve)
+	if err != nil {
+		t.Fatalf("RenderContainer spec2: %v", err)
+	}
+
+	if ru1.Content != ru2.Content {
+		t.Errorf("same logical unit produced different Content based on option origin:\nwith-all-sections:\n%s\ncontainer-only:\n%s", ru1.Content, ru2.Content)
+	}
+}
+
 func TestContainerSpec_PrunableMixin(t *testing.T) {
 	resolve := testContainerResolve("/etc/containers/config")
 	testPrunableMixin(t,

@@ -31,8 +31,8 @@ func TestRenderUnit_Content(t *testing.T) {
 	}
 
 	expected := `[Container]
-Image=nginx:latest
 ContainerName=webapp
+Image=nginx:latest
 
 [Install]
 WantedBy=multi-user.target
@@ -54,8 +54,8 @@ func TestRenderUnit_MultipleValues(t *testing.T) {
 	}
 
 	expected := `[Container]
-Volume=/host:/container
 Volume=/another:/path
+Volume=/host:/container
 `
 
 	if ru.Content != expected {

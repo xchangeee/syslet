@@ -103,6 +103,12 @@ func (r *UnitRenderer) RenderedUnit() (RenderedUnit, error) {
 	for _, o := range r.overrides {
 		flat = forceUnitOption(flat, model.SectionName(o.Section), model.SectionKey(o.Name), o.Value)
 	}
+	// Sort to canonical order so the serialized Content is identical regardless of whether
+	// options came from user-defined sections or syslet overrides. Without this,
+	// flattenUnitOptions sorts user sections alphabetically while override/default options
+	// are prepended when absent, producing different section orderings for logically
+	// identical units and causing spurious "unit updated" events.
+	slices.SortFunc(flat, compareUnitOptions)
 	goOpts := make([]*gounit.UnitOption, len(flat))
 	for i := range flat {
 		goOpts[i] = &flat[i]
@@ -160,6 +166,18 @@ func forceUnitOption(opts []gounit.UnitOption, section model.SectionName, key mo
 	return append([]gounit.UnitOption{NewUnitOption(section, key, value)}, opts...)
 }
 
+// compareUnitOptions defines the canonical (section, key, value) ordering used when
+// serializing unit files and when stripping metadata for content comparison.
+func compareUnitOptions(a, b gounit.UnitOption) int {
+	if n := cmp.Compare(a.Section, b.Section); n != 0 {
+		return n
+	}
+	if n := cmp.Compare(a.Name, b.Name); n != 0 {
+		return n
+	}
+	return cmp.Compare(a.Value, b.Value)
+}
+
 // StripMetadataSections removes X-Syslet section and Unit.Description before comparing content.
 func StripMetadataSections(content string) (string, error) {
 	opts, err := gounit.Deserialize(bytes.NewReader([]byte(content)))
@@ -179,13 +197,7 @@ func StripMetadataSections(content string) (string, error) {
 	}
 
 	slices.SortFunc(filtered, func(a, b *gounit.UnitOption) int {
-		if n := cmp.Compare(a.Section, b.Section); n != 0 {
-			return n
-		}
-		if n := cmp.Compare(a.Name, b.Name); n != 0 {
-			return n
-		}
-		return cmp.Compare(a.Value, b.Value)
+		return compareUnitOptions(*a, *b)
 	})
 
 	data, err := io.ReadAll(gounit.Serialize(filtered))
