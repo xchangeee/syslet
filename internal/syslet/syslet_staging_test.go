@@ -19,7 +19,7 @@ func TestStaging_AllUnitTypes_StagedWhenVolumeChanges(t *testing.T) {
 	buildSpec := makeBuildSpec("myapp", "localhost/myapp:latest")
 
 	fs := afero.NewMemMapFs()
-	ctx, sd, _, _, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{containerSpec, newVolumeSpec, netSpec, buildSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, containerSpec),
@@ -32,7 +32,7 @@ func TestStaging_AllUnitTypes_StagedWhenVolumeChanges(t *testing.T) {
 
 	gen := &recordingQuadletGenerator{fs: fs}
 	mgrs := newTestFileManagers(fs)
-	if _, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath); err != nil {
+	if _, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw); err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
 

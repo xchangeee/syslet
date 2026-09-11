@@ -290,15 +290,13 @@ func (p *ApplyPlan) RecordError(name model.FullUnitName, message string) {
 	p.Results = append(p.Results, ApplyResult{fullUnitName: name, status: StatusError, message: message, errored: true})
 }
 
-// BuildPlan reads specs, validates them, builds an execution plan by diffing against
-// the installed state, and runs pre-flight staging validation on any unit files
-// that would be written. pc and decryptor are required for secret support: pass
-// nil for both when the caller does not manage secrets.
-func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, jr systemd.JournalReader, gen systemd.QuadletGeneratorRunner, az systemd.SystemdAnalyzeRunner, pc podman.Interface, decryptor *sops.Decryptor, path string) (*ApplyPlan, error) {
-	raw, err := api.LoadSpecsFS(fs, path)
-	if err != nil {
-		return nil, err
-	}
+// BuildPlan validates already-loaded specs, builds an execution plan by diffing
+// against the installed state, and runs pre-flight staging validation on any unit
+// files that would be written. Callers load raw themselves (from a path via
+// api.LoadSpecsFS or a stream via api.LoadSpecsReader), keeping BuildPlan free of
+// any I/O concerning the spec source. pc and decryptor are required for secret
+// support: pass nil for both when the caller does not manage secrets.
+func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, jr systemd.JournalReader, gen systemd.QuadletGeneratorRunner, az systemd.SystemdAnalyzeRunner, pc podman.Interface, decryptor *sops.Decryptor, raw api.LoadResult) (*ApplyPlan, error) {
 	units, err := loader.Parse(raw)
 	if err != nil {
 		return nil, err

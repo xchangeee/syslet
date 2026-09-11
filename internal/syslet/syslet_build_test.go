@@ -33,7 +33,7 @@ func TestApply_Build_Stale_RemovesUnit(t *testing.T) {
 	staleBuildSpec := makeStaleBuildSpec("oldapp", "oldapp:latest")
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{webappSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, webappSpec),
@@ -42,7 +42,7 @@ func TestApply_Build_Stale_RemovesUnit(t *testing.T) {
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitAbsent(t, sd, "oldapp.build")
 	testutil.AssertNoStartStop(t, mockConn)
@@ -61,7 +61,7 @@ func TestApply_Build_StaleWithDeletePolicy_DeletesPodmanImage(t *testing.T) {
 	staleBuildSpec = makeStaleBuildSpecWithDelete(staleBuildSpec.Ref().Name(), "oldapp:latest")
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{webappSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, webappSpec),
@@ -70,7 +70,7 @@ func TestApply_Build_StaleWithDeletePolicy_DeletesPodmanImage(t *testing.T) {
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitAbsent(t, sd, "oldapp.build")
 
@@ -91,7 +91,7 @@ func TestApply_Build_MeaningfulChange_RecreatesAndRestartsContainers(t *testing.
 	// Pre-write the same Containerfile so context files are unchanged.
 	preWriteBuildContext(t, fs, "myapp", "Containerfile", "FROM scratch", 0644)
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{newMyappSpec, webappSpec},
 		existingUnits: map[string]string{
 			"myapp.build":      renderBuild(t, fs, oldMyappSpec),
@@ -102,7 +102,7 @@ func TestApply_Build_MeaningfulChange_RecreatesAndRestartsContainers(t *testing.
 		},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertStopped(t, mockConn, "webapp.service", "myapp-build.service")
 	testutil.AssertStarted(t, mockConn, "webapp.service")
@@ -126,7 +126,7 @@ func TestApply_Build_ContextFileChange_RecreatesAndRestartsContainers(t *testing
 	// Pre-write an old Containerfile so the context file shows as changed.
 	preWriteBuildContext(t, fs, "myapp", "Containerfile", "FROM ubuntu", 0644)
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{myappSpec, webappSpec},
 		existingUnits: map[string]string{
 			"myapp.build":      renderBuild(t, fs, myappSpec),
@@ -137,7 +137,7 @@ func TestApply_Build_ContextFileChange_RecreatesAndRestartsContainers(t *testing
 		},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertStopped(t, mockConn, "webapp.service", "myapp-build.service")
 	testutil.AssertStarted(t, mockConn, "webapp.service")
@@ -162,7 +162,7 @@ func TestApply_Build_MetadataOnlyChange_NoRecreation(t *testing.T) {
 	// Pre-write the same Containerfile so context files are unchanged.
 	preWriteBuildContext(t, fs, "myapp", "Containerfile", "FROM scratch", 0644)
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{newMyappSpec, webappSpec},
 		existingUnits: map[string]string{
 			"myapp.build":      renderBuild(t, fs, oldMyappSpec),
@@ -173,7 +173,7 @@ func TestApply_Build_MetadataOnlyChange_NoRecreation(t *testing.T) {
 		},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 
@@ -197,7 +197,7 @@ func TestApply_Build_StaleWithDeletePolicy_OnlyDeletesSpecificImageTag(t *testin
 
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{webappSpec, activeBuildSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, webappSpec),
@@ -207,7 +207,7 @@ func TestApply_Build_StaleWithDeletePolicy_OnlyDeletesSpecificImageTag(t *testin
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitAbsent(t, sd, "oldapp.build")
 	testutil.AssertUnitExists(t, sd, "myapp.build")

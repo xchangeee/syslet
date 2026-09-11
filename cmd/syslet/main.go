@@ -1,13 +1,17 @@
-// syslet reads a zip file or directory containing JSON spec files, validates them,
-// generates Podman quadlet unit files and container config files, prunes
-// outdated files, and restarts systemd units as needed.
+// syslet reads JSON spec files, validates them, generates Podman quadlet unit
+// files and container config files, prunes outdated files, and restarts systemd
+// units as needed.
 //
 // Usage:
 //
-//	syslet [--diff] [config.zip|config-dir/]
+//	syslet [--diff] [config.json|config-dir/]
+//	cat dir/*.json | syslet [--diff] --stdin
 //
-// If no path is given, defaults to /etc/syslet/config.zip.
-// The path can be either a zip file or a directory containing .json spec files.
+// If no path or --stdin is given, defaults to /etc/syslet/config.json.
+// A path may be a directory of .json spec files or a single file containing a
+// JSON stream of specs. With --stdin the spec stream is read from standard input
+// and, on apply, persisted to /etc/syslet/config.json as the host's on-disk
+// record so it can be re-applied manually.
 //
 // Optional daemon config is read from /etc/syslet/syslet.json:
 //
@@ -28,6 +32,7 @@ import (
 	"syscall"
 
 	sysletage "codeberg.org/xchangeee/syslet/internal/age"
+	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/sops"
@@ -36,7 +41,7 @@ import (
 	"github.com/spf13/afero"
 )
 
-const defaultConfigPath = "/etc/syslet/config.zip"
+const defaultConfigPath = "/etc/syslet/config.json"
 const daemonConfigPath = "/etc/syslet/syslet.json"
 
 // ageKeyFilePath is the append-only cache of derived age private keys.
@@ -74,7 +79,13 @@ func loadDaemonConfig(fs afero.Fs) (daemonConfig, error) {
 
 func main() {
 	diffFlag := flag.Bool("diff", false, "Show what would change without applying (dry-run)")
+	stdinFlag := flag.Bool("stdin", false, "Read the JSON spec stream from standard input")
 	flag.Parse()
+
+	if *stdinFlag && flag.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "error: --stdin and a config path are mutually exclusive\n")
+		os.Exit(1)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -129,7 +140,25 @@ func main() {
 		decryptor = sops.NewDecryptor(ageKeyFilePath)
 	}
 
-	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, jr, sq, sa, pc, decryptor, configPath)
+	// Load the spec stream from stdin or the config path. On a stdin apply we
+	// persist the stream to defaultConfigPath as the host's re-applyable on-disk
+	// record; a diff is a dry-run and persists nothing (empty persist path).
+	var raw api.LoadResult
+	if *stdinFlag {
+		persistPath := ""
+		if !*diffFlag {
+			persistPath = defaultConfigPath
+		}
+		raw, err = api.LoadSpecsStream(fs, os.Stdin, persistPath)
+	} else {
+		raw, err = api.LoadSpecsFS(fs, configPath)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, jr, sq, sa, pc, decryptor, raw)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

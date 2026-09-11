@@ -1,7 +1,6 @@
 package syslet
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/podman"
@@ -90,10 +90,10 @@ func renderContainerWithStore(t *testing.T, store *filestore.ContainerConfigFile
 
 // testApplyWithMgrs builds a plan and applies it using the supplied FileManagers.
 // Use when the config store requires a real OS filesystem (e.g. for configDir symlink support).
-func testApplyWithMgrs(t *testing.T, ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, mockPodman podman.Interface, zipPath string) error {
+func testApplyWithMgrs(t *testing.T, ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, mockPodman podman.Interface, raw api.LoadResult) error {
 	t.Helper()
 	jr := &systemd.MockJournalReader{}
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, jr, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, jr, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		return err
 	}
@@ -101,9 +101,9 @@ func testApplyWithMgrs(t *testing.T, ctx context.Context, fs afero.Fs, mgrs file
 }
 
 // mustApplyWithMgrs calls testApplyWithMgrs and fails the test on any error.
-func mustApplyWithMgrs(t *testing.T, ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, mockPodman podman.Interface, zipPath string) {
+func mustApplyWithMgrs(t *testing.T, ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, mockPodman podman.Interface, raw api.LoadResult) {
 	t.Helper()
-	if err := testApplyWithMgrs(t, ctx, fs, mgrs, sd, mockPodman, zipPath); err != nil {
+	if err := testApplyWithMgrs(t, ctx, fs, mgrs, sd, mockPodman, raw); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 }
@@ -440,42 +440,27 @@ func marshalSpecToRaw(spec model.Unit) ([]byte, error) {
 	return json.Marshal(raw)
 }
 
-// createZipFromSpecs marshals specs to JSON and creates a zip in the provided filesystem.
-func createZipFromSpecs(fs afero.Fs, specs []model.Unit) (string, error) {
+// loadResultFromSpecs marshals specs into a JSON stream and runs it through the
+// real api.LoadSpecsReader, so tests exercise the same loader path production
+// uses for stdin and persisted config.json input.
+func loadResultFromSpecs(specs []model.Unit) (api.LoadResult, error) {
 	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-
-	for i, spec := range specs {
+	for _, spec := range specs {
 		data, err := marshalSpecToRaw(spec)
 		if err != nil {
-			_ = w.Close()
-			return "", err
+			return api.LoadResult{}, err
 		}
-		filename := fmt.Sprintf("spec-%d.json", i)
-		f, err := w.Create(filename)
-		if err != nil {
-			_ = w.Close()
-			return "", err
-		}
-		if _, err := f.Write(data); err != nil {
-			_ = w.Close()
-			return "", err
-		}
+		buf.Write(data)
+		buf.WriteByte('\n')
 	}
-
-	if err := w.Close(); err != nil {
-		return "", err
+	if buf.Len() == 0 {
+		return api.LoadResult{}, nil
 	}
-
-	zipPath := "/tmp/test-specs.zip"
-	if err := afero.WriteFile(fs, zipPath, buf.Bytes(), 0644); err != nil {
-		return "", err
-	}
-	return zipPath, nil
+	return api.LoadSpecsReader(&buf)
 }
 
 // setupTestWithFS creates a test environment using the provided filesystem.
-func setupTestWithFS(t *testing.T, fs afero.Fs, fixture testFixture) (context.Context, *systemd.Client, *systemd.MockDBusConn, podman.Interface, string) {
+func setupTestWithFS(t *testing.T, fs afero.Fs, fixture testFixture) (context.Context, *systemd.Client, *systemd.MockDBusConn, podman.Interface, api.LoadResult) {
 	t.Helper()
 	ctx := context.Background()
 	mockConn := systemd.NewMockDBusConn()
@@ -494,34 +479,34 @@ func setupTestWithFS(t *testing.T, fs afero.Fs, fixture testFixture) (context.Co
 		mockConn.SetUnitState(serviceName, systemd.ActiveState(state))
 	}
 
-	zipPath, err := createZipFromSpecs(fs, fixture.specs)
+	raw, err := loadResultFromSpecs(fixture.specs)
 	if err != nil {
-		t.Fatalf("failed to create zip: %v", err)
+		t.Fatalf("failed to load specs: %v", err)
 	}
 
 	t.Cleanup(func() {
 		sd.Close()
 	})
 
-	return ctx, sd, mockConn, mockPodman, zipPath
+	return ctx, sd, mockConn, mockPodman, raw
 }
 
 // setupTest creates a test environment with a fresh in-memory filesystem.
-func setupTest(t *testing.T, fixture testFixture) (context.Context, afero.Fs, *systemd.Client, *systemd.MockDBusConn, podman.Interface, string) {
+func setupTest(t *testing.T, fixture testFixture) (context.Context, afero.Fs, *systemd.Client, *systemd.MockDBusConn, podman.Interface, api.LoadResult) {
 	t.Helper()
 	fs := afero.NewMemMapFs()
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, fixture)
-	return ctx, fs, sd, mockConn, mockPodman, zipPath
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, fixture)
+	return ctx, fs, sd, mockConn, mockPodman, raw
 }
 
 // testApply is a helper that builds a plan and applies it.
-func testApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman podman.Interface, zipPath string, jr ...systemd.JournalReader) error {
+func testApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman podman.Interface, raw api.LoadResult, jr ...systemd.JournalReader) error {
 	mgrs := newTestFileManagers(fs)
 	var journalReader systemd.JournalReader = &systemd.MockJournalReader{}
 	if len(jr) > 0 {
 		journalReader = jr[0]
 	}
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, journalReader, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, journalReader, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		return err
 	}
@@ -529,9 +514,9 @@ func testApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Clien
 }
 
 // mustApply builds a plan and applies it, failing the test on any error.
-func mustApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman podman.Interface, zipPath string, jr ...systemd.JournalReader) {
+func mustApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman podman.Interface, raw api.LoadResult, jr ...systemd.JournalReader) {
 	t.Helper()
-	if err := testApply(t, ctx, fs, sd, mockPodman, zipPath, jr...); err != nil {
+	if err := testApply(t, ctx, fs, sd, mockPodman, raw, jr...); err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
 }

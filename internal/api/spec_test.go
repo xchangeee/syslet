@@ -1,9 +1,8 @@
 package api
 
 import (
-	"archive/zip"
-	"bytes"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -19,27 +18,6 @@ func writeSpecFile(t *testing.T, fs afero.Fs, path, content string) {
 	t.Helper()
 	if err := afero.WriteFile(fs, path, []byte(content), 0644); err != nil {
 		t.Fatalf("writeSpecFile(%q): %v", path, err)
-	}
-}
-
-func makeZipFS(t *testing.T, fs afero.Fs, zipPath string, entries map[string]string) {
-	t.Helper()
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for name, content := range entries {
-		w, err := zw.Create(name)
-		if err != nil {
-			t.Fatalf("makeZipFS create %q: %v", name, err)
-		}
-		if _, err := w.Write([]byte(content)); err != nil {
-			t.Fatalf("makeZipFS write %q: %v", name, err)
-		}
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatalf("makeZipFS close: %v", err)
-	}
-	if err := afero.WriteFile(fs, zipPath, buf.Bytes(), 0644); err != nil {
-		t.Fatalf("makeZipFS write zip file: %v", err)
 	}
 }
 
@@ -161,86 +139,97 @@ func TestLoadSpecsFromDirectory_ErrorCases(t *testing.T) {
 	}
 }
 
-// --- Zip loading tests ---
+// --- JSON-stream loading tests ---
 
-func TestLoadSpecsFromZip(t *testing.T) {
-	fs := afero.NewMemMapFs()
-	makeZipFS(t, fs, "/specs.zip", map[string]string{
-		"container.json":      containerJSON,
-		"volume.json":         volumeJSON,
-		"subdir/network.json": networkJSON,
-	})
+// TestLoadSpecsReader_InputShapes verifies that the three stream shapes a deploy
+// can produce — a top-level array, newline-delimited JSON, and `cat`-style
+// concatenated objects — all parse to the same set of specs.
+func TestLoadSpecsReader_InputShapes(t *testing.T) {
+	cases := map[string]string{
+		"array":         "[" + containerJSON + "," + volumeJSON + "," + networkJSON + "]",
+		"ndjson":        containerJSON + "\n" + volumeJSON + "\n" + networkJSON + "\n",
+		"concatenated":  containerJSON + volumeJSON + networkJSON,
+		"prettyCatLike": "  " + containerJSON + "\n\n  " + volumeJSON + "\n" + networkJSON + "\n",
+	}
 
-	result, err := LoadSpecsZip(fs, "/specs.zip")
-	if err != nil {
-		t.Fatalf("LoadSpecsZip failed: %v", err)
-	}
-	if len(result.Containers) != 1 {
-		t.Errorf("expected 1 container, got %d", len(result.Containers))
-	}
-	if len(result.Volumes) != 1 {
-		t.Errorf("expected 1 volume, got %d", len(result.Volumes))
-	}
-	if len(result.Networks) != 1 {
-		t.Errorf("expected 1 network, got %d", len(result.Networks))
+	for name, input := range cases {
+		t.Run(name, func(t *testing.T) {
+			result, err := LoadSpecsReader(strings.NewReader(input))
+			if err != nil {
+				t.Fatalf("LoadSpecsReader failed: %v", err)
+			}
+			if len(result.Containers) != 1 {
+				t.Errorf("expected 1 container, got %d", len(result.Containers))
+			}
+			if len(result.Volumes) != 1 {
+				t.Errorf("expected 1 volume, got %d", len(result.Volumes))
+			}
+			if len(result.Networks) != 1 {
+				t.Errorf("expected 1 network, got %d", len(result.Networks))
+			}
+		})
 	}
 }
 
-func TestLoadSpecsFromZip_NonJSONFiles(t *testing.T) {
-	fs := afero.NewMemMapFs()
-	makeZipFS(t, fs, "/mixed.zip", map[string]string{
-		"container.json": containerJSON,
-		"README.txt":     "This is a readme",
-	})
-
-	result, err := LoadSpecsZip(fs, "/mixed.zip")
-	if err != nil {
-		t.Fatalf("LoadSpecsZip failed: %v", err)
-	}
-	if len(result.Containers) != 1 {
-		t.Errorf("expected 1 container, got %d", len(result.Containers))
-	}
-}
-
-func TestLoadSpecsFromZip_ErrorCases(t *testing.T) {
-	tests := []struct {
-		name  string
-		setup func(t *testing.T, fs afero.Fs) string
-	}{
-		{
-			name: "empty zip",
-			setup: func(t *testing.T, fs afero.Fs) string {
-				makeZipFS(t, fs, "/empty.zip", nil)
-				return "/empty.zip"
-			},
-		},
-		{
-			name: "not a zip file",
-			setup: func(t *testing.T, fs afero.Fs) string {
-				writeSpecFile(t, fs, "/notzip.zip", "not a zip file")
-				return "/notzip.zip"
-			},
-		},
-		{
-			name: "invalid json in zip",
-			setup: func(t *testing.T, fs afero.Fs) string {
-				makeZipFS(t, fs, "/invalid.zip", map[string]string{
-					"invalid.json": `{"type":"container"`,
-				})
-				return "/invalid.zip"
-			},
-		},
+func TestLoadSpecsReader_ErrorCases(t *testing.T) {
+	tests := map[string]string{
+		"empty":          "",
+		"whitespace":     "   \n\t ",
+		"invalidJSON":    `{"type":"container"`,
+		"unknownType":    `{"type":"unknown","name":"x"}`,
+		"unknownInArray": "[" + containerJSON + `,{"type":"unknown","name":"x"}]`,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fs := afero.NewMemMapFs()
-			path := tt.setup(t, fs)
-			_, err := LoadSpecsZip(fs, path)
-			if err == nil {
+	for name, input := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := LoadSpecsReader(strings.NewReader(input)); err == nil {
 				t.Error("expected error, got nil")
 			}
 		})
+	}
+}
+
+// --- LoadSpecsStream tests ---
+
+// TestLoadSpecsStream_WithPersistPath asserts the stream is decoded and the raw
+// bytes are persisted (parent dirs created) so a caller keeps a re-applyable record.
+func TestLoadSpecsStream_WithPersistPath(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	input := containerJSON + "\n" + volumeJSON + "\n"
+
+	result, err := LoadSpecsStream(fs, strings.NewReader(input), "/etc/syslet/config.json")
+	if err != nil {
+		t.Fatalf("LoadSpecsStream failed: %v", err)
+	}
+	if len(result.Containers) != 1 || len(result.Volumes) != 1 {
+		t.Errorf("decoded %d containers and %d volumes, want 1 and 1", len(result.Containers), len(result.Volumes))
+	}
+
+	persisted, err := afero.ReadFile(fs, "/etc/syslet/config.json")
+	if err != nil {
+		t.Fatalf("expected stream to be persisted: %v", err)
+	}
+	if string(persisted) != input {
+		t.Errorf("persisted content = %q, want %q", persisted, input)
+	}
+}
+
+// TestLoadSpecsStream_WithoutPersistPath asserts an empty persist path decodes
+// without writing anything (the dry-run case).
+func TestLoadSpecsStream_WithoutPersistPath(t *testing.T) {
+	fs := afero.NewMemMapFs()
+
+	result, err := LoadSpecsStream(fs, strings.NewReader(containerJSON), "")
+	if err != nil {
+		t.Fatalf("LoadSpecsStream failed: %v", err)
+	}
+	if len(result.Containers) != 1 {
+		t.Errorf("expected 1 container, got %d", len(result.Containers))
+	}
+
+	files, _ := afero.ReadDir(fs, "/")
+	if len(files) != 0 {
+		t.Errorf("expected no files written, got %d", len(files))
 	}
 }
 
@@ -263,22 +252,22 @@ func TestLoadSpecs(t *testing.T) {
 		}
 	})
 
-	t.Run("zip", func(t *testing.T) {
+	t.Run("json stream file", func(t *testing.T) {
 		fs := afero.NewMemMapFs()
-		makeZipFS(t, fs, "/specs.zip", map[string]string{"volume.json": volumeJSON})
+		writeSpecFile(t, fs, "/config.json", containerJSON+volumeJSON)
 
-		result, err := LoadSpecsFS(fs, "/specs.zip")
+		result, err := LoadSpecsFS(fs, "/config.json")
 		if err != nil {
-			t.Fatalf("LoadSpecsFS (zip) failed: %v", err)
+			t.Fatalf("LoadSpecsFS (file) failed: %v", err)
 		}
-		if len(result.Volumes) != 1 {
-			t.Errorf("expected 1 volume from zip, got %d", len(result.Volumes))
+		if len(result.Containers) != 1 || len(result.Volumes) != 1 {
+			t.Errorf("expected 1 container and 1 volume from file, got %d and %d", len(result.Containers), len(result.Volumes))
 		}
 	})
 
 	t.Run("invalid file", func(t *testing.T) {
 		fs := afero.NewMemMapFs()
-		writeSpecFile(t, fs, "/notafile.txt", "not a zip or directory")
+		writeSpecFile(t, fs, "/notafile.txt", "not json")
 
 		_, err := LoadSpecsFS(fs, "/notafile.txt")
 		if err == nil {

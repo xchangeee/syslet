@@ -28,7 +28,7 @@ func TestApply_Network_MeaningfulChange_RecreatesAndRestartsContainers(t *testin
 	fs := afero.NewMemMapFs()
 	oldFrontendNetworkSpec := makeNetworkSpec("frontend", "bridge")
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{frontendNetworkSpec, webappSpec},
 		existingUnits: map[string]string{
 			"frontend.network": renderNetwork(t, oldFrontendNetworkSpec),
@@ -40,7 +40,7 @@ func TestApply_Network_MeaningfulChange_RecreatesAndRestartsContainers(t *testin
 		},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertStopped(t, mockConn, "webapp.service", "frontend-network.service")
 	testutil.AssertStarted(t, mockConn, "webapp.service")
@@ -63,7 +63,7 @@ func TestApply_Network_MetadataOnlyChange_NoRecreation(t *testing.T) {
 	// Old spec: RemovalAllowed=false
 	oldFrontendNetworkSpec := makeNetworkSpec("frontend", "bridge")
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{frontendNetworkSpec, webappSpec},
 		existingUnits: map[string]string{
 			"frontend.network": renderNetwork(t, oldFrontendNetworkSpec),
@@ -74,7 +74,7 @@ func TestApply_Network_MetadataOnlyChange_NoRecreation(t *testing.T) {
 		},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 
@@ -88,9 +88,9 @@ func TestApply_Network_MetadataOnlyChange_NoRecreation(t *testing.T) {
 
 func TestApply_Network_New_WritesUnitOnly(t *testing.T) {
 	specs := []model.Unit{makeNetworkSpec("frontend", "bridge")}
-	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
+	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitExists(t, sd, "frontend.network")
 	testutil.AssertReloaded(t, mockConn)
@@ -102,7 +102,7 @@ func TestApply_Network_Stale_RemovesUnit(t *testing.T) {
 	staleNetworkSpec := makeStaleNetworkSpec("oldnet", "bridge")
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{webappSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, webappSpec),
@@ -111,7 +111,7 @@ func TestApply_Network_Stale_RemovesUnit(t *testing.T) {
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitAbsent(t, sd, "oldnet.network")
 	testutil.AssertNoStartStop(t, mockConn)
@@ -124,7 +124,7 @@ func TestApply_Network_StaleWithDeletePolicy_DeletesPodmanNetwork(t *testing.T) 
 	staleNetworkSpec := makeStaleNetworkSpecWithDelete("oldnet", "bridge")
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{webappSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, webappSpec),
@@ -133,7 +133,7 @@ func TestApply_Network_StaleWithDeletePolicy_DeletesPodmanNetwork(t *testing.T) 
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitAbsent(t, sd, "oldnet.network")
 

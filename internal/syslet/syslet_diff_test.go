@@ -118,12 +118,12 @@ func TestValidationErrorsInPlan(t *testing.T) {
 	)
 
 	fs := afero.NewMemMapFs()
-	ctx, sd, _, _, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{badSpec},
 	})
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan returned fatal error (want nil): %v", err)
 	}
@@ -154,7 +154,7 @@ func TestStagingErrorsSuppressDiff(t *testing.T) {
 	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 
 	fs := afero.NewMemMapFs()
-	ctx, sd, _, _, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
@@ -173,7 +173,7 @@ func TestStagingErrorsSuppressDiff(t *testing.T) {
 	}
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, az, nil, nil, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, az, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan returned fatal error: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestDisplayDiff_ConfigDir(t *testing.T) {
 	spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
 		model.NewContainerDirMount(mountPath, newFile))
 
-	ctx, memFs, sd, _, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, _, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
 		existingState: map[string]string{"webapp.service": "active"},
@@ -214,7 +214,7 @@ func TestDisplayDiff_ConfigDir(t *testing.T) {
 
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFile)
 
-	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
+	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestDisplayDiff_ConfigDir_ModeChange(t *testing.T) {
 	spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
 		model.NewContainerDirMount(mountPath, newFile))
 
-	ctx, memFs, sd, _, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, _, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
 		existingState: map[string]string{"webapp.service": "active"},
@@ -264,7 +264,7 @@ func TestDisplayDiff_ConfigDir_ModeChange(t *testing.T) {
 
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFile)
 
-	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
+	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -428,7 +428,7 @@ webapp.container                         updated    unit updated, config updated
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 
-			ctx, sd, _, _, zipPath := setupTestWithFS(t, fs, testFixture{
+			ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
 				specs:         []model.Unit{tt.spec},
 				existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, tt.oldSpec)},
 				existingState: map[string]string{"webapp.service": "active"},
@@ -439,7 +439,7 @@ webapp.container                         updated    unit updated, config updated
 			}
 
 			mgrs := newTestFileManagers(fs)
-			plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
+			plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 			if err != nil {
 				t.Fatalf("BuildPlan failed: %v", err)
 			}

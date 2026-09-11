@@ -16,8 +16,8 @@ func TestApply_ContainerConfigFile_NoModeSpecified_DefaultsTo0644(t *testing.T) 
 			model.NewContainerFileMount("/etc/app/app.conf", "key=value", 0)),
 	}
 
-	ctx, fs, sd, _, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	ctx, fs, sd, _, mockPodman, raw := setupTest(t, testFixture{specs: specs})
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	path := configFilePath("webapp", "/etc/app/app.conf")
 	testutil.AssertFileMode(t, fs, path, 0644)
@@ -30,8 +30,8 @@ func TestApply_ContainerConfigFile_ExplicitMode_WrittenWithCorrectPermissions(t 
 			model.NewContainerFileMount("/usr/local/bin/entrypoint.sh", "#!/bin/sh\necho hello", os.FileMode(0755))),
 	}
 
-	ctx, fs, sd, _, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	ctx, fs, sd, _, mockPodman, raw := setupTest(t, testFixture{specs: specs})
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	path := configFilePath("webapp", "/usr/local/bin/entrypoint.sh")
 	testutil.AssertFileMode(t, fs, path, 0755)
@@ -46,8 +46,8 @@ func TestApply_ContainerConfigFile_MixedModes_EachWrittenWithOwnPermissions(t *t
 			model.NewContainerFileMount("/etc/app/secret.conf", "secret", os.FileMode(0600))),
 	}
 
-	ctx, fs, sd, _, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	ctx, fs, sd, _, mockPodman, raw := setupTest(t, testFixture{specs: specs})
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertFileMode(t, fs, configFilePath("webapp", "/etc/app/app.conf"), 0644)
 	testutil.AssertFileMode(t, fs, configFilePath("webapp", "/usr/local/bin/run.sh"), 0755)
@@ -64,7 +64,7 @@ func TestApply_ContainerConfigFile_ModeChanged_UpdatesPermissions(t *testing.T) 
 		model.NewContainerFileMount(mountPath, script, 0))
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
@@ -73,7 +73,7 @@ func TestApply_ContainerConfigFile_ModeChanged_UpdatesPermissions(t *testing.T) 
 	preWriteConfig(t, fs, "webapp", mountPath, script, 0644)
 	testutil.AssertFileMode(t, fs, configFilePath("webapp", mountPath), 0644)
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertFileMode(t, fs, configFilePath("webapp", mountPath), 0755)
 	testutil.AssertFileContent(t, fs, configFilePath("webapp", mountPath), script)
@@ -88,7 +88,7 @@ func TestApply_ContainerConfigFile_Removed_DeletedFromDisk(t *testing.T) {
 		model.NewContainerFileMount("/etc/app/b.conf", "old content", 0))
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
@@ -97,7 +97,7 @@ func TestApply_ContainerConfigFile_Removed_DeletedFromDisk(t *testing.T) {
 	preWriteConfig(t, fs, "webapp", "/etc/app/a.conf", "unchanged content", 0644)
 	preWriteConfig(t, fs, "webapp", "/etc/app/b.conf", "old content", 0644)
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	assertConfigFileExists(t, fs, "webapp", "/etc/app/a.conf")
 	assertConfigFileAbsent(t, fs, "webapp", "/etc/app/b.conf")
@@ -110,7 +110,7 @@ func TestApply_Container_Stale_DeletesConfigDirectory(t *testing.T) {
 		model.NewContainerFileMount("/etc/app/config2.conf", "config2", 0))
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
@@ -119,7 +119,7 @@ func TestApply_Container_Stale_DeletesConfigDirectory(t *testing.T) {
 	preWriteConfig(t, fs, "webapp", "/etc/app/config1.conf", "config1", 0644)
 	preWriteConfig(t, fs, "webapp", "/etc/app/config2.conf", "config2", 0644)
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	assertConfigDirEmpty(t, fs, "webapp")
 }

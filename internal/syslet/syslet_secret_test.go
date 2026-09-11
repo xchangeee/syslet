@@ -11,7 +11,6 @@ package syslet
 // "syslet/hash" label so orphan detection can identify them.
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -19,6 +18,7 @@ import (
 	"sort"
 	"testing"
 
+	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/sops"
@@ -54,12 +54,11 @@ func secretContentHash(t *testing.T) string {
 	return util.SHA256Hex([]byte(encryptedCiphertext(t)))
 }
 
-// createZipWithSecret builds a zip containing one secret spec and optional extra
-// unit specs, writes it to the in-memory FS, and returns its path.
-func createZipWithSecret(t *testing.T, fs afero.Fs, specName string, ciphertext model.Ciphertext, extraSpecs []model.Unit) string {
+// loadResultWithSecret builds a JSON spec stream containing one secret spec and
+// optional extra unit specs, then loads it through the real api.LoadSpecsReader.
+func loadResultWithSecret(t *testing.T, specName string, ciphertext model.Ciphertext, extraSpecs []model.Unit) api.LoadResult {
 	t.Helper()
 	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
 
 	secretJSON, err := json.Marshal(map[string]any{
 		"type":       "secret",
@@ -69,36 +68,23 @@ func createZipWithSecret(t *testing.T, fs afero.Fs, specName string, ciphertext 
 	if err != nil {
 		t.Fatalf("marshal secret spec: %v", err)
 	}
-	f, err := w.Create("secret.json")
-	if err != nil {
-		t.Fatalf("create secret entry: %v", err)
-	}
-	if _, err := f.Write(secretJSON); err != nil {
-		t.Fatalf("write secret entry: %v", err)
-	}
+	buf.Write(secretJSON)
+	buf.WriteByte('\n')
 
 	for i, spec := range extraSpecs {
 		data, err := marshalSpecToRaw(spec)
 		if err != nil {
 			t.Fatalf("marshal spec %d: %v", i, err)
 		}
-		entry, err := w.Create(filepath.Join("spec", filepath.FromSlash("unit-"+string(rune('0'+i))+".json")))
-		if err != nil {
-			t.Fatalf("create unit entry %d: %v", i, err)
-		}
-		if _, err := entry.Write(data); err != nil {
-			t.Fatalf("write unit entry %d: %v", i, err)
-		}
+		buf.Write(data)
+		buf.WriteByte('\n')
 	}
 
-	if err := w.Close(); err != nil {
-		t.Fatalf("close zip: %v", err)
+	raw, err := api.LoadSpecsReader(&buf)
+	if err != nil {
+		t.Fatalf("load specs: %v", err)
 	}
-	zipPath := "/tmp/secret-test.zip"
-	if err := afero.WriteFile(fs, zipPath, buf.Bytes(), 0644); err != nil {
-		t.Fatalf("write zip: %v", err)
-	}
-	return zipPath
+	return raw
 }
 
 // secretTestSetup initialises the standard in-memory test environment.
@@ -114,10 +100,10 @@ func secretTestSetup(t *testing.T) (context.Context, afero.Fs, *systemd.Client, 
 }
 
 // buildSecretPlan calls BuildPlan with a real decryptor and the mock podman client.
-func buildSecretPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman *mockPodmanClient, decryptor *sops.Decryptor, zipPath string) *ApplyPlan {
+func buildSecretPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman *mockPodmanClient, decryptor *sops.Decryptor, raw api.LoadResult) *ApplyPlan {
 	t.Helper()
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, mockPodman, decryptor, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, mockPodman, decryptor, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -140,9 +126,9 @@ func sortedUpsertNames(ops []UpsertPodmanSecretOp) []string {
 func TestSecret_New_UpsertsAllKeys(t *testing.T) {
 	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
 	ct := encryptedCiphertext(t)
-	zipPath := createZipWithSecret(t, fs, "myapp", ct, nil)
+	raw := loadResultWithSecret(t, "myapp", ct, nil)
 
-	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), zipPath)
+	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
 
 	got := sortedUpsertNames(plan.UpsertPodmanSecrets)
 	want := []string{"myapp-api-key", "myapp-db-password"}
@@ -168,9 +154,9 @@ func TestSecret_Unchanged_NoAction(t *testing.T) {
 		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": hash}},
 		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
 	}
-	zipPath := createZipWithSecret(t, fs, "myapp", ct, nil)
+	raw := loadResultWithSecret(t, "myapp", ct, nil)
 
-	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), zipPath)
+	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
 
 	if len(plan.UpsertPodmanSecrets) != 0 {
 		t.Errorf("expected no upserts, got %v", plan.UpsertPodmanSecrets)
@@ -188,9 +174,9 @@ func TestSecret_ContentChanged_UpsertsAllKeys(t *testing.T) {
 		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": "oldhash"}},
 		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": "oldhash"}},
 	}
-	zipPath := createZipWithSecret(t, fs, "myapp", ct, nil)
+	raw := loadResultWithSecret(t, "myapp", ct, nil)
 
-	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), zipPath)
+	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
 
 	if len(plan.UpsertPodmanSecrets) != 2 {
 		t.Errorf("expected 2 upserts (hash mismatch), got %d: %v", len(plan.UpsertPodmanSecrets), plan.UpsertPodmanSecrets)
@@ -210,9 +196,9 @@ func TestSecret_OrphanKey_DeletesKey(t *testing.T) {
 		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
 		{Name: "myapp-old-token", Labels: map[string]string{"syslet/hash": hash}}, // orphan
 	}
-	zipPath := createZipWithSecret(t, fs, "myapp", ct, nil)
+	raw := loadResultWithSecret(t, "myapp", ct, nil)
 
-	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), zipPath)
+	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
 
 	if len(plan.UpsertPodmanSecrets) != 0 {
 		t.Errorf("expected no upserts, got %v", plan.UpsertPodmanSecrets)
@@ -223,7 +209,7 @@ func TestSecret_OrphanKey_DeletesKey(t *testing.T) {
 }
 
 func TestSecret_SpecRemoved_DeletesAllKeys(t *testing.T) {
-	// No secret specs in the zip, but syslet-managed secrets exist on host.
+	// No secret specs in the input, but syslet-managed secrets exist on host.
 	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
 
 	mockPodman.existingSecrets = []podman.PodmanSecretMeta{
@@ -231,15 +217,15 @@ func TestSecret_SpecRemoved_DeletesAllKeys(t *testing.T) {
 		{Name: "oldapp-key2", Labels: map[string]string{"syslet/hash": "abc"}},
 	}
 
-	// Zip with only a container spec — no secret spec.
+	// Input with only a container spec — no secret spec.
 	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
-	zipPath, err := createZipFromSpecs(fs, []model.Unit{webappSpec})
+	raw, err := loadResultFromSpecs([]model.Unit{webappSpec})
 	if err != nil {
-		t.Fatalf("createZipFromSpecs: %v", err)
+		t.Fatalf("loadResultFromSpecs: %v", err)
 	}
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, mockPodman, nil, zipPath)
+	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, mockPodman, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -291,8 +277,8 @@ func TestSecret_Changed_RestartsReferencingContainers(t *testing.T) {
 	}
 	mockConn.SetUnitState("webapp.service", systemd.ActiveStateActive)
 
-	zipPath := createZipWithSecret(t, fs, "myapp", ct, []model.Unit{webappSpec})
-	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), zipPath)
+	raw := loadResultWithSecret(t, "myapp", ct, []model.Unit{webappSpec})
+	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
 
 	var stopped, started bool
 	for _, op := range plan.StopSystemdServices {
@@ -338,8 +324,8 @@ func TestSecret_Unchanged_NoContainerRestart(t *testing.T) {
 	}
 	mockConn.SetUnitState("webapp.service", systemd.ActiveStateActive)
 
-	zipPath := createZipWithSecret(t, fs, "myapp", ct, []model.Unit{webappSpec})
-	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), zipPath)
+	raw := loadResultWithSecret(t, "myapp", ct, []model.Unit{webappSpec})
+	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
 
 	if len(plan.StopSystemdServices) != 0 || len(plan.StartSystemdServices) != 0 {
 		t.Errorf("expected no restart: stops=%v starts=%v", plan.StopSystemdServices, plan.StartSystemdServices)

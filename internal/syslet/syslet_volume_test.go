@@ -4,16 +4,17 @@ import (
 	"context"
 	"testing"
 
+	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 	"github.com/spf13/afero"
 )
 
-func buildTestPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, zipPath string) (*ApplyPlan, error) {
+func buildTestPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, raw api.LoadResult) (*ApplyPlan, error) {
 	t.Helper()
 	mgrs := newTestFileManagers(fs)
-	return BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, zipPath)
+	return BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 }
 
 func makeVolumeSpecWithDelete(name, device string) *model.VolumeUnit {
@@ -41,9 +42,9 @@ func makeContainerSpecWithVolume(name string, state model.DesiredState, volumeNa
 
 func TestApply_Volume_New_WritesUnitOnly(t *testing.T) {
 	specs := []model.Unit{makeVolumeSpec("data", "tmpfs")}
-	ctx, fs, sd, mockConn, mockPodman, zipPath := setupTest(t, testFixture{specs: specs})
+	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitExists(t, sd, "data.volume")
 	testutil.AssertReloaded(t, mockConn)
@@ -57,12 +58,12 @@ func TestApply_Volume_MetadataOnlyChange_WritesUnit(t *testing.T) {
 
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{newVolumeSpec},
 		existingUnits: map[string]string{"data.volume": renderVolume(t, oldVolumeSpec)},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	mockPc := mockPodman.(*mockPodmanClient)
 	if len(mockPc.deletedVolumes) != 0 {
@@ -77,13 +78,13 @@ func TestApply_Volume_MeaningfulChange_WithDeletePolicy_DeletesAndRecreatesUnit(
 
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{newVolumeSpec},
 		existingUnits: map[string]string{"data.volume": renderVolume(t, oldVolumeSpec)},
 		existingState: map[string]string{"data-volume.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	mockPc := mockPodman.(*mockPodmanClient)
 	if len(mockPc.deletedVolumes) != 1 || mockPc.deletedVolumes[0] != "data" {
@@ -98,12 +99,12 @@ func TestApply_Volume_MeaningfulChange_WithoutDeletePolicy_Errors(t *testing.T) 
 
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{newVolumeSpec},
 		existingUnits: map[string]string{"data.volume": renderVolume(t, oldVolumeSpec)},
 	})
 
-	plan, err := buildTestPlan(t, ctx, fs, sd, zipPath)
+	plan, err := buildTestPlan(t, ctx, fs, sd, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
@@ -123,7 +124,7 @@ func TestApply_Volume_Stale_RemovesUnit(t *testing.T) {
 	staleVolumeSpec := makeStaleVolumeSpec("olddata", "tmpfs")
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{webappSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, webappSpec),
@@ -132,7 +133,7 @@ func TestApply_Volume_Stale_RemovesUnit(t *testing.T) {
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitAbsent(t, sd, "olddata.volume")
 	testutil.AssertNoStartStop(t, mockConn)
@@ -145,7 +146,7 @@ func TestApply_Volume_StaleWithDeletePolicy_DeletesPodmanVolume(t *testing.T) {
 	staleVolumeSpec := makeStaleVolumeSpecWithDelete("olddata", "tmpfs")
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{webappSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, webappSpec),
@@ -154,7 +155,7 @@ func TestApply_Volume_StaleWithDeletePolicy_DeletesPodmanVolume(t *testing.T) {
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertUnitAbsent(t, sd, "olddata.volume")
 

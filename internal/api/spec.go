@@ -1,11 +1,12 @@
-// Package api loads syslet spec files (JSON archives) and deserializes them into
-// domain-level LoadResult values consumed by the loader package.
+// Package api loads syslet spec files (a directory of JSON files or a JSON
+// stream of spec objects) and deserializes them into domain-level LoadResult
+// values consumed by the loader package.
 package api
 
 import (
-	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -100,18 +101,50 @@ type LoadResult struct {
 	Secrets    []RawSecretSpec
 }
 
-// LoadSpecsFS reads specs from either a zip file or a directory, auto-detecting by trying
-// LoadSpecsZip first and falling back to LoadSpecsDir.
+// LoadSpecsFS reads specs from a path, dispatching on whether it is a directory
+// (each .json file is one spec) or a regular file containing a JSON stream of
+// specs (an array, NDJSON, or concatenated objects — see LoadSpecsReader).
 func LoadSpecsFS(fs afero.Fs, path string) (LoadResult, error) {
-	result, err := LoadSpecsZip(fs, path)
-	if err == nil {
-		return result, nil
+	info, err := fs.Stat(path)
+	if err != nil {
+		return LoadResult{}, fmt.Errorf("reading %s: %w", path, err)
 	}
-	result, dirErr := LoadSpecsDir(fs, path)
-	if dirErr == nil {
-		return result, nil
+	if info.IsDir() {
+		return LoadSpecsDir(fs, path)
 	}
-	return LoadResult{}, fmt.Errorf("failed to load specs from %s: not a valid zip file (%v) or directory (%v)", path, err, dirErr)
+	f, err := fs.Open(path)
+	if err != nil {
+		return LoadResult{}, fmt.Errorf("opening %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	result, err := LoadSpecsReader(f)
+	if err != nil {
+		return LoadResult{}, fmt.Errorf("loading specs from %s: %w", path, err)
+	}
+	return result, nil
+}
+
+// LoadSpecsStream reads a JSON spec stream from r and decodes it via
+// LoadSpecsReader. When persistPath is non-empty the raw stream is first written
+// there (creating parent directories) so callers such as the daemon can keep a
+// re-applyable on-disk record of what was applied; pass "" to decode without
+// persisting (e.g. a dry-run). The persist path layout is the caller's policy —
+// this function only honors the path it is given.
+func LoadSpecsStream(fs afero.Fs, r io.Reader, persistPath string) (LoadResult, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return LoadResult{}, fmt.Errorf("reading spec stream: %w", err)
+	}
+	if persistPath != "" {
+		dir := filepath.Dir(persistPath)
+		if err := fs.MkdirAll(dir, 0755); err != nil {
+			return LoadResult{}, fmt.Errorf("creating %s: %w", dir, err)
+		}
+		if err := afero.WriteFile(fs, persistPath, data, 0600); err != nil {
+			return LoadResult{}, fmt.Errorf("persisting %s: %w", persistPath, err)
+		}
+	}
+	return LoadSpecsReader(bytes.NewReader(data))
 }
 
 // LoadSpecsDir reads all .json files from a directory.
@@ -142,42 +175,68 @@ func LoadSpecsDir(fs afero.Fs, dirPath string) (LoadResult, error) {
 	return result, nil
 }
 
-// LoadSpecsZip opens a zip file and reads all .json entries as specs.
-func LoadSpecsZip(fs afero.Fs, zipPath string) (LoadResult, error) {
-	data, err := afero.ReadFile(fs, zipPath)
-	if err != nil {
-		return LoadResult{}, fmt.Errorf("reading zip file %s: %w", zipPath, err)
-	}
-	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return LoadResult{}, fmt.Errorf("opening zip %s: %w", zipPath, err)
-	}
-
+// LoadSpecsReader reads a JSON stream of specs from r. It accepts the shapes a
+// deploy can produce over stdin or from a persisted config.json: a top-level
+// JSON array of spec objects, newline-delimited JSON, or whitespace/`cat`-
+// concatenated objects (e.g. `cat dir/*.json`). Each object is dispatched
+// through unmarshalInto by its "type" field.
+func LoadSpecsReader(r io.Reader) (LoadResult, error) {
 	var result LoadResult
-	for _, f := range r.File {
-		if f.FileInfo().IsDir() || filepath.Ext(f.Name) != ".json" {
-			continue
+	dec := json.NewDecoder(r)
+	for i := 0; ; i++ {
+		var msg json.RawMessage
+		if err := dec.Decode(&msg); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return LoadResult{}, fmt.Errorf("decoding spec stream: %w", err)
 		}
-		rc, err := f.Open()
-		if err != nil {
-			return LoadResult{}, fmt.Errorf("opening %s in zip: %w", f.Name, err)
-		}
-		fileData, err := io.ReadAll(rc)
-		if closeErr := rc.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-		if err != nil {
-			return LoadResult{}, fmt.Errorf("reading %s from zip: %w", f.Name, err)
-		}
-		if err := unmarshalInto(fileData, f.Name, &result); err != nil {
-			return LoadResult{}, fmt.Errorf("parsing %s: %w", f.Name, err)
+		if err := addStreamValue(msg, i, &result); err != nil {
+			return LoadResult{}, err
 		}
 	}
 
 	if result.empty() {
-		return LoadResult{}, fmt.Errorf("no .json spec files found in %s", zipPath)
+		return LoadResult{}, fmt.Errorf("no specs found in input")
 	}
 	return result, nil
+}
+
+// addStreamValue handles a single decoded JSON value from a spec stream. A value
+// may itself be an array (the top-level-array form) whose elements are specs, or
+// a single spec object (the NDJSON / concatenated-object form).
+func addStreamValue(msg json.RawMessage, index int, result *LoadResult) error {
+	trimmed := bytesTrimLeadingSpace(msg)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var arr []json.RawMessage
+		if err := json.Unmarshal(msg, &arr); err != nil {
+			return fmt.Errorf("parsing spec array: %w", err)
+		}
+		for j, elem := range arr {
+			if err := unmarshalInto(elem, fmt.Sprintf("spec[%d]", j), result); err != nil {
+				return fmt.Errorf("parsing spec[%d]: %w", j, err)
+			}
+		}
+		return nil
+	}
+	if err := unmarshalInto(msg, fmt.Sprintf("spec %d", index), result); err != nil {
+		return fmt.Errorf("parsing spec %d: %w", index, err)
+	}
+	return nil
+}
+
+// bytesTrimLeadingSpace returns b without leading JSON whitespace, used to peek
+// at the first significant byte of a decoded value.
+func bytesTrimLeadingSpace(b []byte) []byte {
+	for len(b) > 0 {
+		switch b[0] {
+		case ' ', '\t', '\r', '\n':
+			b = b[1:]
+		default:
+			return b
+		}
+	}
+	return b
 }
 
 func (r LoadResult) empty() bool {

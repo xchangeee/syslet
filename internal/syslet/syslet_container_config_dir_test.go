@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
@@ -23,9 +24,9 @@ func newConfigStore(t *testing.T) *filestore.ContainerConfigFileStore {
 }
 
 // setupConfigDirTest creates a test environment for configDir scenarios.
-// It uses a MemMapFs for unit files and the zip, and the supplied OS-backed
-// store for versioned config dirs, so that symlink operations work.
-func setupConfigDirTest(t *testing.T, store *filestore.ContainerConfigFileStore, fixture testFixture) (context.Context, afero.Fs, *systemd.Client, *systemd.MockDBusConn, filestore.FileManagers, string) {
+// It uses a MemMapFs for unit files and the supplied OS-backed store for
+// versioned config dirs, so that symlink operations work.
+func setupConfigDirTest(t *testing.T, store *filestore.ContainerConfigFileStore, fixture testFixture) (context.Context, afero.Fs, *systemd.Client, *systemd.MockDBusConn, filestore.FileManagers, api.LoadResult) {
 	t.Helper()
 	memFs := afero.NewMemMapFs()
 	mockConn := systemd.NewMockDBusConn()
@@ -42,9 +43,9 @@ func setupConfigDirTest(t *testing.T, store *filestore.ContainerConfigFileStore,
 		mockConn.SetUnitState(serviceName, systemd.ActiveState(state))
 	}
 
-	zipPath, err := createZipFromSpecs(memFs, fixture.specs)
+	raw, err := loadResultFromSpecs(fixture.specs)
 	if err != nil {
-		t.Fatalf("failed to create zip: %v", err)
+		t.Fatalf("failed to load specs: %v", err)
 	}
 
 	mgrs := filestore.FileManagers{
@@ -54,7 +55,7 @@ func setupConfigDirTest(t *testing.T, store *filestore.ContainerConfigFileStore,
 
 	t.Cleanup(func() { sd.Close() })
 
-	return context.Background(), memFs, sd, mockConn, mgrs, zipPath
+	return context.Background(), memFs, sd, mockConn, mgrs, raw
 }
 
 // preWriteConfigDir simulates a previously-applied configDir state by writing
@@ -87,14 +88,14 @@ func TestApply_ContainerConfigDir_FilesUnchanged_NoAction(t *testing.T) {
 		model.NewContainerDirMount(string(mountPath), files...))
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, files...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 	testutil.AssertContainerNotReloaded(t, mockConn)
@@ -114,14 +115,14 @@ func TestApply_ContainerConfigDir_FileContentChanged_ReloadsService(t *testing.T
 		model.NewContainerDirMount(string(mountPath), newFiles...))
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{newSpec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
@@ -141,14 +142,14 @@ func TestApply_ContainerConfigDir_MultipleFiles_OneChanged_ReloadsService(t *tes
 		model.NewContainerDirMount(string(mountPath), newFiles...))
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
@@ -167,14 +168,14 @@ func TestApply_ContainerConfigDir_FileAdded_ReloadsService(t *testing.T) {
 		model.NewContainerDirMount(string(mountPath), newFiles...))
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
@@ -193,14 +194,14 @@ func TestApply_ContainerConfigDir_FileRemoved_ReloadsService(t *testing.T) {
 		model.NewContainerDirMount(string(mountPath), newFiles...))
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
@@ -218,14 +219,14 @@ func TestApply_ContainerConfigDir_FileModeChanged_ReloadsService(t *testing.T) {
 		model.NewContainerDirMount(string(mountPath), newFiles...))
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
@@ -241,13 +242,13 @@ func TestApply_ContainerConfigDir_NewDir_RestartsService(t *testing.T) {
 	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{newSpec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 	testutil.AssertContainerNotReloaded(t, mockConn)
@@ -263,14 +264,14 @@ func TestApply_ContainerConfigDir_DirRemoved_RestartsService(t *testing.T) {
 	newSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{newSpec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, files...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 	testutil.AssertContainerNotReloaded(t, mockConn)
@@ -290,14 +291,14 @@ func TestApply_ContainerConfigDir_Stopped_FilesChanged_NoAction(t *testing.T) {
 		model.NewContainerDirMount(string(mountPath), newFiles...))
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
 		existingState: map[string]string{"webapp.service": "inactive"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertNoStartStop(t, mockConn)
 	testutil.AssertContainerNotReloaded(t, mockConn)
@@ -319,14 +320,14 @@ func TestApply_ContainerConfigDir_FilesChangedAndUnitChanged_RestartOnly(t *test
 		model.NewContainerDirMount(string(mountPath), newFiles...))
 
 	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, zipPath := setupConfigDirTest(t, store, testFixture{
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
 		specs:         []model.Unit{newSpec},
 		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
 
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), zipPath)
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 	testutil.AssertContainerNotReloaded(t, mockConn)

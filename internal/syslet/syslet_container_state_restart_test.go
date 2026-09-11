@@ -14,13 +14,13 @@ func TestApply_Container_ImageChanged_RestartsService(t *testing.T) {
 	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 	testutil.AssertReloaded(t, mockConn)
@@ -32,13 +32,13 @@ func TestApply_Container_ConfigAdded_RestartsService(t *testing.T) {
 	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 	path := configFilePath("webapp", "/etc/nginx/nginx.conf")
@@ -55,7 +55,7 @@ func TestApply_Container_ConfigContentAndModeChanged_RestartsService(t *testing.
 		model.NewContainerFileMount(mountPath, "#!/bin/sh\necho old", 0))
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
@@ -63,7 +63,7 @@ func TestApply_Container_ConfigContentAndModeChanged_RestartsService(t *testing.
 
 	preWriteConfig(t, fs, "webapp", mountPath, "#!/bin/sh\necho old", 0644)
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 	path := configFilePath("webapp", mountPath)
@@ -81,7 +81,7 @@ func TestApply_Container_ConfigModeChanged_RestartsService(t *testing.T) {
 		model.NewContainerFileMount(mountPath, script, 0))
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
@@ -89,7 +89,7 @@ func TestApply_Container_ConfigModeChanged_RestartsService(t *testing.T) {
 
 	preWriteConfig(t, fs, "webapp", mountPath, script, 0644)
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 }
@@ -103,13 +103,13 @@ func TestApply_Container_ConfigRemoved_RestartsService(t *testing.T) {
 		model.NewContainerFileMount("/etc/app/b.conf", "old content", 0))
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 }
@@ -121,13 +121,13 @@ func TestApply_Container_AllConfigsRemoved_RestartsService(t *testing.T) {
 		model.NewContainerFileMount("/etc/app/config2.conf", "config2", 0))
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 }
@@ -139,7 +139,7 @@ func TestApply_MultipleContainers_OneChanged_RestartsOnlyChanged(t *testing.T) {
 	changedOldSpec := makeContainerSpec("changed", "nginx:latest", model.DesiredStateRunning)
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{unchangedSpec, changedSpec, newSpec},
 		existingUnits: map[string]string{
 			"unchanged.container": renderContainer(t, fs, unchangedSpec),
@@ -151,7 +151,7 @@ func TestApply_MultipleContainers_OneChanged_RestartsOnlyChanged(t *testing.T) {
 		},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertStopped(t, mockConn, "changed.service")
 	testutil.AssertStarted(t, mockConn, "changed.service", "new.service")
@@ -163,13 +163,13 @@ func TestApply_StoppedContainer_ConfigChanged_NoAction(t *testing.T) {
 	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateStopped)
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs:         []model.Unit{spec},
 		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
 		existingState: map[string]string{"webapp.service": "inactive"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	path := configFilePath("webapp", "/etc/app.conf")
 	testutil.AssertFileContent(t, fs, path, "new config")
@@ -184,7 +184,7 @@ func TestApply_Volume_Recreated_ContainerRestarted(t *testing.T) {
 	webappSpec := makeContainerSpecWithVolume("webapp", model.DesiredStateRunning, "data", "/data")
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{newVolumeSpec, webappSpec},
 		existingUnits: map[string]string{
 			"data.volume":      renderVolume(t, oldVolumeSpec),
@@ -196,7 +196,7 @@ func TestApply_Volume_Recreated_ContainerRestarted(t *testing.T) {
 		},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertStopped(t, mockConn, "webapp.service", "data-volume.service")
 	testutil.AssertStarted(t, mockConn, "webapp.service")
@@ -210,7 +210,7 @@ func TestApply_Network_Changed_UnreferencedContainerNotRestarted(t *testing.T) {
 	oldNetworkSpec := makeNetworkSpec("frontend", "macvlan")
 	fs := afero.NewMemMapFs()
 
-	ctx, sd, mockConn, mockPodman, zipPath := setupTestWithFS(t, fs, testFixture{
+	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
 		specs: []model.Unit{containerSpec, networkSpec},
 		existingUnits: map[string]string{
 			"webapp.container": renderContainer(t, fs, containerSpec),
@@ -219,7 +219,7 @@ func TestApply_Network_Changed_UnreferencedContainerNotRestarted(t *testing.T) {
 		existingState: map[string]string{"webapp.service": "active"},
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, zipPath)
+	mustApply(t, ctx, fs, sd, mockPodman, raw)
 
 	testutil.AssertStopped(t, mockConn, "frontend-network.service")
 	testutil.AssertNotStopped(t, mockConn, "webapp.service")
