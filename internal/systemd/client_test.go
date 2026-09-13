@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"codeberg.org/xchangeee/syslet/internal/model"
 	"github.com/spf13/afero"
 )
 
@@ -26,7 +27,7 @@ func TestClient_RuntimeState_Active(t *testing.T) {
 	ctx := context.Background()
 	mockConn := NewMockDBusConn()
 	mockConn.UnitStates["webapp.service"] = &UnitState{
-		ActiveState: "active",
+		ActiveState: ActiveStateActive,
 		Enabled:     true,
 	}
 	fs := afero.NewMemMapFs()
@@ -36,7 +37,7 @@ func TestClient_RuntimeState_Active(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RuntimeState failed: %v", err)
 	}
-	if state.ActiveState != "active" {
+	if state.ActiveState != ActiveStateActive {
 		t.Errorf("expected active state, got %q", state.ActiveState)
 	}
 	if !state.Enabled {
@@ -55,7 +56,7 @@ func TestClient_RuntimeState_Inactive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RuntimeState failed: %v", err)
 	}
-	if state.ActiveState != "inactive" {
+	if state.ActiveState != ActiveStateInactive {
 		t.Errorf("expected inactive state, got %q", state.ActiveState)
 	}
 	if state.Enabled {
@@ -63,15 +64,15 @@ func TestClient_RuntimeState_Inactive(t *testing.T) {
 	}
 }
 
-func TestClient_StartContainer(t *testing.T) {
+func TestClient_StartUnit(t *testing.T) {
 	ctx := context.Background()
 	mockConn := NewMockDBusConn()
 	fs := afero.NewMemMapFs()
 	client := NewClient(mockConn, fs)
 
-	err := client.StartContainer(ctx, "webapp.container")
+	err := client.StartUnit(ctx, model.ContainerUnitRef("webapp").ServiceUnitName())
 	if err != nil {
-		t.Fatalf("StartContainer failed: %v", err)
+		t.Fatalf("StartUnit failed: %v", err)
 	}
 
 	// Verify the service was started (not the container unit)
@@ -80,19 +81,18 @@ func TestClient_StartContainer(t *testing.T) {
 	}
 }
 
-func TestClient_StopContainer(t *testing.T) {
+func TestClient_StopUnit(t *testing.T) {
 	ctx := context.Background()
 	mockConn := NewMockDBusConn()
-	mockConn.UnitStates["webapp.service"] = &UnitState{ActiveState: "active"}
+	mockConn.UnitStates["webapp.service"] = &UnitState{ActiveState: ActiveStateActive}
 	fs := afero.NewMemMapFs()
 	client := NewClient(mockConn, fs)
 
-	err := client.StopContainer(ctx, "webapp.container")
+	err := client.StopUnit(ctx, model.ContainerUnitRef("webapp").ServiceUnitName())
 	if err != nil {
-		t.Fatalf("StopContainer failed: %v", err)
+		t.Fatalf("StopUnit failed: %v", err)
 	}
 
-	// Verify the service was stopped
 	if len(mockConn.Stopped) != 1 || mockConn.Stopped[0] != "webapp.service" {
 		t.Errorf("expected webapp.service to be stopped, got %v", mockConn.Stopped)
 	}
@@ -102,17 +102,17 @@ func TestClient_ContainerState(t *testing.T) {
 	ctx := context.Background()
 	mockConn := NewMockDBusConn()
 	mockConn.UnitStates["myapp.service"] = &UnitState{
-		ActiveState: "active",
+		ActiveState: ActiveStateActive,
 		Enabled:     true,
 	}
 	fs := afero.NewMemMapFs()
 	client := NewClient(mockConn, fs)
 
-	state, err := client.ContainerState(ctx, "myapp.container")
+	state, err := client.ContainerState(ctx, model.ContainerUnitRef("myapp"))
 	if err != nil {
 		t.Fatalf("ContainerState failed: %v", err)
 	}
-	if state.ActiveState != "active" {
+	if state.ActiveState != ActiveStateActive {
 		t.Errorf("expected active state, got %q", state.ActiveState)
 	}
 }
@@ -323,22 +323,20 @@ func TestClient_CustomQuadletDir(t *testing.T) {
 	}
 }
 
-func TestContainerServiceName(t *testing.T) {
+func TestContainerName_ServiceUnitName(t *testing.T) {
 	tests := []struct {
-		input    string
-		expected string
+		name     model.ContainerUnitRef
+		expected model.ServiceUnitName
 	}{
-		{"webapp.container", "webapp.service"},
-		{"myapp.container", "myapp.service"},
-		{"app", "app.service"},
-		{"multi.dot.name.container", "multi.dot.name.service"},
+		{"webapp", "webapp.service"},
+		{"myapp", "myapp.service"},
+		{"multi.dot.name", "multi.dot.name.service"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := containerServiceName(tt.input)
-			if result != tt.expected {
-				t.Errorf("containerServiceName(%q) = %q, want %q", tt.input, result, tt.expected)
+		t.Run(string(tt.name), func(t *testing.T) {
+			if got := tt.name.ServiceUnitName(); got != tt.expected {
+				t.Errorf("ContainerName(%q).ServiceUnitName() = %q, want %q", tt.name, got, tt.expected)
 			}
 		})
 	}

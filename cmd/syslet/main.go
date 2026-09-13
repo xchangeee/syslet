@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
@@ -42,6 +43,10 @@ func main() {
 	defer cancel()
 
 	fs := afero.NewOsFs()
+	mgrs := filestore.FileManagers{
+		Config: filestore.NewContainerConfigFileStore(fs),
+		Build:  filestore.NewBuildContextFileStore(fs),
+	}
 
 	dbusConn, err := systemd.NewDBusConnection(ctx)
 	if err != nil {
@@ -49,12 +54,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer dbusConn.Close()
-
 	sd := systemd.NewClient(dbusConn, fs)
+	jr := systemd.NewJournalReader()
+	sq := systemd.NewQuadletGenerator()
+	sa := systemd.NewSystemdAnalyze()
+
 	pc := podman.New()
 
-	// Build the plan once
-	plan, err := syslet.BuildPlan(ctx, fs, sd, configPath)
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, jr, sq, sa, configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -62,10 +69,12 @@ func main() {
 
 	if *diffFlag {
 		// Show diff without applying changes
-		syslet.Diff(plan)
+		syslet.DisplayPlan(os.Stdout, plan)
 	} else {
 		// Apply changes
-		if err := syslet.Apply(ctx, logger, fs, sd, pc, plan); err != nil {
+		err := syslet.Apply(ctx, logger, sd, jr, pc, mgrs, plan)
+		syslet.DisplayResults(os.Stdout, plan)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}

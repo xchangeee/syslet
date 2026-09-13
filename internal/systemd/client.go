@@ -6,83 +6,40 @@ package systemd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
-	"time"
 
-	"github.com/coreos/go-systemd/v22/dbus"
+	"codeberg.org/xchangeee/syslet/internal/model"
 	"github.com/spf13/afero"
 )
-
-const (
-	// QuadletUnitDir is where Podman quadlet files live.
-	QuadletUnitDir = "/etc/containers/systemd"
-)
-
-// JournalReader reads journal entries produced during a daemon-reload. It is
-// injectable so tests can provide a mock without spawning a real journalctl.
-type JournalReader interface {
-	// QuadletErrorsSince returns all messages logged by quadlet-generator
-	// after the given time, or nil if none were found.
-	QuadletErrorsSince(ctx context.Context, since time.Time) ([]string, error)
-}
-
-// journalctlReader is the real JournalReader that shells out to journalctl.
-type journalctlReader struct{}
-
-func (r *journalctlReader) QuadletErrorsSince(ctx context.Context, since time.Time) ([]string, error) {
-	sinceStr := since.Local().Format("2006-01-02 15:04:05")
-	cmd := exec.CommandContext(ctx,
-		"journalctl", "-b", "-t", "quadlet-generator",
-		"--since="+sinceStr, "-o", "cat", "--no-pager",
-	)
-	out, err := cmd.Output()
-	if err != nil {
-		// journalctl is not present on non-Linux hosts; treat as no entries.
-		if errors.Is(err, exec.ErrNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("journalctl: %w", err)
-	}
-	var lines []string
-	for _, line := range strings.Split(string(out), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			lines = append(lines, line)
-		}
-	}
-	return lines, nil
-}
-
-// DBusConn abstracts the systemd D-Bus connection for dependency injection.
-type DBusConn interface {
-	Close()
-	ReloadContext(ctx context.Context) error
-	GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error)
-	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
-}
 
 // Client wraps systemd D-Bus operations and unit file management.
 type Client struct {
 	conn           DBusConn
 	fs             afero.Fs
 	quadletUnitDir string
-	journal        JournalReader
+}
+
+// ActiveState is the runtime active state of a systemd unit.
+type ActiveState string
+
+const (
+	ActiveStateActive     ActiveState = "active"
+	ActiveStateInactive   ActiveState = "inactive"
+	ActiveStateFailed     ActiveState = "failed"
+	ActiveStateActivating ActiveState = "activating"
+)
+
+// IsRunning reports whether the unit is currently running or coming up.
+func (s ActiveState) IsRunning() bool {
+	return s == ActiveStateActive || s == ActiveStateActivating
 }
 
 // UnitState holds the runtime state of a unit.
 type UnitState struct {
-	ActiveState string // "active", "inactive", "failed", etc.
+	ActiveState ActiveState
 	Enabled     bool
-}
-
-// NewDBusConnection creates a real D-Bus connection to systemd.
-func NewDBusConnection(ctx context.Context) (DBusConn, error) {
-	return dbus.NewSystemConnectionContext(ctx)
 }
 
 // NewClient creates a new systemd client with provided dependencies.
@@ -91,7 +48,6 @@ func NewClient(conn DBusConn, fs afero.Fs) *Client {
 		conn:           conn,
 		fs:             fs,
 		quadletUnitDir: QuadletUnitDir,
-		journal:        &journalctlReader{},
 	}
 }
 
@@ -101,19 +57,7 @@ func NewClientWithPaths(conn DBusConn, fs afero.Fs, quadletDir string) *Client {
 		conn:           conn,
 		fs:             fs,
 		quadletUnitDir: quadletDir,
-		journal:        &journalctlReader{},
 	}
-}
-
-// WithJournalReader replaces the journal reader (for testing).
-func (c *Client) WithJournalReader(jr JournalReader) *Client {
-	c.journal = jr
-	return c
-}
-
-// QuadletErrorsSince returns messages logged by quadlet-generator after since.
-func (c *Client) QuadletErrorsSince(ctx context.Context, since time.Time) ([]string, error) {
-	return c.journal.QuadletErrorsSince(ctx, since)
 }
 
 // Close closes the D-Bus connection.
@@ -138,58 +82,62 @@ func (c *Client) RuntimeState(ctx context.Context, serviceName string) (*UnitSta
 	unitFileState, _ := props["UnitFileState"].(string)
 
 	return &UnitState{
-		ActiveState: activeState,
+		ActiveState: ActiveState(activeState),
 		Enabled:     unitFileState == "enabled" || unitFileState == "static",
 	}, nil
 }
 
-// StartContainer starts a container unit by its quadlet name (e.g. "webapp.container").
-// It maps the name to the generated .service unit for D-Bus.
-func (c *Client) StartContainer(ctx context.Context, containerName string) error {
-	serviceName := containerServiceName(containerName)
+// StartUnit starts the named systemd service.
+func (c *Client) StartUnit(ctx context.Context, name model.ServiceUnitName) error {
 	ch := make(chan string, 1)
-	_, err := c.conn.StartUnitContext(ctx, serviceName, "replace", ch)
+	_, err := c.conn.StartUnitContext(ctx, string(name), "replace", ch)
 	if err != nil {
-		return fmt.Errorf("starting %s: %w", serviceName, err)
+		return fmt.Errorf("starting %s: %w", name, err)
 	}
 	result := <-ch
 	if result != "done" {
-		return fmt.Errorf("starting %s: job result %s", serviceName, result)
+		return fmt.Errorf("starting %s: job result %s", name, result)
 	}
 	return nil
 }
 
-// StopContainer stops a container unit by its quadlet name (e.g. "webapp.container").
-func (c *Client) StopContainer(ctx context.Context, containerName string) error {
-	serviceName := containerServiceName(containerName)
+// StopUnit stops the named systemd service.
+func (c *Client) StopUnit(ctx context.Context, name model.ServiceUnitName) error {
 	ch := make(chan string, 1)
-	_, err := c.conn.StopUnitContext(ctx, serviceName, "replace", ch)
+	_, err := c.conn.StopUnitContext(ctx, string(name), "replace", ch)
 	if err != nil {
-		return fmt.Errorf("stopping %s: %w", serviceName, err)
+		return fmt.Errorf("stopping %s: %w", name, err)
 	}
 	result := <-ch
 	if result != "done" {
-		return fmt.Errorf("stopping %s: job result %s", serviceName, result)
+		return fmt.Errorf("stopping %s: job result %s", name, result)
 	}
 	return nil
 }
 
 // ContainerState returns the runtime state of a container, mapping the
-// quadlet .container name to the generated .service name for D-Bus queries.
-func (c *Client) ContainerState(ctx context.Context, containerName string) (*UnitState, error) {
-	return c.RuntimeState(ctx, containerServiceName(containerName))
+// base container name to the generated .service name for D-Bus queries.
+func (c *Client) ContainerState(ctx context.Context, container model.ContainerUnitRef) (*UnitState, error) {
+	return c.RuntimeState(ctx, string(container.ServiceUnitName()))
 }
 
-// containerServiceName maps a quadlet container name to its generated
-// systemd service name. e.g. "webapp.container" → "webapp.service"
-func containerServiceName(containerName string) string {
-	base := strings.TrimSuffix(containerName, filepath.Ext(containerName))
-	return base + ".service"
+// ReloadUnit sends a reload signal to the named unit (e.g. "webapp.service").
+func (c *Client) ReloadUnit(ctx context.Context, name string) error {
+	ch := make(chan string, 1)
+	_, err := c.conn.ReloadUnitContext(ctx, name, "replace", ch)
+	if err != nil {
+		return fmt.Errorf("reloading %s: %w", name, err)
+	}
+	result := <-ch
+	if result != "done" {
+		return fmt.Errorf("reloading %s: job result %s", name, result)
+	}
+	return nil
 }
 
 // ListUnitFiles returns the basenames of all files in the quadlet directory
 // matching the given extension (e.g. ".container", ".volume", ".network").
-func (c *Client) ListUnitFiles(ext string) ([]string, error) {
+func (c *Client) ListUnitFiles(ext string) ([]model.FullUnitName, error) {
 	entries, err := afero.ReadDir(c.fs, c.quadletUnitDir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -197,33 +145,33 @@ func (c *Client) ListUnitFiles(ext string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", c.quadletUnitDir, err)
 	}
-	var names []string
+	var names []model.FullUnitName
 	for _, e := range entries {
 		if !e.IsDir() && filepath.Ext(e.Name()) == ext {
-			names = append(names, e.Name())
+			names = append(names, model.FullUnitName(e.Name()))
 		}
 	}
 	return names, nil
 }
 
 // ReadUnitFile reads the content of an installed unit file.
-func (c *Client) ReadUnitFile(fullUnitName string) ([]byte, error) {
-	path := filepath.Join(c.quadletUnitDir, fullUnitName)
+func (c *Client) ReadUnitFile(unit model.FullUnitName) ([]byte, error) {
+	path := filepath.Join(c.quadletUnitDir, string(unit))
 	return afero.ReadFile(c.fs, path)
 }
 
 // WriteUnitFile writes a unit file to the quadlet directory.
-func (c *Client) WriteUnitFile(fullUnitName string, content []byte) error {
+func (c *Client) WriteUnitFile(unit model.FullUnitName, content []byte) error {
 	if err := c.fs.MkdirAll(c.quadletUnitDir, 0755); err != nil {
 		return fmt.Errorf("creating unit dir %s: %w", c.quadletUnitDir, err)
 	}
-	path := filepath.Join(c.quadletUnitDir, fullUnitName)
+	path := filepath.Join(c.quadletUnitDir, string(unit))
 	return afero.WriteFile(c.fs, path, content, 0644)
 }
 
 // RemoveUnitFile removes an installed unit file.
-func (c *Client) RemoveUnitFile(fullUnitName string) error {
-	path := filepath.Join(c.quadletUnitDir, fullUnitName)
+func (c *Client) RemoveUnitFile(unit model.FullUnitName) error {
+	path := filepath.Join(c.quadletUnitDir, string(unit))
 	err := c.fs.Remove(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -232,8 +180,8 @@ func (c *Client) RemoveUnitFile(fullUnitName string) error {
 }
 
 // UnitFileExists checks if a unit file is installed.
-func (c *Client) UnitFileExists(fullUnitName string) bool {
-	path := filepath.Join(c.quadletUnitDir, fullUnitName)
+func (c *Client) UnitFileExists(unit string) bool {
+	path := filepath.Join(c.quadletUnitDir, unit)
 	_, err := c.fs.Stat(path)
 	return err == nil
 }

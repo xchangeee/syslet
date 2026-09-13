@@ -3,253 +3,13 @@ package syslet
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"os"
-	"regexp"
-	"strings"
 	"time"
 
-	"codeberg.org/xchangeee/syslet/internal/api"
-	"codeberg.org/xchangeee/syslet/internal/containerconfig"
+	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
-
-	"github.com/aymanbagabas/go-udiff"
-	gounit "github.com/coreos/go-systemd/v22/unit"
-	"github.com/spf13/afero"
 )
-
-// Per-phase operation structs for the apply plan.
-
-// StopOp represents a container that needs to be stopped.
-type StopOp struct {
-	fullName string
-}
-
-// ConfigFileWrite represents a config file to write.
-type ConfigFileWrite struct {
-	containerName string
-	filename      string
-	content       string
-	oldContent    string // empty if new file
-}
-
-// ConfigFileDelete represents a config file to delete.
-type ConfigFileDelete struct {
-	containerName string
-	filename      string
-}
-
-// ConfigDirDelete represents a container config directory to delete entirely.
-type ConfigDirDelete struct {
-	containerName string
-}
-
-// UnitFileWrite represents a unit file to write.
-type UnitFileWrite struct {
-	fullName   string
-	content    string
-	oldContent string // empty if new file
-}
-
-// UnitFileDelete represents a unit file to delete (prune).
-type UnitFileDelete struct {
-	fullName string
-}
-
-// StartOp represents a container that needs to be started.
-type StartOp struct {
-	fullName string
-}
-
-// VolumeDeleteOp represents a volume that needs to be deleted via podman.
-type VolumeDeleteOp struct {
-	name string
-}
-
-// NetworkDeleteOp represents a network that needs to be deleted via podman.
-type NetworkDeleteOp struct {
-	name string
-}
-
-// BuildFileWrite represents a build context file to write.
-type BuildFileWrite struct {
-	buildName  string
-	filename   string
-	content    string
-	oldContent string // empty if new file
-}
-
-// BuildFileDelete represents a build context file to delete.
-type BuildFileDelete struct {
-	buildName string
-	filename  string
-}
-
-// BuildDirDelete represents a build context directory to delete entirely.
-type BuildDirDelete struct {
-	buildName string
-}
-
-// ImageDeleteOp represents an image that needs to be deleted via podman.
-type ImageDeleteOp struct {
-	tag string
-}
-
-// ApplyResult tracks the outcome for a single unit (for summary reporting).
-type ApplyResult struct {
-	fullName string
-	status   string // "created", "updated", "unchanged", "removed", "error"
-	message  string
-	errored  bool
-}
-
-// ApplyPlan contains all operations to execute, organized by phase.
-// This is the global struct passed to diff functions to accumulate operations.
-type ApplyPlan struct {
-	StopContainers   []StopOp
-	WriteConfigs     []ConfigFileWrite
-	DeleteConfigs    []ConfigFileDelete
-	DeleteConfigDirs []ConfigDirDelete
-	WriteBuildFiles  []BuildFileWrite
-	DeleteBuildFiles []BuildFileDelete
-	DeleteBuildDirs  []BuildDirDelete
-	WriteUnits       []UnitFileWrite
-	DeleteUnits      []UnitFileDelete
-	DeleteVolumes    []VolumeDeleteOp
-	DeleteNetworks   []NetworkDeleteOp
-	DeleteImages     []ImageDeleteOp
-	StartContainers  []StartOp
-
-	// set during diff if daemon-reload is needed
-	NeedsReload bool
-
-	// final summary for reporting
-	Results []ApplyResult
-}
-
-// BuildPlan reads specs from a zip file or directory, validates them, and builds
-// an execution plan by diffing against the installed state.
-// Returns the plan without executing it.
-func BuildPlan(ctx context.Context, fs afero.Fs, sd *systemd.Client, path string) (*ApplyPlan, error) {
-	specs, err := api.LoadSpecsFS(fs, path)
-	if err != nil {
-		return nil, err
-	}
-
-	// Pre-render validation: check raw input data.
-	if err := api.ValidateSpecs(specs); err != nil {
-		return nil, fmt.Errorf("pre-render validation: %w", err)
-	}
-
-	cfg := containerconfig.NewConfigFileManager(fs)
-	buildMgr := containerconfig.NewBuildFileManager(fs)
-
-	// Render all specs to intermediate unit options.
-	var containers, volumes, networks, builds []api.RenderedUnit
-	specNames := make(map[string]bool)
-
-	for _, s := range specs {
-		var r api.RenderedUnit
-		var err error
-
-		switch s.GetType() {
-		case api.SpecTypeContainer:
-			r, err = s.(*api.ContainerSpec).Render(cfg.BaseDirectory())
-			if err != nil {
-				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
-			}
-			containers = append(containers, r)
-		case api.SpecTypeVolume:
-			r, err = s.(*api.VolumeSpec).Render()
-			if err != nil {
-				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
-			}
-			volumes = append(volumes, r)
-		case api.SpecTypeNetwork:
-			r, err = s.(*api.NetworkSpec).Render()
-			if err != nil {
-				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
-			}
-			networks = append(networks, r)
-		case api.SpecTypeBuild:
-			r, err = s.(*api.BuildSpec).Render(buildMgr.BaseDirectory())
-			if err != nil {
-				return nil, fmt.Errorf("rendering %s: %w", s.GetName(), err)
-			}
-			builds = append(builds, r)
-		}
-		specNames[s.FullUnitName()] = true
-	}
-
-	// Post-render validation: check rendered units and cross-references.
-	if err := api.ValidateRenderedUnits(containers, volumes, networks, builds); err != nil {
-		return nil, fmt.Errorf("post-render validation: %w", err)
-	}
-
-	// Serialize unit options to strings after validation passes.
-	for i := range containers {
-		content, err := containers[i].SerializeUnitOptions()
-		if err != nil {
-			return nil, fmt.Errorf("serializing %s: %w", containers[i].Spec.GetName(), err)
-		}
-		containers[i].Content = content
-	}
-	for i := range volumes {
-		content, err := volumes[i].SerializeUnitOptions()
-		if err != nil {
-			return nil, fmt.Errorf("serializing %s: %w", volumes[i].Spec.GetName(), err)
-		}
-		volumes[i].Content = content
-	}
-	for i := range networks {
-		content, err := networks[i].SerializeUnitOptions()
-		if err != nil {
-			return nil, fmt.Errorf("serializing %s: %w", networks[i].Spec.GetName(), err)
-		}
-		networks[i].Content = content
-	}
-	for i := range builds {
-		content, err := builds[i].SerializeUnitOptions()
-		if err != nil {
-			return nil, fmt.Errorf("serializing %s: %w", builds[i].Spec.GetName(), err)
-		}
-		builds[i].Content = content
-	}
-
-	// Build the apply plan by diffing all specs.
-	plan := &ApplyPlan{}
-
-	// Diff containers (handles config files, unit files, start/stop).
-	for _, r := range containers {
-		if err := diffContainer(ctx, sd, cfg, plan, r); err != nil {
-			return nil, fmt.Errorf("diffing container %s: %w", r.Spec.GetName(), err)
-		}
-	}
-
-	// Diff volumes and networks (unit files only).
-	for _, r := range volumes {
-		diffSimple(sd, plan, r)
-	}
-	for _, r := range networks {
-		diffSimple(sd, plan, r)
-	}
-
-	// Diff builds (unit files + build context files).
-	for _, r := range builds {
-		if err := diffBuild(sd, buildMgr, plan, r); err != nil {
-			return nil, fmt.Errorf("diffing build %s: %w", r.Spec.GetName(), err)
-		}
-	}
-
-	// Find installed files that are NOT in the current spec set (stale → prune).
-	if err := findStaleUnits(ctx, sd, plan, specNames, specs); err != nil {
-		return nil, fmt.Errorf("finding stale units: %w", err)
-	}
-
-	return plan, nil
-}
 
 // Apply executes a pre-built plan in coordinated order:
 //  1. Stop containers that changed or are being pruned
@@ -259,126 +19,145 @@ func BuildPlan(ctx context.Context, fs afero.Fs, sd *systemd.Client, path string
 //  5. Delete podman volumes and networks (if ReclaimPolicy is "Delete")
 //  6. Single daemon-reload
 //  7. Start containers that should be running
-func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Client, pc podman.Interface, plan *ApplyPlan) error {
-	cfg := containerconfig.NewConfigFileManager(fs)
-	buildMgr := containerconfig.NewBuildFileManager(fs)
+func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr systemd.JournalReader, pc podman.Interface, mgrs filestore.FileManagers, plan *ApplyPlan) error {
+	if plan.HasErrors() {
+		return fmt.Errorf("plan has errors, refusing to apply (fix planning errors first)")
+	}
+
+	r := &applyRunner{logger: logger, plan: plan}
 
 	// Execute in strict global order (4 phases).
 
-	// Phase 1: Stop containers that need stopping.
-	for _, op := range plan.StopContainers {
-		logger.Info("stopping", "unit", op.fullName)
-		if err := sd.StopContainer(ctx, op.fullName); err != nil {
-			logger.Error("failed to stop", "unit", op.fullName, "error", err)
-			recordError(plan, op.fullName, fmt.Sprintf("failed to stop: %v", err))
-		}
+	// Phase 1: Stop all services that need stopping (containers and network services).
+	for _, op := range plan.StopSystemdServices {
+		r.execUnit("stopping", op.ref.FullName(),
+			func() error { return sd.StopUnit(ctx, op.ref.ServiceUnitName()) },
+			"unit", op.ref.FullName())
 	}
 
 	// Phase 2: Write and delete config files.
-	for _, op := range plan.WriteConfigs {
-		logger.Info("writing config", "container", op.containerName, "file", op.filename)
-		if err := cfg.Write(op.containerName, op.filename, op.content); err != nil {
-			logger.Error("failed to write config", "container", op.containerName, "file", op.filename, "error", err)
-			recordError(plan, op.containerName+".container", fmt.Sprintf("failed to write config %s: %v", op.filename, err))
+	for _, op := range plan.WriteFsContainerConfigFiles {
+		r.execUnit("writing config", op.container.FullName(),
+			func() error { return mgrs.Config.WriteFile(op.container, op.mountPath, op.content, op.mode) },
+			"container", op.container, "mountPath", op.mountPath)
+	}
+	for _, op := range plan.DeleteFsContainerConfigFiles {
+		r.exec("removing stale config",
+			func() error { return mgrs.Config.RemoveFile(op.container, op.internalFilename) },
+			"container", op.container, "file", op.internalFilename)
+	}
+	for _, op := range plan.DeleteFsContainerConfigs {
+		r.exec("removing config directory",
+			func() error { return mgrs.Config.RemoveUnit(op.container) },
+			"container", op.container)
+	}
+
+	// Phase 3a: Write and delete configDir groups.
+	for _, op := range plan.WriteFsContainerConfigDirs {
+		logger.Info("writing configDir", "container", op.container, "mountPath", op.mountPath, "version", op.version)
+		writeErr := false
+		for _, f := range op.files {
+			if err := mgrs.Config.WriteVersionedDirFile(op.container, op.mountPath, op.version, f.Name, f.Mode, f.Content); err != nil {
+				logger.Error("failed to write configDir file", "container", op.container, "mountPath", op.mountPath, "file", f.Name, "error", err)
+				plan.RecordError(op.container.FullName(), fmt.Sprintf("failed to write configDir %s file %s: %v", op.mountPath, f.Name, err))
+				writeErr = true
+			}
+		}
+		if writeErr {
+			continue
+		}
+		if err := mgrs.Config.UpdateDirSymlink(op.container, op.mountPath, op.version); err != nil {
+			logger.Error("failed to update configDir symlink", "container", op.container, "mountPath", op.mountPath, "error", err)
+			plan.RecordError(op.container.FullName(), fmt.Sprintf("failed to update configDir symlink %s: %v", op.mountPath, err))
+			continue
+		}
+		if err := mgrs.Config.PruneOldVersions(op.container, op.mountPath, op.version); err != nil {
+			logger.Error("failed to prune old configDir versions", "container", op.container, "mountPath", op.mountPath, "error", err)
 		}
 	}
-	for _, op := range plan.DeleteConfigs {
-		logger.Info("removing stale config", "container", op.containerName, "file", op.filename)
-		if err := cfg.RemoveFile(op.containerName, op.filename); err != nil {
-			logger.Error("failed to remove stale config", "container", op.containerName, "file", op.filename, "error", err)
-		}
-	}
-	for _, op := range plan.DeleteConfigDirs {
-		logger.Info("removing config directory", "container", op.containerName)
-		if err := cfg.RemoveAll(op.containerName); err != nil {
-			logger.Error("failed to remove config dir", "container", op.containerName, "error", err)
-		}
+	for _, op := range plan.DeleteFsContainerConfigDirs {
+		r.exec("removing stale configDir group",
+			func() error { return mgrs.Config.RemoveDir(op.container, op.mountPathHash) },
+			"container", op.container, "hash", op.mountPathHash)
 	}
 
 	// Write and delete build context files.
-	for _, op := range plan.WriteBuildFiles {
-		logger.Info("writing build file", "build", op.buildName, "file", op.filename)
-		if err := buildMgr.Write(op.buildName, op.filename, op.content); err != nil {
-			logger.Error("failed to write build file", "build", op.buildName, "file", op.filename, "error", err)
-			recordError(plan, op.buildName+".build", fmt.Sprintf("failed to write build file %s: %v", op.filename, err))
-		}
+	for _, op := range plan.WriteFsBuildContextFiles {
+		r.execUnit("writing build file", op.build.FullName(),
+			func() error { return mgrs.Build.WriteFile(string(op.build), op.filename, op.content, op.mode) },
+			"build", op.build, "file", op.filename)
 	}
-	for _, op := range plan.DeleteBuildFiles {
-		logger.Info("removing stale build file", "build", op.buildName, "file", op.filename)
-		if err := buildMgr.RemoveFile(op.buildName, op.filename); err != nil {
-			logger.Error("failed to remove stale build file", "build", op.buildName, "file", op.filename, "error", err)
-		}
+	for _, op := range plan.DeleteFsBuildContextFiles {
+		r.exec("removing stale build file",
+			func() error { return mgrs.Build.RemoveFile(string(op.build), op.filename) },
+			"build", op.build, "file", op.filename)
 	}
-	for _, op := range plan.DeleteBuildDirs {
-		logger.Info("removing build context directory", "build", op.buildName)
-		if err := buildMgr.RemoveAll(op.buildName); err != nil {
-			logger.Error("failed to remove build context dir", "build", op.buildName, "error", err)
-		}
+	for _, op := range plan.DeleteFsBuildContexts {
+		r.exec("removing build context directory",
+			func() error { return mgrs.Build.RemoveUnit(string(op.build)) },
+			"build", op.build)
 	}
 
 	// Phase 3: Write and delete unit files.
-	for _, op := range plan.WriteUnits {
-		logger.Info("writing unit file", "unit", op.fullName)
-		if err := sd.WriteUnitFile(op.fullName, []byte(op.content)); err != nil {
-			logger.Error("failed to write unit file", "unit", op.fullName, "error", err)
-			recordError(plan, op.fullName, fmt.Sprintf("failed to write unit file: %v", err))
-		}
+	for _, op := range plan.WriteFsQuadletUnitFiles {
+		r.execUnit("writing unit file", op.fullUnitName,
+			func() error { return sd.WriteUnitFile(op.fullUnitName, []byte(op.content)) },
+			"unit", op.fullUnitName)
 	}
-	for _, op := range plan.DeleteUnits {
-		logger.Info("removing stale unit", "unit", op.fullName)
-		if err := sd.RemoveUnitFile(op.fullName); err != nil {
-			logger.Error("failed to remove unit file", "unit", op.fullName, "error", err)
-		}
+	for _, op := range plan.DeleteFsQuadletUnitFiles {
+		r.exec("removing stale unit",
+			func() error { return sd.RemoveUnitFile(op.fullUnitName) },
+			"unit", op.fullUnitName)
 	}
 
 	// Delete podman volumes and networks if requested.
-	for _, op := range plan.DeleteVolumes {
-		logger.Info("deleting podman volume", "name", op.name)
-		if err := pc.DeleteVolume(ctx, op.name); err != nil {
-			logger.Error("failed to delete volume", "name", op.name, "error", err)
-		}
+	for _, op := range plan.DeletePodmanVolumes {
+		r.exec("deleting podman volume",
+			func() error { return pc.DeleteVolume(ctx, string(op.volume)) },
+			"name", op.volume)
 	}
-	for _, op := range plan.DeleteNetworks {
-		logger.Info("deleting podman network", "name", op.name)
-		if err := pc.DeleteNetwork(ctx, op.name); err != nil {
-			logger.Error("failed to delete network", "name", op.name, "error", err)
-		}
+	for _, op := range plan.DeletePodmanNetworks {
+		r.exec("deleting podman network",
+			func() error { return pc.DeleteNetwork(ctx, string(op.network)) },
+			"name", op.network)
 	}
-	for _, op := range plan.DeleteImages {
-		logger.Info("deleting podman image", "tag", op.tag)
-		if err := pc.DeleteImage(ctx, op.tag); err != nil {
-			logger.Error("failed to delete image", "tag", op.tag, "error", err)
-		}
+	for _, op := range plan.DeletePodmanImages {
+		r.exec("deleting podman image",
+			func() error { return pc.DeleteImage(ctx, string(op.tag)) },
+			"tag", op.tag)
 	}
 
 	// Single daemon-reload if needed.
-	var quadletFailed map[string]bool
-	if plan.NeedsReload {
+	if plan.NeedsReload() {
 		reloadTime := time.Now()
 		logger.Info("daemon-reload")
 		if err := sd.DaemonReload(ctx); err != nil {
 			logger.Error("daemon-reload failed", "error", err)
+			messages, jErr := jr.QuadletErrorsSince(ctx, reloadTime)
+			if jErr != nil {
+				logger.Warn("could not read quadlet-generator errors from journal", "error", jErr)
+			} else {
+				for _, msg := range messages {
+					logger.Error("quadlet generator error", "message", msg)
+				}
+			}
+			return fmt.Errorf("daemon-reload failed: %w", err)
 		}
-		quadletFailed = collectQuadletErrors(ctx, logger, sd, reloadTime)
+	}
+
+	// Phase 4a: Reload containers that only need in-place config reload (no restart).
+	for _, op := range plan.ReloadSystemdServices {
+		fullName := op.container.FullName()
+		r.execUnit("reloading", fullName,
+			func() error { return sd.ReloadUnit(ctx, string(op.container.ServiceUnitName())) },
+			"unit", fullName)
 	}
 
 	// Phase 4: Start containers that need starting.
-	for _, op := range plan.StartContainers {
-		if quadletFailed[op.fullName] {
-			logger.Error("skipping start: quadlet generator failed to process unit", "unit", op.fullName)
-			recordError(plan, op.fullName, "quadlet generator failed to process unit file")
-			continue
-		}
-		logger.Info("starting", "unit", op.fullName)
-		if err := sd.StartContainer(ctx, op.fullName); err != nil {
-			logger.Error("failed to start", "unit", op.fullName, "error", err)
-			recordError(plan, op.fullName, fmt.Sprintf("failed to start: %v", err))
-		}
-	}
-
-	// Print summary.
-	for _, result := range plan.Results {
-		fmt.Printf("%-40s %-10s %s\n", result.fullName, result.status, result.message)
+	for _, op := range plan.StartSystemdServices {
+		r.execUnit("starting", op.ref.FullName(),
+			func() error { return sd.StartUnit(ctx, op.ref.ServiceUnitName()) },
+			"unit", op.ref.FullName())
 	}
 
 	// Return error if any operations failed.
@@ -388,282 +167,4 @@ func Apply(ctx context.Context, logger *slog.Logger, fs afero.Fs, sd *systemd.Cl
 		}
 	}
 	return nil
-}
-
-// containerNameRe matches quadlet container unit names in journal messages,
-// e.g. "listmonk-server.container" or "webapp.container".
-var containerNameRe = regexp.MustCompile(`[a-zA-Z0-9][a-zA-Z0-9_-]*\.container`)
-
-// collectQuadletErrors queries the journal for quadlet-generator messages since
-// the given time and returns the set of container unit names that failed to
-// generate. Errors are logged as warnings; callers receive an empty set on
-// failure so the start phase can still proceed.
-func collectQuadletErrors(ctx context.Context, logger *slog.Logger, sd *systemd.Client, since time.Time) map[string]bool {
-	failed := make(map[string]bool)
-	messages, err := sd.QuadletErrorsSince(ctx, since)
-	if err != nil {
-		logger.Warn("could not read quadlet-generator errors from journal", "error", err)
-		return failed
-	}
-	for _, msg := range messages {
-		name := containerNameRe.FindString(msg)
-		if name != "" {
-			logger.Error("quadlet generator error", "unit", name, "message", msg)
-			failed[name] = true
-		} else {
-			logger.Error("quadlet generator error", "message", msg)
-		}
-	}
-	return failed
-}
-
-// recordError adds an error result to the plan.
-func recordError(plan *ApplyPlan, fullName, message string) {
-	// Check if result already exists, update it.
-	for i := range plan.Results {
-		if plan.Results[i].fullName == fullName {
-			plan.Results[i].errored = true
-			plan.Results[i].status = "error"
-			plan.Results[i].message = message
-			return
-		}
-	}
-	// Otherwise add a new error result.
-	plan.Results = append(plan.Results, ApplyResult{
-		fullName: fullName,
-		status:   "error",
-		message:  message,
-		errored:  true,
-	})
-}
-
-// Diff displays what would change based on a pre-built plan
-// without actually applying the changes.
-func Diff(plan *ApplyPlan) {
-	DisplayDiff(os.Stdout, plan)
-}
-
-// displayContentDiff prints a semantic diff between old and new content.
-// For systemd unit files, parses the content into structured options and compares
-// them semantically, showing additions/removals with section context.
-// For config files, uses text-based unified diff.
-func displayContentDiff(w io.Writer, name, oldContent, newContent string) {
-	// Only use semantic diff for systemd unit files (not config files)
-	isUnitFile := strings.HasSuffix(name, ".container") ||
-		strings.HasSuffix(name, ".volume") ||
-		strings.HasSuffix(name, ".network")
-
-	if !isUnitFile {
-		// Config files: use text diff
-		displayTextDiff(w, name, oldContent, newContent)
-		return
-	}
-
-	// Parse both contents into structured options
-	oldOpts, err := gounit.Deserialize(strings.NewReader(oldContent))
-	if err != nil {
-		// Fallback to text diff if parsing fails
-		displayTextDiff(w, name, oldContent, newContent)
-		return
-	}
-
-	newOpts, err := gounit.Deserialize(strings.NewReader(newContent))
-	if err != nil {
-		// Fallback to text diff if parsing fails
-		displayTextDiff(w, name, oldContent, newContent)
-		return
-	}
-
-	// Create maps for comparison: "section:name:value" -> count
-	oldMap := make(map[string]int)
-	newMap := make(map[string]int)
-
-	for _, opt := range oldOpts {
-		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
-		oldMap[key]++
-	}
-
-	for _, opt := range newOpts {
-		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
-		newMap[key]++
-	}
-
-	// Find differences
-	var additions, removals []api.UnitOption
-
-	// Find removals (in old but not in new, or fewer occurrences)
-	for _, opt := range oldOpts {
-		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
-		if oldMap[key] > newMap[key] {
-			removals = append(removals, api.UnitOption{
-				Section: opt.Section,
-				Name:    opt.Name,
-				Value:   opt.Value,
-			})
-			oldMap[key]-- // Track that we've processed one occurrence
-		}
-	}
-
-	// Find additions (in new but not in old, or more occurrences)
-	for _, opt := range newOpts {
-		key := fmt.Sprintf("%s:%s:%s", opt.Section, opt.Name, opt.Value)
-		if newMap[key] > oldMap[key] {
-			additions = append(additions, api.UnitOption{
-				Section: opt.Section,
-				Name:    opt.Name,
-				Value:   opt.Value,
-			})
-			newMap[key]-- // Track that we've processed one occurrence
-		}
-	}
-
-	if len(removals) == 0 && len(additions) == 0 {
-		return // No semantic changes
-	}
-
-	_, _ = fmt.Fprintf(w, "\n--- %s (current)\n", name)
-	_, _ = fmt.Fprintf(w, "+++ %s (new)\n", name)
-
-	for _, opt := range removals {
-		_, _ = fmt.Fprintf(w, "- [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
-	}
-	for _, opt := range additions {
-		_, _ = fmt.Fprintf(w, "+ [%s] %s=%s\n", opt.Section, opt.Name, opt.Value)
-	}
-}
-
-// displayTextDiff is a fallback for non-unit files or when parsing fails.
-// Uses unified diff format for better readability.
-func displayTextDiff(w io.Writer, name, oldContent, newContent string) {
-	diff := udiff.Unified(name+" (current)", name+" (new)", oldContent, newContent)
-	if diff != "" {
-		_, _ = fmt.Fprint(w, diff)
-	}
-}
-
-// DisplayDiff prints a human-readable diff showing what would change.
-// It shows operations that would be performed and the final status of each unit.
-func DisplayDiff(w io.Writer, plan *ApplyPlan) {
-	// Print operations that would be performed
-	hasChanges := false
-
-	if len(plan.StopContainers) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nContainers to stop:")
-		for _, op := range plan.StopContainers {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullName)
-		}
-	}
-
-	if len(plan.WriteConfigs) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nConfig file changes:")
-		for _, op := range plan.WriteConfigs {
-			displayContentDiff(w, fmt.Sprintf("%s/%s", op.containerName, op.filename), op.oldContent, op.content)
-		}
-	}
-
-	if len(plan.DeleteConfigs) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nConfig files to delete:")
-		for _, op := range plan.DeleteConfigs {
-			_, _ = fmt.Fprintf(w, "  - %s/%s\n", op.containerName, op.filename)
-		}
-	}
-
-	if len(plan.DeleteConfigDirs) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nConfig directories to delete:")
-		for _, op := range plan.DeleteConfigDirs {
-			_, _ = fmt.Fprintf(w, "  - %s/\n", op.containerName)
-		}
-	}
-
-	if len(plan.WriteBuildFiles) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nBuild context file changes:")
-		for _, op := range plan.WriteBuildFiles {
-			displayContentDiff(w, fmt.Sprintf("%s/%s", op.buildName, op.filename), op.oldContent, op.content)
-		}
-	}
-
-	if len(plan.DeleteBuildFiles) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nBuild context files to delete:")
-		for _, op := range plan.DeleteBuildFiles {
-			_, _ = fmt.Fprintf(w, "  - %s/%s\n", op.buildName, op.filename)
-		}
-	}
-
-	if len(plan.DeleteBuildDirs) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nBuild context directories to delete:")
-		for _, op := range plan.DeleteBuildDirs {
-			_, _ = fmt.Fprintf(w, "  - %s/\n", op.buildName)
-		}
-	}
-
-	if len(plan.WriteUnits) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nUnit file changes:")
-		for _, op := range plan.WriteUnits {
-			displayContentDiff(w, op.fullName, op.oldContent, op.content)
-		}
-	}
-
-	if len(plan.DeleteUnits) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nUnit files to delete:")
-		for _, op := range plan.DeleteUnits {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullName)
-		}
-	}
-
-	if len(plan.DeleteVolumes) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nPodman volumes to delete:")
-		for _, op := range plan.DeleteVolumes {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.name)
-		}
-	}
-
-	if len(plan.DeleteNetworks) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nPodman networks to delete:")
-		for _, op := range plan.DeleteNetworks {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.name)
-		}
-	}
-
-	if len(plan.DeleteImages) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nPodman images to delete:")
-		for _, op := range plan.DeleteImages {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.tag)
-		}
-	}
-
-	if plan.NeedsReload {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nSystemd daemon-reload: required")
-	}
-
-	if len(plan.StartContainers) > 0 {
-		hasChanges = true
-		_, _ = fmt.Fprintln(w, "\nContainers to start:")
-		for _, op := range plan.StartContainers {
-			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullName)
-		}
-	}
-
-	// Print summary of all units
-	_, _ = fmt.Fprintln(w, "\nSummary:")
-	_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", "UNIT", "STATUS", "CHANGES")
-	for _, result := range plan.Results {
-		_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", result.fullName, result.status, result.message)
-	}
-
-	if !hasChanges {
-		_, _ = fmt.Fprintln(w, "\nNo changes detected. All units are up to date.")
-	}
 }

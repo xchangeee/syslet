@@ -1,12 +1,21 @@
 {
   "permissions": {
     "allow": [
+      "Bash(find:*)",
+      "Bash(go build:*)",
+      "Bash(go doc:*)",
+      "Bash(go get:*)",
+      "Bash(go test:*)",
+      "Bash(grep:*)",
       "Bash(make build:*)",
       "Bash(make check:*)",
       "Bash(make coverage:*)",
       "Bash(make deps:*)",
       "Bash(make fmt:*)",
-      "Bash(make test:*)"
+      "Bash(make test:*)",
+      "Bash(sed:*)",
+      "Bash(tree:*)",
+      "Bash(xargs ls:*)"
     ]
   }
 }
