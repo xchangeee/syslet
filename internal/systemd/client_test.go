@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
 	"github.com/spf13/afero"
+
+	"codeberg.org/xchangeee/syslet/internal/model"
 )
 
 func TestClient_DaemonReload(t *testing.T) {

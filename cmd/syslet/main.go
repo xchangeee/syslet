@@ -31,6 +31,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/spf13/afero"
+
 	sysletage "codeberg.org/xchangeee/syslet/internal/age"
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/filestore"
@@ -38,7 +40,6 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/sops"
 	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"github.com/spf13/afero"
 )
 
 const defaultConfigPath = "/etc/syslet/config.json"

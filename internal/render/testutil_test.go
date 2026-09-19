@@ -3,9 +3,10 @@ package render
 import (
 	"path/filepath"
 
+	gounit "github.com/coreos/go-systemd/v22/unit"
+
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/util"
-	gounit "github.com/coreos/go-systemd/v22/unit"
 )
 
 // testContainerResolve returns a ContainerResolverFactory that mirrors the production

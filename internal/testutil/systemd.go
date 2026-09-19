@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"slices"
 	"testing"
 
 	"codeberg.org/xchangeee/syslet/internal/systemd"
@@ -43,11 +44,9 @@ func AssertNoneStopped(t *testing.T, mockConn *systemd.MockDBusConn) {
 // AssertNotStopped checks that the given unit was not stopped.
 func AssertNotStopped(t *testing.T, mockConn *systemd.MockDBusConn, unit string) {
 	t.Helper()
-	for _, s := range mockConn.Stopped {
-		if s == unit {
-			t.Errorf("expected %s not to be stopped, but it was (stopped: %v)", unit, mockConn.Stopped)
-			return
-		}
+	if slices.Contains(mockConn.Stopped, unit) {
+		t.Errorf("expected %s not to be stopped, but it was (stopped: %v)", unit, mockConn.Stopped)
+		return
 	}
 }
 

@@ -3,8 +3,9 @@ package render
 import (
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
 	gounit "github.com/coreos/go-systemd/v22/unit"
+
+	"codeberg.org/xchangeee/syslet/internal/model"
 )
 
 // --- IsReclaimPolicyDelete pure function tests ---

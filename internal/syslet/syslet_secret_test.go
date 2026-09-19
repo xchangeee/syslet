@@ -18,13 +18,14 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/sops"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/util"
-	"github.com/spf13/afero"
 )
 
 // secretTestDecryptor returns a Decryptor backed by the syslet test key file.

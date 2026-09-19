@@ -4,9 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	gounit "github.com/coreos/go-systemd/v22/unit"
+
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/render"
-	gounit "github.com/coreos/go-systemd/v22/unit"
 )
 
 // --- Helpers ---

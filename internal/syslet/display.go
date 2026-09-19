@@ -7,9 +7,10 @@ import (
 	"slices"
 	"strings"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
 	"github.com/aymanbagabas/go-udiff"
 	gounit "github.com/coreos/go-systemd/v22/unit"
+
+	"codeberg.org/xchangeee/syslet/internal/model"
 )
 
 // secretKey extracts the key portion from a full podman secret name "<specname>-<key>".

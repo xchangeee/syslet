@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/getsops/sops/v3/decrypt"
+	"gopkg.in/yaml.v3"
 
 	"codeberg.org/xchangeee/syslet/internal/model"
 )

@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/render"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"github.com/spf13/afero"
 )
 
 // Staging manages a persistent temporary directory for pre-flight validation

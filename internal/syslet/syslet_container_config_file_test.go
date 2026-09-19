@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
-
-	"github.com/spf13/afero"
 )
 
 func TestApply_ContainerConfigFile_NoModeSpecified_DefaultsTo0644(t *testing.T) {

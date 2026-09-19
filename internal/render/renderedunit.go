@@ -7,8 +7,9 @@ import (
 	"io"
 	"slices"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
 	gounit "github.com/coreos/go-systemd/v22/unit"
+
+	"codeberg.org/xchangeee/syslet/internal/model"
 )
 
 // RenderedUnit holds a unit and its rendered unit options before serialization.

@@ -3,9 +3,10 @@ package syslet
 import (
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
-	"github.com/spf13/afero"
 )
 
 func makeContainerSpecWithNetwork(name, image string, state model.DesiredState, networkName string) *model.ContainerUnit {

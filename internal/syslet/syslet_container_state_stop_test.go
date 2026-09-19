@@ -3,9 +3,10 @@ package syslet
 import (
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
-	"github.com/spf13/afero"
 )
 
 func TestApply_Container_NewWithStoppedState_WritesUnitOnly(t *testing.T) {

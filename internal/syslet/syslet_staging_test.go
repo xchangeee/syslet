@@ -3,9 +3,10 @@ package syslet
 import (
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"github.com/spf13/afero"
 )
 
 // TestStaging_AllUnitTypes_StagedWhenVolumeChanges verifies that all rendered unit types

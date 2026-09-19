@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	agessh "github.com/Mic92/ssh-to-age"
@@ -43,10 +44,8 @@ func AppendToKeyFile(fs afero.Fs, keyFilePath string, ageKey string) ([]string, 
 		existing = parseKeyFile(data)
 	}
 
-	for _, k := range existing {
-		if k == ageKey {
-			return existing, nil
-		}
+	if slices.Contains(existing, ageKey) {
+		return existing, nil
 	}
 
 	f, err := fs.OpenFile(keyFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)

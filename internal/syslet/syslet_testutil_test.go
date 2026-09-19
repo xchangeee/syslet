@@ -8,6 +8,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/model"
@@ -16,8 +18,6 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 	"codeberg.org/xchangeee/syslet/internal/util"
-
-	"github.com/spf13/afero"
 )
 
 // recordingQuadletGenerator records the filenames found in the units input directory

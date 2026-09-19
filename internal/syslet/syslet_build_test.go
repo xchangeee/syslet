@@ -4,10 +4,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
-	"github.com/spf13/afero"
 )
 
 func makeContainerSpecWithBuild(name string, state model.DesiredState, buildName string) *model.ContainerUnit {

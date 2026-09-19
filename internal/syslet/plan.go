@@ -11,6 +11,9 @@ import (
 	"log/slog"
 	"os"
 
+	gounit "github.com/coreos/go-systemd/v22/unit"
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/filestore"
 	"codeberg.org/xchangeee/syslet/internal/loader"
@@ -21,8 +24,6 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/util"
 	"codeberg.org/xchangeee/syslet/internal/validate"
-	gounit "github.com/coreos/go-systemd/v22/unit"
-	"github.com/spf13/afero"
 )
 
 // OperationStatus is the outcome of a single unit operation.

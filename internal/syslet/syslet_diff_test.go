@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
-
-	"github.com/spf13/afero"
 )
 
 // TestDisplayPlan_SecretChanges verifies that DisplayPlan groups secret upserts and

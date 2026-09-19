@@ -47,7 +47,7 @@ func (r *JournalctlReader) QuadletErrorsSince(ctx context.Context, since time.Ti
 		return nil, fmt.Errorf("journalctl: %w", err)
 	}
 	var lines []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			lines = append(lines, line)
 		}

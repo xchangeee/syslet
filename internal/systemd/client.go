@@ -10,8 +10,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
 	"github.com/spf13/afero"
+
+	"codeberg.org/xchangeee/syslet/internal/model"
 )
 
 // Client wraps systemd D-Bus operations and unit file management.

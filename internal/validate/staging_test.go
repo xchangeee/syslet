@@ -6,11 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/render"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
-	"github.com/spf13/afero"
 )
 
 func newTestStaging(t *testing.T, fs afero.Fs, gen systemd.QuadletGeneratorRunner, az systemd.SystemdAnalyzeRunner) *Staging {

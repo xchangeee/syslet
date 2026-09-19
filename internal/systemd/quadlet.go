@@ -56,8 +56,7 @@ func (g *QuadletGenerator) Run(ctx context.Context, unitDir, earlyDir, normalDir
 
 	if err := cmd.Run(); err != nil {
 		out := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			return exitErr.ExitCode(), fmt.Errorf("generator exited %d\n%s", exitErr.ExitCode(), out)
 		}
 		return -1, fmt.Errorf("running generator: %w\n%s", err, out)
