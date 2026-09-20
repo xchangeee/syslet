@@ -162,7 +162,7 @@ func convertUnitOptions(raw map[string]map[string]any) (model.UnitOptions, error
 	for section, keys := range raw {
 		opts[model.SectionName(section)] = make(map[model.SectionKey]model.UnitValue, len(keys))
 		for key, val := range keys {
-			uv, err := model.UnitValueFromRaw(val)
+			uv, err := model.UnitValueFromRaw(model.SectionName(section), model.SectionKey(key), val)
 			if err != nil {
 				return nil, fmt.Errorf("[%s] %s: %w", section, key, err)
 			}

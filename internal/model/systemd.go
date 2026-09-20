@@ -5,6 +5,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 )
 
 // UnitType identifies the kind of systemd quadlet unit.
@@ -107,9 +108,93 @@ func MultiUV(values ...string) UnitValue {
 	return UnitValue{values: cp}
 }
 
-// UnitValueFromRaw converts a value decoded by encoding/json (string or []any)
-// into a UnitValue. Returns an error for any non-string element.
-func UnitValueFromRaw(raw any) (UnitValue, error) {
+// EnvironmentKey is the systemd unit key that accepts map input in
+// UnitValueFromRaw as name-to-value assignments (e.g. Environment=foo=bar).
+const EnvironmentKey = SectionKey("Environment")
+
+// ContainerSection is the [Container] section of a .container unit.
+const ContainerSection = SectionName("Container")
+
+// VolumeKey is the systemd unit key that accepts map input in UnitValueFromRaw
+// as mount-to-source assignments (e.g. Volume=data:/var/lib/data).
+const VolumeKey = SectionKey("Volume")
+
+// SecretKey is the systemd unit key that accepts map input in UnitValueFromRaw
+// as secret-name-to-options assignments (e.g. Secret=mysecret,type=mount).
+const SecretKey = SectionKey("Secret")
+
+// MaskKey is the systemd unit key that accepts map input in UnitValueFromRaw
+// as path-to-value assignments (e.g. Mask=/proc/foo:/proc/bar).
+const MaskKey = SectionKey("Mask")
+
+// LogOptKey is the systemd unit key that accepts map input in UnitValueFromRaw
+// as log-option-to-value assignments (e.g. LogOpt=path=/var/log/foo).
+const LogOptKey = SectionKey("LogOpt")
+
+// NetworkKey is the systemd unit key that accepts map input in UnitValueFromRaw
+// as a set of network names; map values are ignored, only keys are used
+// (e.g. Network=mynet).
+const NetworkKey = SectionKey("Network")
+
+// mapEntrySpec describes how a map entry's key (and, unless keyOnly, its
+// string value) is formatted into a single unit value string.
+type mapEntrySpec struct {
+	separator string
+	keyOnly   bool
+	// valueOptional allows an empty string value, in which case the separator
+	// and value are omitted entirely, leaving just the key (e.g. Secret).
+	valueOptional bool
+	// allowEmptyValue allows an empty string value, keeping the separator so
+	// the key is still joined to the (empty) value (e.g. Environment=NAME=).
+	// Ignored when valueOptional is set.
+	allowEmptyValue bool
+	// When both valueOptional and allowEmptyValue are false, an empty value is
+	// a validation error since the separator would otherwise have no value to join.
+}
+
+// mapEntrySpecFor returns the mapEntrySpec for a given section/key
+// combination, and whether that combination accepts map input at all.
+func mapEntrySpecFor(section SectionName, key SectionKey) (mapEntrySpec, bool) {
+	switch {
+	case key == EnvironmentKey:
+		// Environment=NAME=VALUE — map key is the variable name, map value is
+		// its value. The value may be empty (Environment=NAME= sets it to the
+		// empty string), so the separator is always kept.
+		return mapEntrySpec{separator: "=", allowEmptyValue: true}, true
+	case section == ContainerSection && key == VolumeKey:
+		// Volume=SOURCE:DESTINATION[:OPTIONS] — map key is the host path or
+		// named volume (mount source), map value is the in-container mount
+		// path (optionally followed by its own ":OPTIONS" suffix).
+		return mapEntrySpec{separator: ":"}, true
+	case section == ContainerSection && key == SecretKey:
+		// Secret=NAME,OPT=VAL,... — map key is the secret name, map value is the
+		// remaining comma-separated option string appended after the name.
+		// The options are optional, so an empty value omits the trailing comma.
+		return mapEntrySpec{separator: ",", valueOptional: true}, true
+	case section == ContainerSection && key == MaskKey:
+		// Mask=PATH:PATH — map key is the path to mask, map value is the
+		// path it is masked with.
+		return mapEntrySpec{separator: ":"}, true
+	case section == ContainerSection && key == LogOptKey:
+		// LogOpt=OPTION=VALUE — map key is a log driver option name (e.g.
+		// "path", "max-size"), map value is that option's value.
+		return mapEntrySpec{separator: "="}, true
+	case section == ContainerSection && key == NetworkKey:
+		// Network=NAME — map key is the network name to join; there is no
+		// per-network value in this field, so the map value is ignored.
+		return mapEntrySpec{keyOnly: true}, true
+	default:
+		return mapEntrySpec{}, false
+	}
+}
+
+// UnitValueFromRaw converts a value decoded by encoding/json (string or []any,
+// plus map[string]any for section/key combinations accepted by
+// mapEntrySpecFor) into a UnitValue. A map is converted to a list of
+// "key<separator>value" entries (or just "key" for a keyOnly spec) sorted by
+// key for deterministic output. Returns an error for any non-string element
+// or, unless keyOnly, non-string map value.
+func UnitValueFromRaw(section SectionName, key SectionKey, raw any) (UnitValue, error) {
 	switch v := raw.(type) {
 	case string:
 		return UnitValue{values: []string{v}}, nil
@@ -123,8 +208,38 @@ func UnitValueFromRaw(raw any) (UnitValue, error) {
 			strs[i] = s
 		}
 		return UnitValue{values: strs}, nil
+	case map[string]any:
+		spec, ok := mapEntrySpecFor(section, key)
+		if !ok {
+			return UnitValue{}, fmt.Errorf("unit value must be a string or array of strings, got %T (map input is not supported for [%s] %s)", raw, section, key)
+		}
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		strs := make([]string, len(keys))
+		for i, k := range keys {
+			if spec.keyOnly {
+				strs[i] = k
+				continue
+			}
+			s, ok := v[k].(string)
+			if !ok {
+				return UnitValue{}, fmt.Errorf("unit value map entry %q must be a string, got %T", k, v[k])
+			}
+			if s == "" && !spec.valueOptional && !spec.allowEmptyValue {
+				return UnitValue{}, fmt.Errorf("unit value map entry %q must not be empty", k)
+			}
+			if s == "" && spec.valueOptional {
+				strs[i] = k
+				continue
+			}
+			strs[i] = k + spec.separator + s
+		}
+		return UnitValue{values: strs}, nil
 	default:
-		return UnitValue{}, fmt.Errorf("unit value must be a string or array of strings, got %T", raw)
+		return UnitValue{}, fmt.Errorf("unit value must be a string, array of strings, or map of strings, got %T", raw)
 	}
 }
 
