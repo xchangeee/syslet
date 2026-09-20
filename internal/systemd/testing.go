@@ -34,12 +34,12 @@ func NewMockDBusConn() *MockDBusConn {
 
 func (m *MockDBusConn) Close() {}
 
-func (m *MockDBusConn) ReloadContext(ctx context.Context) error {
+func (m *MockDBusConn) ReloadContext(_ context.Context) error {
 	m.Reloaded = true
 	return m.ReloadErr
 }
 
-func (m *MockDBusConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]any, error) {
+func (m *MockDBusConn) GetUnitPropertiesContext(_ context.Context, unit string) (map[string]any, error) {
 	if m.GetPropsErr != nil {
 		return nil, m.GetPropsErr
 	}
@@ -60,7 +60,7 @@ func (m *MockDBusConn) GetUnitPropertiesContext(ctx context.Context, unit string
 	}, nil
 }
 
-func (m *MockDBusConn) StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error) {
+func (m *MockDBusConn) StartUnitContext(_ context.Context, name string, _ string, ch chan<- string) (int, error) {
 	if m.StartErr != nil {
 		return 0, m.StartErr
 	}
@@ -73,7 +73,7 @@ func (m *MockDBusConn) StartUnitContext(ctx context.Context, name string, mode s
 	return 0, nil
 }
 
-func (m *MockDBusConn) StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error) {
+func (m *MockDBusConn) StopUnitContext(_ context.Context, name string, _ string, ch chan<- string) (int, error) {
 	if m.StopErr != nil {
 		return 0, m.StopErr
 	}
@@ -86,7 +86,7 @@ func (m *MockDBusConn) StopUnitContext(ctx context.Context, name string, mode st
 	return 0, nil
 }
 
-func (m *MockDBusConn) ReloadUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error) {
+func (m *MockDBusConn) ReloadUnitContext(_ context.Context, name string, _ string, ch chan<- string) (int, error) {
 	m.ReloadedUnits = append(m.ReloadedUnits, name)
 	ch <- m.ReloadJobResult
 	return 0, nil

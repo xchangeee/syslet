@@ -88,7 +88,7 @@ func loadResultWithSecret(t *testing.T, specName string, ciphertext model.Cipher
 	return raw
 }
 
-// secretTestSetup initialises the standard in-memory test environment.
+// secretTestSetup initializes the standard in-memory test environment.
 func secretTestSetup(t *testing.T) (context.Context, afero.Fs, *systemd.Client, *systemd.MockDBusConn, *mockPodmanClient) {
 	t.Helper()
 	ctx := context.Background()

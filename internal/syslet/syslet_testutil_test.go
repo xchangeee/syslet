@@ -299,17 +299,17 @@ func newMockPodmanClient() *mockPodmanClient {
 	}
 }
 
-func (m *mockPodmanClient) DeleteVolume(ctx context.Context, name string) error {
+func (m *mockPodmanClient) DeleteVolume(_ context.Context, name string) error {
 	m.deletedVolumes = append(m.deletedVolumes, name)
 	return nil
 }
 
-func (m *mockPodmanClient) DeleteNetwork(ctx context.Context, name string) error {
+func (m *mockPodmanClient) DeleteNetwork(_ context.Context, name string) error {
 	m.deletedNetworks = append(m.deletedNetworks, name)
 	return nil
 }
 
-func (m *mockPodmanClient) DeleteImage(ctx context.Context, tag string) error {
+func (m *mockPodmanClient) DeleteImage(_ context.Context, tag string) error {
 	m.deletedImages = append(m.deletedImages, tag)
 	return nil
 }
@@ -500,7 +500,7 @@ func setupTest(t *testing.T, fixture testFixture) (context.Context, afero.Fs, *s
 }
 
 // testApply is a helper that builds a plan and applies it.
-func testApply(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman podman.Interface, raw api.LoadResult, jr ...systemd.JournalReader) error {
+func testApply(_ *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman podman.Interface, raw api.LoadResult, jr ...systemd.JournalReader) error {
 	mgrs := newTestFileManagers(fs)
 	var journalReader systemd.JournalReader = &systemd.MockJournalReader{}
 	if len(jr) > 0 {

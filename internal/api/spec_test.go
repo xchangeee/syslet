@@ -89,6 +89,7 @@ func TestLoadSpecsFromDirectory_ErrorCases(t *testing.T) {
 		{
 			name: "no json files",
 			setup: func(t *testing.T, fs afero.Fs) string {
+				t.Helper()
 				if err := fs.Mkdir("/empty", 0755); err != nil {
 					t.Fatalf("mkdir: %v", err)
 				}
@@ -99,6 +100,7 @@ func TestLoadSpecsFromDirectory_ErrorCases(t *testing.T) {
 		{
 			name: "invalid json",
 			setup: func(t *testing.T, fs afero.Fs) string {
+				t.Helper()
 				if err := fs.Mkdir("/invalid", 0755); err != nil {
 					t.Fatalf("mkdir: %v", err)
 				}
@@ -110,6 +112,7 @@ func TestLoadSpecsFromDirectory_ErrorCases(t *testing.T) {
 		{
 			name: "unknown spec type",
 			setup: func(t *testing.T, fs afero.Fs) string {
+				t.Helper()
 				if err := fs.Mkdir("/unknown", 0755); err != nil {
 					t.Fatalf("mkdir: %v", err)
 				}
@@ -120,7 +123,7 @@ func TestLoadSpecsFromDirectory_ErrorCases(t *testing.T) {
 		},
 		{
 			name: "nonexistent directory",
-			setup: func(t *testing.T, fs afero.Fs) string {
+			setup: func(_ *testing.T, _ afero.Fs) string {
 				return "/nonexistent/directory"
 			},
 			wantErr: true,
@@ -296,6 +299,7 @@ func TestUnmarshalInto_AllTypes(t *testing.T) {
 			name: "container",
 			json: `{"type":"container","name":"web","unit":{"Container":{"Image":"nginx"}}}`,
 			checkFunc: func(t *testing.T, result LoadResult) {
+				t.Helper()
 				if len(result.Containers) != 1 {
 					t.Fatalf("expected 1 container, got %d", len(result.Containers))
 				}
@@ -308,6 +312,7 @@ func TestUnmarshalInto_AllTypes(t *testing.T) {
 			name: "volume",
 			json: `{"type":"volume","name":"data","unit":{"Volume":{}}}`,
 			checkFunc: func(t *testing.T, result LoadResult) {
+				t.Helper()
 				if len(result.Volumes) != 1 || result.Volumes[0].Name != "data" {
 					t.Errorf("expected volume 'data', got %+v", result.Volumes)
 				}
@@ -317,6 +322,7 @@ func TestUnmarshalInto_AllTypes(t *testing.T) {
 			name: "network",
 			json: `{"type":"network","name":"backend","unit":{"Network":{}}}`,
 			checkFunc: func(t *testing.T, result LoadResult) {
+				t.Helper()
 				if len(result.Networks) != 1 || result.Networks[0].Name != "backend" {
 					t.Errorf("expected network 'backend', got %+v", result.Networks)
 				}

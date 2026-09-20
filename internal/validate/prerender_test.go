@@ -28,12 +28,12 @@ func TestValidateUnits_AllValidatorsExercised(t *testing.T) {
 	if err := validateUnits(
 		specs,
 		[]CollectionValidator{
-			func(s []model.Unit) error { calls["col1"]++; return nil },
-			func(s []model.Unit) error { calls["col2"]++; return nil },
+			func(_ []model.Unit) error { calls["col1"]++; return nil },
+			func(_ []model.Unit) error { calls["col2"]++; return nil },
 		},
 		[]UnitValidator{
-			func(s model.Unit) error { calls["spec1"]++; return nil },
-			func(s model.Unit) error { calls["spec2"]++; return nil },
+			func(_ model.Unit) error { calls["spec1"]++; return nil },
+			func(_ model.Unit) error { calls["spec2"]++; return nil },
 		},
 	); err != nil {
 		t.Fatalf("validateSpecs() unexpected error: %v", err)
@@ -57,7 +57,7 @@ func TestValidateUnits_CollectionValidatorError(t *testing.T) {
 
 	err := validateUnits(
 		specs,
-		[]CollectionValidator{func(s []model.Unit) error { return sentinel }},
+		[]CollectionValidator{func(_ []model.Unit) error { return sentinel }},
 		nil,
 	)
 	if !errors.Is(err, sentinel) {
@@ -72,7 +72,7 @@ func TestValidateUnits_UnitValidatorError(t *testing.T) {
 	err := validateUnits(
 		specs,
 		nil,
-		[]UnitValidator{func(s model.Unit) error { return sentinel }},
+		[]UnitValidator{func(_ model.Unit) error { return sentinel }},
 	)
 	if !errors.Is(err, sentinel) {
 		t.Errorf("expected sentinel error, got: %v", err)

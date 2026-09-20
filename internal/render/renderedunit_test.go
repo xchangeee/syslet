@@ -207,7 +207,7 @@ func TestStripMetadataSections_DescriptionChangeDoesNotAffectOutput(t *testing.T
 		"Unit", "Description", "Old description",
 		"Container", "Image", "nginx:latest",
 	)
-	new := unitContent(
+	newContent := unitContent(
 		"Unit", "Description", "New description",
 		"Container", "Image", "nginx:latest",
 	)
@@ -216,7 +216,7 @@ func TestStripMetadataSections_DescriptionChangeDoesNotAffectOutput(t *testing.T
 	if err != nil {
 		t.Fatalf("stripping old: %v", err)
 	}
-	strippedNew, err := StripMetadataSections(new)
+	strippedNew, err := StripMetadataSections(newContent)
 	if err != nil {
 		t.Fatalf("stripping new: %v", err)
 	}
@@ -231,13 +231,13 @@ func TestStripMetadataSections_DescriptionChangeDoesNotAffectOutput(t *testing.T
 // syslet would schedule a container restart.
 func TestStripMetadataSections_ImageChange_AffectsOutput(t *testing.T) {
 	old := unitContent("Container", "Image", "nginx:1.24")
-	new := unitContent("Container", "Image", "nginx:1.25")
+	newContent := unitContent("Container", "Image", "nginx:1.25")
 
 	strippedOld, err := StripMetadataSections(old)
 	if err != nil {
 		t.Fatalf("stripping old: %v", err)
 	}
-	strippedNew, err := StripMetadataSections(new)
+	strippedNew, err := StripMetadataSections(newContent)
 	if err != nil {
 		t.Fatalf("stripping new: %v", err)
 	}
