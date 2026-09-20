@@ -254,6 +254,34 @@ func TestApply_ContainerConfigDir_NewDir_RestartsService(t *testing.T) {
 	testutil.AssertContainerNotReloaded(t, mockConn)
 }
 
+func TestApply_ContainerConfigDir_NewDirNoFiles_CreatesDir(t *testing.T) {
+	mountPath := model.ContainerMountPath("/etc/app/")
+	newSpec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
+		model.NewContainerDirMount(string(mountPath)))
+	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
+
+	store := newConfigStore(t)
+	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
+		specs:         []model.Unit{newSpec},
+		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, oldSpec)},
+		existingState: map[string]string{"webapp.service": "active"},
+	})
+
+	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
+
+	// store is OS-backed (see newConfigStore), so the configDir directory lives on
+	// the real filesystem, not on memFs (which only holds the rendered unit files).
+	hostPath := store.Resolve(model.ContainerUnitRef("webapp"), mountPath)
+	info, err := os.Stat(hostPath)
+	if err != nil {
+		t.Fatalf("expected configDir directory to exist on disk at %s, got error: %v", hostPath, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected %s to be a directory", hostPath)
+	}
+	testutil.AssertRestarted(t, mockConn, "webapp.service")
+}
+
 func TestApply_ContainerConfigDir_DirRemoved_RestartsService(t *testing.T) {
 	mountPath := model.ContainerMountPath("/etc/app/")
 	files := []model.ContainerConfigFile{

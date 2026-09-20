@@ -120,7 +120,10 @@ func buildPlanUnitContainerConfigDirs(store *filestore.ContainerConfigFileStore,
 			plan.RecordError(unitRef.FullName(), fmt.Sprintf("checking configDir %s version: %v", internalDirname, err))
 			return false
 		}
-		dirChanged := false
+		// currentVersion == 0 means no version has ever been deployed for this dir, so it
+		// must be created even if dm.Files is empty (an empty configDir still needs an
+		// empty host directory for podman to bind-mount).
+		dirChanged := currentVersion == 0
 		desiredFileSet := make(map[string]bool, len(dm.Files))
 		for _, f := range dm.Files {
 			desiredFileSet[f.Name] = true

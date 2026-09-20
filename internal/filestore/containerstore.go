@@ -219,6 +219,13 @@ func (s *ContainerConfigFileStore) UpdateDirSymlink(ref model.ContainerUnitRef, 
 	dataLink := filepath.Join(dirPath, "..data")
 	tmpLink := filepath.Join(dirPath, "..data-tmp")
 
+	// The version dir must exist even when it holds zero files: ..data will point at it,
+	// and podman needs a real directory on disk to bind-mount.
+	versionDirPath := filepath.Join(dirPath, versionStr)
+	if err := s.afs.MkdirAll(versionDirPath, 0755); err != nil {
+		return fmt.Errorf("creating version dir: %w", err)
+	}
+
 	_ = s.afs.Remove(tmpLink) // best-effort: remove stale tmp link from a previous interrupted run
 	if err := s.symlink(versionStr, tmpLink); err != nil {
 		return fmt.Errorf("creating temp symlink: %w", err)
@@ -228,8 +235,7 @@ func (s *ContainerConfigFileStore) UpdateDirSymlink(ref model.ContainerUnitRef, 
 	}
 
 	// Build the set of files in the new version dir.
-	versionDir := filepath.Join(dirPath, versionStr)
-	versionEntries, err := afero.ReadDir(s.afs, versionDir)
+	versionEntries, err := afero.ReadDir(s.afs, versionDirPath)
 	if err != nil {
 		return fmt.Errorf("listing version dir for symlinks: %w", err)
 	}
