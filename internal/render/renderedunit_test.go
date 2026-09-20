@@ -63,6 +63,94 @@ Volume=/host:/container
 	}
 }
 
+// TestRenderUnit_EnvironmentValueWithSpace_QuotesValue verifies that an
+// Environment= value containing a space is quoted, since systemd treats an
+// unquoted space as a separator between multiple space-separated assignments
+// on that key (see systemd.syntax(7)). Without quoting, a single Environment=
+// value such as "extra_params=--a=1 --b=2" would be parsed as two separate
+// variables.
+func TestRenderUnit_EnvironmentValueWithSpace_QuotesValue(t *testing.T) {
+	unit := model.NewContainerUnit(model.ContainerUnitRef("test"), nil, "", nil, false)
+	ru, err := NewUnitRenderer(unit).
+		Append(SectionContainer, KeyEnvironment, `extra_params=--o:ssl.enable=false --o:ssl.termination=true`).
+		RenderedUnit()
+	if err != nil {
+		t.Fatalf("RenderedUnit failed: %v", err)
+	}
+
+	expected := `[Container]
+Environment="extra_params=--o:ssl.enable=false --o:ssl.termination=true"
+`
+
+	if ru.Content != expected {
+		t.Errorf("RenderedUnit() Content mismatch:\ngot:\n%s\nwant:\n%s", ru.Content, expected)
+	}
+}
+
+// TestRenderUnit_EnvironmentValueAlreadyQuoted_NoAction verifies that a value the
+// user already wrapped in quotes themselves is left as-is, rather than being
+// wrapped in a second layer of quotes.
+func TestRenderUnit_EnvironmentValueAlreadyQuoted_NoAction(t *testing.T) {
+	unit := model.NewContainerUnit(model.ContainerUnitRef("test"), nil, "", nil, false)
+	ru, err := NewUnitRenderer(unit).
+		Append(SectionContainer, KeyEnvironment, `"extra_params=--o:ssl.enable=false --o:ssl.termination=true"`).
+		RenderedUnit()
+	if err != nil {
+		t.Fatalf("RenderedUnit failed: %v", err)
+	}
+
+	expected := `[Container]
+Environment="extra_params=--o:ssl.enable=false --o:ssl.termination=true"
+`
+
+	if ru.Content != expected {
+		t.Errorf("RenderedUnit() Content mismatch:\ngot:\n%s\nwant:\n%s", ru.Content, expected)
+	}
+}
+
+// TestRenderUnit_EnvironmentValueWithEmbeddedQuotes_EscapesQuoting verifies that
+// embedded double quotes and backslashes are backslash-escaped when a value gets
+// wrapped in quotes, so the resulting line remains valid systemd syntax.
+func TestRenderUnit_EnvironmentValueWithEmbeddedQuotes_EscapesQuoting(t *testing.T) {
+	unit := model.NewContainerUnit(model.ContainerUnitRef("test"), nil, "", nil, false)
+	ru, err := NewUnitRenderer(unit).
+		Append(SectionContainer, KeyEnvironment, `extra_params=--label="my value" path=C:\data`).
+		RenderedUnit()
+	if err != nil {
+		t.Fatalf("RenderedUnit failed: %v", err)
+	}
+
+	expected := `[Container]
+Environment="extra_params=--label=\"my value\" path=C:\\data"
+`
+
+	if ru.Content != expected {
+		t.Errorf("RenderedUnit() Content mismatch:\ngot:\n%s\nwant:\n%s", ru.Content, expected)
+	}
+}
+
+// TestRenderUnit_NonEnvironmentValueWithSpace_NoAction verifies that quoting is
+// scoped to Environment= only: other keys don't share its space-separated,
+// quote-aware list syntax, so wrapping their values in quotes would just embed
+// literal quote characters in the value instead of being parsed away.
+func TestRenderUnit_NonEnvironmentValueWithSpace_NoAction(t *testing.T) {
+	unit := model.NewContainerUnit(model.ContainerUnitRef("test"), nil, "", nil, false)
+	ru, err := NewUnitRenderer(unit).
+		Append(SectionContainer, KeyContainerName, `my container`).
+		RenderedUnit()
+	if err != nil {
+		t.Fatalf("RenderedUnit failed: %v", err)
+	}
+
+	expected := `[Container]
+ContainerName=my container
+`
+
+	if ru.Content != expected {
+		t.Errorf("RenderedUnit() Content mismatch:\ngot:\n%s\nwant:\n%s", ru.Content, expected)
+	}
+}
+
 // unitContent builds a minimal INI-style unit file string from section/key/value triples.
 func unitContent(triples ...string) string {
 	if len(triples)%3 != 0 {

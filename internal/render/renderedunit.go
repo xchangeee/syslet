@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	gounit "github.com/coreos/go-systemd/v22/unit"
 
@@ -109,7 +110,11 @@ func (r *UnitRenderer) RenderedUnit() (RenderedUnit, error) {
 	slices.SortFunc(flat, compareUnitOptions)
 	goOpts := make([]*gounit.UnitOption, len(flat))
 	for i := range flat {
-		goOpts[i] = &flat[i]
+		opt := flat[i]
+		if model.SectionKey(opt.Name) == KeyEnvironment {
+			opt.Value = quoteUnitValue(opt.Value)
+		}
+		goOpts[i] = &opt
 	}
 	data, err := io.ReadAll(gounit.Serialize(goOpts))
 	if err != nil {
@@ -120,6 +125,45 @@ func (r *UnitRenderer) RenderedUnit() (RenderedUnit, error) {
 		UnitOptions: flat,
 		Content:     string(data),
 	}, nil
+}
+
+// quoteUnitValue wraps value in double quotes if it contains whitespace, so systemd
+// parses it as a single token rather than splitting it on spaces into several
+// assignments. This is only applied to Environment= values: systemd documents
+// Environment= as accepting a space-separated list of assignments with quoting
+// support (systemd.exec(5)/systemd.syntax(7)); other unit keys don't share that
+// list-with-quoting syntax, so quoting them here would just embed literal quote
+// characters in the value instead of being parsed away. Without this, a value like
+// "extra_params=--a=1 --b=2" would be split into two separate environment variables
+// instead of one.
+func quoteUnitValue(value string) string {
+	if !strings.ContainsAny(value, " \t") {
+		return value
+	}
+	if isAlreadyQuoted(value) {
+		return value
+	}
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range value {
+		if r == '"' || r == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// isAlreadyQuoted reports whether value is already wrapped in a matching pair of
+// quotes (double or single, per systemd's own quoting rules), so quoteUnitValue
+// does not wrap it a second time.
+func isAlreadyQuoted(value string) bool {
+	if len(value) < 2 {
+		return false
+	}
+	first, last := value[0], value[len(value)-1]
+	return (first == '"' || first == '\'') && first == last
 }
 
 func flattenUnitOptions(unitMap model.UnitOptions) []gounit.UnitOption {
