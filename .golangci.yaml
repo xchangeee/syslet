@@ -218,9 +218,9 @@ linters:
 
       # List of words to ignore
       # among the one defined in https://github.com/golangci/misspell/blob/master/words.go
-      ignore-rules: []
-      #  - valor
-      #  - and
+      ignore-rules:
+        # correct spelling of the Mosquitto MQTT broker, used as a test fixture name
+        - mosquitto
 
       # Extra word corrections.
       extra-words: []
