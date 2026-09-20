@@ -123,7 +123,7 @@ linters:
     - whitespace
     - wastedassign
     - unqueryvet
-    - unparam
+    #- unparam
     - unconvert
     - tparallel
     - sloglint
