@@ -310,8 +310,8 @@ Config file changes:
 @@ -1,4 +1,4 @@
  server {
 -  listen 80;
-+  listen 8080;
 -  server_name old.example.com;
++  listen 8080;
 +  server_name new.example.com;
  }
 
