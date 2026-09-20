@@ -8,7 +8,7 @@ import (
 )
 
 func TestSystemdAnalyze_Verify_BinaryNotFound(t *testing.T) {
-	a := &SystemdAnalyze{bin: "/nonexistent/systemd-analyze"}
+	a := &Analyze{bin: "/nonexistent/systemd-analyze"}
 	_, err := a.Verify(context.Background(), []string{"/some/unit.service"})
 	if err == nil {
 		t.Fatal("expected error when binary not found, got nil")
@@ -22,7 +22,7 @@ func TestSystemdAnalyze_Verify_ExitCodeReturned(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := &SystemdAnalyze{bin: script}
+	a := &Analyze{bin: script}
 	result, err := a.Verify(context.Background(), []string{"/some/unit.service"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -41,7 +41,7 @@ func TestSystemdAnalyze_Verify_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := &SystemdAnalyze{bin: script}
+	a := &Analyze{bin: script}
 	result, err := a.Verify(context.Background(), []string{"/some/unit.service"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

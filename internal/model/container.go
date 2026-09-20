@@ -75,7 +75,6 @@ func NewContainerDirMount(mountPath string, files ...ContainerConfigFile) Contai
 		Directory: ContainerMountPath(mountPath),
 		Files:     files,
 	}
-
 }
 
 // NewContainerConfigFile creates a ContainerConfigFile (used as a member of a ContainerDirMount).

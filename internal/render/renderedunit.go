@@ -70,8 +70,8 @@ type UnitRenderer struct {
 	overrides []gounit.UnitOption
 }
 
-// RenderUnit creates a UnitRenderer for the given unit.
-func RenderUnit(unit model.Unit) *UnitRenderer { return &UnitRenderer{unit: unit} }
+// NewUnitRenderer creates a UnitRenderer for the given unit.
+func NewUnitRenderer(unit model.Unit) *UnitRenderer { return &UnitRenderer{unit: unit} }
 
 // Append adds an option that is appended after the unit's own options.
 func (r *UnitRenderer) Append(section model.SectionName, key model.SectionKey, value string) *UnitRenderer {
@@ -93,10 +93,7 @@ func (r *UnitRenderer) Override(section model.SectionName, key model.SectionKey,
 
 // RenderedUnit finalizes the render and returns the fully-populated RenderedUnit.
 func (r *UnitRenderer) RenderedUnit() (RenderedUnit, error) {
-	flat, err := flattenUnitOptions(r.unit.Options())
-	if err != nil {
-		return RenderedUnit{}, err
-	}
+	flat := flattenUnitOptions(r.unit.Options())
 	flat = append(flat, r.extra...)
 	for _, d := range r.defaults {
 		flat = ensureUnitOption(flat, model.SectionName(d.Section), model.SectionKey(d.Name), d.Value)
@@ -125,7 +122,7 @@ func (r *UnitRenderer) RenderedUnit() (RenderedUnit, error) {
 	}, nil
 }
 
-func flattenUnitOptions(unitMap model.UnitOptions) ([]gounit.UnitOption, error) {
+func flattenUnitOptions(unitMap model.UnitOptions) []gounit.UnitOption {
 	sections := make([]model.SectionName, 0, len(unitMap))
 	for section := range unitMap {
 		sections = append(sections, section)
@@ -145,7 +142,7 @@ func flattenUnitOptions(unitMap model.UnitOptions) ([]gounit.UnitOption, error) 
 			}
 		}
 	}
-	return opts, nil
+	return opts
 }
 
 func ensureUnitOption(opts []gounit.UnitOption, section model.SectionName, key model.SectionKey, value string) []gounit.UnitOption {
@@ -181,7 +178,7 @@ func compareUnitOptions(a, b gounit.UnitOption) int {
 
 // StripMetadataSections removes X-Syslet section and Unit.Description before comparing content.
 func StripMetadataSections(content string) (string, error) {
-	opts, err := gounit.Deserialize(bytes.NewReader([]byte(content)))
+	opts, err := gounit.DeserializeOptions(bytes.NewReader([]byte(content)))
 	if err != nil {
 		return "", fmt.Errorf("deserializing unit content: %w", err)
 	}

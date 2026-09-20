@@ -297,7 +297,7 @@ func (p *ApplyPlan) RecordError(name model.FullUnitName, message string) {
 // api.LoadSpecsFS or a stream via api.LoadSpecsReader), keeping BuildPlan free of
 // any I/O concerning the spec source. pc and decryptor are required for secret
 // support: pass nil for both when the caller does not manage secrets.
-func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, jr systemd.JournalReader, gen systemd.QuadletGeneratorRunner, az systemd.SystemdAnalyzeRunner, pc podman.Interface, decryptor *sops.Decryptor, raw api.LoadResult) (*ApplyPlan, error) {
+func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, jr systemd.JournalReader, gen systemd.QuadletGeneratorRunner, az systemd.AnalyzeRunner, pc podman.Interface, decryptor *sops.Decryptor, raw api.LoadResult) (*ApplyPlan, error) {
 	units, err := loader.Parse(raw)
 	if err != nil {
 		return nil, err
@@ -314,7 +314,7 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 		return plan, nil
 	}
 
-	result, err := render.Render(units, mgrs.Config.Resolve, mgrs.Build.Resolve)
+	result, err := render.NewResult(units, mgrs.Config.Resolve, mgrs.Build.Resolve)
 	if err != nil {
 		return nil, err
 	}
@@ -407,13 +407,13 @@ func loadStaleUnits(sd *systemd.Client, desiredNames map[model.FullUnitName]bool
 			}
 			ref, err := model.ParseFullUnitName(fn)
 			if err != nil {
-				return nil, fmt.Errorf("unrecognised unit file %s: %w", fn, err)
+				return nil, fmt.Errorf("unrecognized unit file %s: %w", fn, err)
 			}
 			unitContent, err := sd.ReadUnitFile(fn)
 			if err != nil {
 				return nil, fmt.Errorf("reading installed unit %s: %w", fn, err)
 			}
-			ptrOpts, err := gounit.Deserialize(bytes.NewReader(unitContent))
+			ptrOpts, err := gounit.DeserializeOptions(bytes.NewReader(unitContent))
 			if err != nil {
 				return nil, fmt.Errorf("parsing installed unit %s: %w", fn, err)
 			}
@@ -453,7 +453,7 @@ func computeUnitChanges(sd *systemd.Client, plan *ApplyPlan, r render.RenderedUn
 		return unitChanges{}, false
 	}
 	oldContent := string(existing)
-	ptrOpts, err := gounit.Deserialize(bytes.NewReader(existing))
+	ptrOpts, err := gounit.DeserializeOptions(bytes.NewReader(existing))
 	if err != nil {
 		plan.RecordError(fn, fmt.Sprintf("parsing installed unit: %v", err))
 		return unitChanges{}, false

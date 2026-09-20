@@ -8,14 +8,14 @@ import (
 
 func TestVolumeSpec_Render_BasicVolume(t *testing.T) {
 	spec := model.NewVolumeUnit(model.VolumeUnitRef("data"), makeUnitOptions(SectionVolume, "Device", "tmpfs"), false, model.ReclaimPolicyRetain)
-	ru, err := RenderVolume(spec)
+	ru, err := NewRenderedUnitFromVolume(spec)
 	rendered := mustRender(t, ru, err)
 	assertHasOption(t, rendered.UnitOptions, SectionVolume, KeyVolumeName, "data")
 }
 
 func TestVolumeSpec_Render_VolumeNameIsEnforced(t *testing.T) {
 	spec := model.NewVolumeUnit(model.VolumeUnitRef("data"), makeUnitOptions(SectionVolume, "VolumeName", "custom-volume"), false, model.ReclaimPolicyRetain)
-	ru, err := RenderVolume(spec)
+	ru, err := NewRenderedUnitFromVolume(spec)
 	rendered := mustRender(t, ru, err)
 	assertUniqueOption(t, rendered.UnitOptions, SectionVolume, KeyVolumeName, "data")
 }
@@ -23,7 +23,7 @@ func TestVolumeSpec_Render_VolumeNameIsEnforced(t *testing.T) {
 func TestVolumeSpec_ReclaimableMixin(t *testing.T) {
 	testReclaimableMixin(t,
 		func() (RenderedUnit, error) {
-			return RenderVolume(model.NewVolumeUnit(
+			return NewRenderedUnitFromVolume(model.NewVolumeUnit(
 				model.VolumeUnitRef("data"),
 				makeUnitOptions(SectionVolume, "Device", "tmpfs"),
 				false,
@@ -31,7 +31,7 @@ func TestVolumeSpec_ReclaimableMixin(t *testing.T) {
 			))
 		},
 		func() (RenderedUnit, error) {
-			return RenderVolume(model.NewVolumeUnit(
+			return NewRenderedUnitFromVolume(model.NewVolumeUnit(
 				model.VolumeUnitRef("data"),
 				makeUnitOptions(SectionXSyslet, "ReclaimPolicy", "Retain"),
 				false,
@@ -39,7 +39,7 @@ func TestVolumeSpec_ReclaimableMixin(t *testing.T) {
 			))
 		},
 		func() (RenderedUnit, error) {
-			return RenderVolume(model.NewVolumeUnit(
+			return NewRenderedUnitFromVolume(model.NewVolumeUnit(
 				model.VolumeUnitRef("data"),
 				makeUnitOptions(SectionVolume, "Device", "tmpfs"),
 				false,
@@ -52,7 +52,7 @@ func TestVolumeSpec_ReclaimableMixin(t *testing.T) {
 func TestVolumeSpec_PrunableMixin(t *testing.T) {
 	testPrunableMixin(t,
 		func() (RenderedUnit, error) {
-			return RenderVolume(model.NewVolumeUnit(
+			return NewRenderedUnitFromVolume(model.NewVolumeUnit(
 				model.VolumeUnitRef("data"),
 				makeUnitOptions(SectionVolume, "Device", "tmpfs"),
 				true,
@@ -60,7 +60,7 @@ func TestVolumeSpec_PrunableMixin(t *testing.T) {
 			))
 		},
 		func() (RenderedUnit, error) {
-			return RenderVolume(model.NewVolumeUnit(
+			return NewRenderedUnitFromVolume(model.NewVolumeUnit(
 				model.VolumeUnitRef("data"),
 				makeUnitOptions(SectionXSyslet, "RemovalAllowed", "false"),
 				true,
@@ -68,7 +68,7 @@ func TestVolumeSpec_PrunableMixin(t *testing.T) {
 			))
 		},
 		func() (RenderedUnit, error) {
-			return RenderVolume(model.NewVolumeUnit(
+			return NewRenderedUnitFromVolume(model.NewVolumeUnit(
 				model.VolumeUnitRef("data"),
 				makeUnitOptions(SectionVolume, "Device", "tmpfs"),
 				false,

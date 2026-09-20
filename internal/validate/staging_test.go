@@ -14,7 +14,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 )
 
-func newTestStaging(t *testing.T, fs afero.Fs, gen systemd.QuadletGeneratorRunner, az systemd.SystemdAnalyzeRunner) *Staging {
+func newTestStaging(t *testing.T, fs afero.Fs, gen systemd.QuadletGeneratorRunner, az systemd.AnalyzeRunner) *Staging {
 	t.Helper()
 	s, err := NewStaging(fs, gen, az)
 	if err != nil {
@@ -216,7 +216,7 @@ func TestStaging_MultipleOutputFiles_AllAnalyzed(t *testing.T) {
 
 // countingAnalyzeRunner wraps a real runner and records each path passed to Verify.
 type countingAnalyzeRunner struct {
-	inner   systemd.SystemdAnalyzeRunner
+	inner   systemd.AnalyzeRunner
 	visited *[]string
 }
 

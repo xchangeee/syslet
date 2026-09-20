@@ -81,7 +81,7 @@ func makeContainerSpecWithDirs(name, image string, state model.DesiredState, dir
 // Use this when the rendered Volume= paths must match those produced by a non-default store.
 func renderContainerWithStore(t *testing.T, store *filestore.ContainerConfigFileStore, spec *model.ContainerUnit) string {
 	t.Helper()
-	rendered, err := render.RenderContainer(spec, store.Resolve)
+	rendered, err := render.NewRenderedUnitFromContainer(spec, store.Resolve)
 	if err != nil {
 		t.Fatalf("renderContainerWithStore: %v", err)
 	}
@@ -236,7 +236,7 @@ func newTestFileManagers(fs afero.Fs) filestore.FileManagers {
 func renderContainer(t *testing.T, fs afero.Fs, spec *model.ContainerUnit) string {
 	t.Helper()
 	store := filestore.NewContainerConfigFileStore(fs)
-	rendered, err := render.RenderContainer(spec, store.Resolve)
+	rendered, err := render.NewRenderedUnitFromContainer(spec, store.Resolve)
 	if err != nil {
 		t.Fatalf("render.RenderContainer: %v", err)
 	}
@@ -246,7 +246,7 @@ func renderContainer(t *testing.T, fs afero.Fs, spec *model.ContainerUnit) strin
 // renderVolume renders a VolumeUnit and returns its content, failing the test on error.
 func renderVolume(t *testing.T, spec *model.VolumeUnit) string {
 	t.Helper()
-	rendered, err := render.RenderVolume(spec)
+	rendered, err := render.NewRenderedUnitFromVolume(spec)
 	if err != nil {
 		t.Fatalf("render.RenderVolume: %v", err)
 	}
@@ -256,7 +256,7 @@ func renderVolume(t *testing.T, spec *model.VolumeUnit) string {
 // renderNetwork renders a NetworkUnit and returns its content, failing the test on error.
 func renderNetwork(t *testing.T, spec *model.NetworkUnit) string {
 	t.Helper()
-	rendered, err := render.RenderNetwork(spec)
+	rendered, err := render.NewRenderedUnitFromNetwork(spec)
 	if err != nil {
 		t.Fatalf("render.RenderNetwork: %v", err)
 	}
@@ -266,7 +266,7 @@ func renderNetwork(t *testing.T, spec *model.NetworkUnit) string {
 // renderBuild renders a BuildUnit and returns its content, failing the test on error.
 func renderBuild(t *testing.T, fs afero.Fs, spec *model.BuildUnit) string {
 	t.Helper()
-	rendered, err := render.RenderBuild(spec, filestore.NewBuildContextFileStore(fs).Resolve)
+	rendered, err := render.NewRenderedUnitFromBuild(spec, filestore.NewBuildContextFileStore(fs).Resolve)
 	if err != nil {
 		t.Fatalf("render.RenderBuild: %v", err)
 	}
@@ -288,7 +288,7 @@ type mockPodmanClient struct {
 	deletedImages   []string
 	upsertedSecrets []upsertedSecret
 	deletedSecrets  []string
-	existingSecrets []podman.PodmanSecretMeta
+	existingSecrets []podman.SecretMeta
 }
 
 func newMockPodmanClient() *mockPodmanClient {
@@ -324,7 +324,7 @@ func (m *mockPodmanClient) DeleteSecret(_ context.Context, name string) error {
 	return nil
 }
 
-func (m *mockPodmanClient) ListSecrets(_ context.Context) ([]podman.PodmanSecretMeta, error) {
+func (m *mockPodmanClient) ListSecrets(_ context.Context) ([]podman.SecretMeta, error) {
 	return m.existingSecrets, nil
 }
 

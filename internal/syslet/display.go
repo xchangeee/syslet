@@ -256,13 +256,13 @@ func displayContentDiff(w io.Writer, name, oldContent, newContent string) {
 		return
 	}
 
-	oldOpts, err := gounit.Deserialize(strings.NewReader(oldContent))
+	oldOpts, err := gounit.DeserializeOptions(strings.NewReader(oldContent))
 	if err != nil {
 		displayTextDiff(w, name, oldContent, newContent)
 		return
 	}
 
-	newOpts, err := gounit.Deserialize(strings.NewReader(newContent))
+	newOpts, err := gounit.DeserializeOptions(strings.NewReader(newContent))
 	if err != nil {
 		displayTextDiff(w, name, oldContent, newContent)
 		return

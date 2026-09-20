@@ -50,7 +50,7 @@ func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.
 		return nil
 	}
 
-	existingByName := make(map[string]podman.PodmanSecretMeta, len(existing))
+	existingByName := make(map[string]podman.SecretMeta, len(existing))
 	for _, s := range existing {
 		existingByName[s.Name] = s
 	}

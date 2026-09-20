@@ -120,7 +120,7 @@ func main() {
 	sd := systemd.NewClient(dbusConn, fs)
 	jr := systemd.NewJournalReader()
 	sq := systemd.NewQuadletGenerator()
-	sa := systemd.NewSystemdAnalyze()
+	sa := systemd.NewAnalyze()
 
 	pc := podman.New()
 

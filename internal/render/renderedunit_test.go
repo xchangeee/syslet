@@ -9,7 +9,7 @@ import (
 
 func TestRenderUnit_Empty(t *testing.T) {
 	unit := model.NewContainerUnit(model.ContainerUnitRef("test"), nil, "", nil, false)
-	ru, err := RenderUnit(unit).RenderedUnit()
+	ru, err := NewUnitRenderer(unit).RenderedUnit()
 	if err != nil {
 		t.Fatalf("RenderedUnit failed: %v", err)
 	}
@@ -21,7 +21,7 @@ func TestRenderUnit_Empty(t *testing.T) {
 
 func TestRenderUnit_Content(t *testing.T) {
 	unit := model.NewContainerUnit(model.ContainerUnitRef("test"), nil, "", nil, false)
-	ru, err := RenderUnit(unit).
+	ru, err := NewUnitRenderer(unit).
 		Append(SectionContainer, KeyContainerImage, "nginx:latest").
 		Append(SectionContainer, KeyContainerName, "webapp").
 		Append(SectionInstall, KeyInstallWantedBy, "multi-user.target").
@@ -45,7 +45,7 @@ WantedBy=multi-user.target
 
 func TestRenderUnit_MultipleValues(t *testing.T) {
 	unit := model.NewContainerUnit(model.ContainerUnitRef("test"), nil, "", nil, false)
-	ru, err := RenderUnit(unit).
+	ru, err := NewUnitRenderer(unit).
 		Append(SectionContainer, KeyContainerVolume, "/host:/container").
 		Append(SectionContainer, KeyContainerVolume, "/another:/path").
 		RenderedUnit()

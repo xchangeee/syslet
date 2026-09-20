@@ -13,10 +13,10 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/model"
 )
 
-// PodmanSecretMeta holds the name and labels of a single entry in podman's secret store.
+// SecretMeta holds the name and labels of a single entry in podman's secret store.
 // It is used during the plan phase to detect which secrets already exist and whether
 // their content has changed (via the syslet/hash label).
-type PodmanSecretMeta struct {
+type SecretMeta struct {
 	Name   string            `json:"Name"`
 	Labels map[string]string `json:"Labels"`
 }
@@ -27,7 +27,7 @@ type Interface interface {
 	DeleteVolume(ctx context.Context, name string) error
 	DeleteNetwork(ctx context.Context, name string) error
 	DeleteImage(ctx context.Context, tag string) error
-	ListSecrets(ctx context.Context) ([]PodmanSecretMeta, error)
+	ListSecrets(ctx context.Context) ([]SecretMeta, error)
 	UpsertSecret(ctx context.Context, name string, value model.Plaintext, labels map[string]string) error
 	DeleteSecret(ctx context.Context, name string) error
 }
@@ -81,7 +81,7 @@ func (c *Client) DeleteImage(ctx context.Context, tag string) error {
 // ListSecrets returns name and labels for every secret currently in the podman secret store.
 // The plan phase calls this once and filters the result in memory by specname prefix, consistent
 // with how syslet handles volumes and networks.
-func (c *Client) ListSecrets(ctx context.Context) ([]PodmanSecretMeta, error) {
+func (c *Client) ListSecrets(ctx context.Context) ([]SecretMeta, error) {
 	lsCmd := exec.CommandContext(ctx, "podman", "secret", "ls", "-q")
 	lsOutput, err := lsCmd.Output()
 	if err != nil {
@@ -100,13 +100,13 @@ func (c *Client) ListSecrets(ctx context.Context) ([]PodmanSecretMeta, error) {
 	}
 
 	var raw []struct {
-		Spec PodmanSecretMeta `json:"Spec"`
+		Spec SecretMeta `json:"Spec"`
 	}
 	if err := json.Unmarshal(inspectOutput, &raw); err != nil {
 		return nil, fmt.Errorf("podman secret inspect: parse JSON: %w", err)
 	}
 
-	secrets := make([]PodmanSecretMeta, len(raw))
+	secrets := make([]SecretMeta, len(raw))
 	for i, r := range raw {
 		secrets[i] = r.Spec
 	}

@@ -151,7 +151,7 @@ func TestSecret_Unchanged_NoAction(t *testing.T) {
 	ct := encryptedCiphertext(t)
 	hash := secretContentHash(t)
 
-	mockPodman.existingSecrets = []podman.PodmanSecretMeta{
+	mockPodman.existingSecrets = []podman.SecretMeta{
 		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": hash}},
 		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
 	}
@@ -171,7 +171,7 @@ func TestSecret_ContentChanged_UpsertsAllKeys(t *testing.T) {
 	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
 	ct := encryptedCiphertext(t)
 
-	mockPodman.existingSecrets = []podman.PodmanSecretMeta{
+	mockPodman.existingSecrets = []podman.SecretMeta{
 		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": "oldhash"}},
 		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": "oldhash"}},
 	}
@@ -192,7 +192,7 @@ func TestSecret_OrphanKey_DeletesKey(t *testing.T) {
 	ct := encryptedCiphertext(t)
 	hash := secretContentHash(t)
 
-	mockPodman.existingSecrets = []podman.PodmanSecretMeta{
+	mockPodman.existingSecrets = []podman.SecretMeta{
 		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": hash}},
 		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
 		{Name: "myapp-old-token", Labels: map[string]string{"syslet/hash": hash}}, // orphan
@@ -213,7 +213,7 @@ func TestSecret_SpecRemoved_DeletesAllKeys(t *testing.T) {
 	// No secret specs in the input, but syslet-managed secrets exist on host.
 	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
 
-	mockPodman.existingSecrets = []podman.PodmanSecretMeta{
+	mockPodman.existingSecrets = []podman.SecretMeta{
 		{Name: "oldapp-key1", Labels: map[string]string{"syslet/hash": "abc"}},
 		{Name: "oldapp-key2", Labels: map[string]string{"syslet/hash": "abc"}},
 	}
@@ -266,7 +266,7 @@ func TestSecret_Changed_RestartsReferencingContainers(t *testing.T) {
 		model.DesiredStateRunning, nil, false,
 	)
 
-	mockPodman.existingSecrets = []podman.PodmanSecretMeta{
+	mockPodman.existingSecrets = []podman.SecretMeta{
 		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": "oldhash"}},
 		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": "oldhash"}},
 	}
@@ -313,7 +313,7 @@ func TestSecret_Unchanged_NoContainerRestart(t *testing.T) {
 		model.DesiredStateRunning, nil, false,
 	)
 
-	mockPodman.existingSecrets = []podman.PodmanSecretMeta{
+	mockPodman.existingSecrets = []podman.SecretMeta{
 		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": hash}},
 		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
 	}

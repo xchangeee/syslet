@@ -24,12 +24,12 @@ type Staging struct {
 	dir              string // base path of the staging tree
 	files            map[string][]byte
 	quadletGenerator systemd.QuadletGeneratorRunner
-	systemdAnalyze   systemd.SystemdAnalyzeRunner
+	systemdAnalyze   systemd.AnalyzeRunner
 }
 
 // NewStaging creates a Staging instance rooted in a new temporary directory
 // within the provided filesystem.
-func NewStaging(fs afero.Fs, generator systemd.QuadletGeneratorRunner, analyzer systemd.SystemdAnalyzeRunner) (*Staging, error) {
+func NewStaging(fs afero.Fs, generator systemd.QuadletGeneratorRunner, analyzer systemd.AnalyzeRunner) (*Staging, error) {
 	dir, err := afero.TempDir(fs, "", "syslet-stage-")
 	if err != nil {
 		return nil, fmt.Errorf("creating staging dir: %w", err)

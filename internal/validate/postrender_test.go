@@ -332,7 +332,7 @@ func TestValidateBuildImageTags_NoBuilds_ReturnsNil(t *testing.T) {
 // --- ValidateRenderedUnits ---
 
 func TestPostRender_AllValid_ReturnsNil(t *testing.T) {
-	result := render.RenderResult{
+	result := render.Result{
 		Containers: []render.RenderedUnit{
 			containerUnit("webapp",
 				containerVolumeOpt("data.volume:/data"),
@@ -351,7 +351,7 @@ func TestPostRender_AllValid_ReturnsNil(t *testing.T) {
 }
 
 func TestPostRender_UndefinedVolume_ReturnsError(t *testing.T) {
-	result := render.RenderResult{
+	result := render.Result{
 		Containers: []render.RenderedUnit{
 			containerUnit("webapp", containerVolumeOpt("missing.volume:/data")),
 		},
@@ -363,7 +363,7 @@ func TestPostRender_UndefinedVolume_ReturnsError(t *testing.T) {
 }
 
 func TestPostRender_VolumeConflict_ReturnsError(t *testing.T) {
-	result := render.RenderResult{
+	result := render.Result{
 		Containers: []render.RenderedUnit{
 			containerUnit("webapp",
 				containerVolumeOpt("a.volume:/data"),

@@ -14,9 +14,9 @@ const (
 	SystemdAnalyzeBin = "systemd-analyze"
 )
 
-// SystemdAnalyzeRunner abstracts the systemd-analyze binary so that the real
+// AnalyzeRunner abstracts the systemd-analyze binary so that the real
 // implementation can be swapped out in tests.
-type SystemdAnalyzeRunner interface {
+type AnalyzeRunner interface {
 	// Verify runs "systemd-analyze verify" on one or more unit files and returns
 	// the captured stdout, stderr, and process exit code. A non-zero exit code
 	// means at least one unit failed verification. An error is only returned for
@@ -34,21 +34,21 @@ type AnalyzeResult struct {
 	ExitCode int
 }
 
-// SystemdAnalyze executes the systemd-analyze binary.
-type SystemdAnalyze struct {
+// Analyze executes the systemd-analyze binary.
+type Analyze struct {
 	bin string
 }
 
-// NewSystemdAnalyze returns a SystemdAnalyze using SystemdAnalyzeBin.
-func NewSystemdAnalyze() *SystemdAnalyze {
-	return &SystemdAnalyze{bin: SystemdAnalyzeBin}
+// NewAnalyze returns a SystemdAnalyze using SystemdAnalyzeBin.
+func NewAnalyze() *Analyze {
+	return &Analyze{bin: SystemdAnalyzeBin}
 }
 
 // Verify runs "systemd-analyze verify" on the given unit file paths, capturing
 // stdout and stderr separately. A non-zero exit code is returned in the result
 // rather than as an error. If the binary is not found the call returns an error
 // wrapping exec.ErrNotFound so callers can skip verification gracefully.
-func (a *SystemdAnalyze) Verify(ctx context.Context, unitPaths []string) (AnalyzeResult, error) {
+func (a *Analyze) Verify(ctx context.Context, unitPaths []string) (AnalyzeResult, error) {
 	args := append([]string{"verify"}, unitPaths...)
 	cmd := exec.CommandContext(ctx, a.bin, args...)
 	var stdout, stderr bytes.Buffer

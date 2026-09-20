@@ -10,7 +10,7 @@ import (
 
 func TestBuildSpec_Render_AutoGeneratesContainerfilePath(t *testing.T) {
 	spec := model.NewBuildUnit(model.BuildUnitRef("myapp"), nil, "FROM alpine\nRUN echo hi", nil, model.ReclaimPolicyRetain)
-	ru, err := RenderBuild(spec, testBuildResolve("/var/lib/syslet/build"))
+	ru, err := NewRenderedUnitFromBuild(spec, testBuildResolve("/var/lib/syslet/build"))
 	rendered := mustRender(t, ru, err)
 
 	want := filepath.Join("/var/lib/syslet/build/myapp", "Containerfile")
@@ -25,7 +25,7 @@ func TestBuildSpec_Render_ContainerfileOverridesUserValue(t *testing.T) {
 		nil,
 		model.ReclaimPolicyRetain,
 	)
-	ru, err := RenderBuild(spec, testBuildResolve("/var/lib/syslet/build"))
+	ru, err := NewRenderedUnitFromBuild(spec, testBuildResolve("/var/lib/syslet/build"))
 	rendered := mustRender(t, ru, err)
 
 	want := filepath.Join("/var/lib/syslet/build/myapp", "Containerfile")
@@ -43,7 +43,7 @@ func TestBuildSpec_Render_WithConfigs(t *testing.T) {
 		},
 		model.ReclaimPolicyRetain,
 	)
-	ru, err := RenderBuild(spec, testBuildResolve("/var/lib/syslet/build"))
+	ru, err := NewRenderedUnitFromBuild(spec, testBuildResolve("/var/lib/syslet/build"))
 	mustRender(t, ru, err)
 
 	if len(spec.ContextFiles) != 2 {
@@ -71,7 +71,7 @@ func TestBuildSpec_Render_ConfigFileMode(t *testing.T) {
 		},
 		model.ReclaimPolicyRetain,
 	)
-	ru, err := RenderBuild(spec, testBuildResolve("/var/lib/syslet/build"))
+	ru, err := NewRenderedUnitFromBuild(spec, testBuildResolve("/var/lib/syslet/build"))
 	mustRender(t, ru, err)
 
 	if spec.ContextFiles[0].Mode != 0755 {
@@ -90,7 +90,7 @@ func TestBuildSpec_Render_ContentSerializable(t *testing.T) {
 		nil,
 		model.ReclaimPolicyDelete,
 	)
-	ru, err := RenderBuild(spec, testBuildResolve("/var/lib/syslet/build"))
+	ru, err := NewRenderedUnitFromBuild(spec, testBuildResolve("/var/lib/syslet/build"))
 	rendered := mustRender(t, ru, err)
 
 	if rendered.Content == "" {
@@ -105,7 +105,7 @@ func TestBuildSpec_ReclaimableMixin(t *testing.T) {
 	resolve := testBuildResolve("/var/lib/syslet/build")
 	testReclaimableMixin(t,
 		func() (RenderedUnit, error) {
-			return RenderBuild(model.NewBuildUnit(
+			return NewRenderedUnitFromBuild(model.NewBuildUnit(
 				model.BuildUnitRef("myapp"),
 				nil,
 				"FROM alpine",
@@ -114,7 +114,7 @@ func TestBuildSpec_ReclaimableMixin(t *testing.T) {
 			), resolve)
 		},
 		func() (RenderedUnit, error) {
-			return RenderBuild(model.NewBuildUnit(
+			return NewRenderedUnitFromBuild(model.NewBuildUnit(
 				model.BuildUnitRef("myapp"),
 				makeUnitOptions(SectionXSyslet, "ReclaimPolicy", "Retain"),
 				"FROM alpine",
@@ -123,7 +123,7 @@ func TestBuildSpec_ReclaimableMixin(t *testing.T) {
 			), resolve)
 		},
 		func() (RenderedUnit, error) {
-			return RenderBuild(model.NewBuildUnit(
+			return NewRenderedUnitFromBuild(model.NewBuildUnit(
 				model.BuildUnitRef("myapp"),
 				nil,
 				"FROM alpine",

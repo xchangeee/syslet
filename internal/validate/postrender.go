@@ -9,7 +9,7 @@ import (
 )
 
 // PostRender performs post-render validation on rendered unit options.
-func PostRender(result render.RenderResult) error {
+func PostRender(result render.Result) error {
 	if err := validateContainerVolumeReferencesExist(result.Containers, result.Volumes); err != nil {
 		return err
 	}

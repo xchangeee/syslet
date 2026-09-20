@@ -21,8 +21,8 @@ type ContainerResolverFactory func(ref model.ContainerUnitRef, dest model.Contai
 // BuildResolverFactory maps a build name and context filename to its full host-disk path.
 type BuildResolverFactory func(buildName, filename string) string
 
-// RenderResult holds the output of Render, grouped by unit type.
-type RenderResult struct {
+// Result holds the output of Render, grouped by unit type.
+type Result struct {
 	Containers []RenderedUnit
 	Volumes    []RenderedUnit
 	Networks   []RenderedUnit
@@ -31,35 +31,35 @@ type RenderResult struct {
 	UnitNames map[model.FullUnitName]bool
 }
 
-func Render(units []model.Unit, configResolve ContainerResolverFactory, buildResolve BuildResolverFactory) (RenderResult, error) {
-	var result RenderResult
+func NewResult(units []model.Unit, configResolve ContainerResolverFactory, buildResolve BuildResolverFactory) (Result, error) {
+	var result Result
 	result.UnitNames = make(map[model.FullUnitName]bool)
 	for _, unit := range units {
 		var r RenderedUnit
 		var err error
 		switch unit.Ref().UnitType() {
 		case model.UnitTypeContainer:
-			r, err = RenderContainer(unit.(*model.ContainerUnit), configResolve)
+			r, err = NewRenderedUnitFromContainer(unit.(*model.ContainerUnit), configResolve)
 			if err != nil {
-				return RenderResult{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
+				return Result{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
 			}
 			result.Containers = append(result.Containers, r)
 		case model.UnitTypeVolume:
-			r, err = RenderVolume(unit.(*model.VolumeUnit))
+			r, err = NewRenderedUnitFromVolume(unit.(*model.VolumeUnit))
 			if err != nil {
-				return RenderResult{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
+				return Result{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
 			}
 			result.Volumes = append(result.Volumes, r)
 		case model.UnitTypeNetwork:
-			r, err = RenderNetwork(unit.(*model.NetworkUnit))
+			r, err = NewRenderedUnitFromNetwork(unit.(*model.NetworkUnit))
 			if err != nil {
-				return RenderResult{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
+				return Result{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
 			}
 			result.Networks = append(result.Networks, r)
 		case model.UnitTypeBuild:
-			r, err = RenderBuild(unit.(*model.BuildUnit), buildResolve)
+			r, err = NewRenderedUnitFromBuild(unit.(*model.BuildUnit), buildResolve)
 			if err != nil {
-				return RenderResult{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
+				return Result{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
 			}
 			result.Builds = append(result.Builds, r)
 		}
@@ -68,11 +68,11 @@ func Render(units []model.Unit, configResolve ContainerResolverFactory, buildRes
 	return result, nil
 }
 
-// RenderContainer converts a ContainerUnit into a RenderedUnit.
+// NewRenderedUnitFromContainer converts a ContainerUnit into a RenderedUnit.
 // Volume= entries for file and directory mounts are emitted here using resolveFor to obtain
 // the host-side path; the mount data itself remains on the unit for plan builders to access.
-func RenderContainer(unit *model.ContainerUnit, resolveFor ContainerResolverFactory) (RenderedUnit, error) {
-	r := RenderUnit(unit)
+func NewRenderedUnitFromContainer(unit *model.ContainerUnit, resolveFor ContainerResolverFactory) (RenderedUnit, error) {
+	r := NewUnitRenderer(unit)
 	r.Default(SectionUnit, KeyUnitDescription, unit.Ref().Name()+" container")
 	r.Override(SectionContainer, KeyContainerName, unit.Ref().Name())
 	r.Override(SectionXSyslet, KeyXSysletRemovalAllowed, strconv.FormatBool(unit.RemovalAllowed))
@@ -94,29 +94,29 @@ func RenderContainer(unit *model.ContainerUnit, resolveFor ContainerResolverFact
 	return r.RenderedUnit()
 }
 
-// RenderVolume converts a VolumeUnit into a RenderedUnit.
-func RenderVolume(unit *model.VolumeUnit) (RenderedUnit, error) {
-	r := RenderUnit(unit)
+// NewRenderedUnitFromVolume converts a VolumeUnit into a RenderedUnit.
+func NewRenderedUnitFromVolume(unit *model.VolumeUnit) (RenderedUnit, error) {
+	r := NewUnitRenderer(unit)
 	r.Override(SectionVolume, KeyVolumeName, unit.Ref().Name())
 	r.Override(SectionXSyslet, KeyXSysletRemovalAllowed, strconv.FormatBool(unit.RemovalAllowed))
 	r.Override(SectionXSyslet, KeyXSysletReclaimPolicy, string(unit.ReclaimPolicy))
 	return r.RenderedUnit()
 }
 
-// RenderNetwork converts a NetworkUnit into a RenderedUnit.
-func RenderNetwork(unit *model.NetworkUnit) (RenderedUnit, error) {
-	r := RenderUnit(unit)
+// NewRenderedUnitFromNetwork converts a NetworkUnit into a RenderedUnit.
+func NewRenderedUnitFromNetwork(unit *model.NetworkUnit) (RenderedUnit, error) {
+	r := NewUnitRenderer(unit)
 	r.Override(SectionNetwork, KeyNetworkName, unit.Ref().Name())
 	r.Override(SectionXSyslet, KeyXSysletRemovalAllowed, strconv.FormatBool(unit.RemovalAllowed))
 	r.Override(SectionXSyslet, KeyXSysletReclaimPolicy, string(unit.ReclaimPolicy))
 	return r.RenderedUnit()
 }
 
-// RenderBuild converts a BuildUnit into a RenderedUnit.
+// NewRenderedUnitFromBuild converts a BuildUnit into a RenderedUnit.
 // Only the unit file (Build= path, ReclaimPolicy) is produced here; the Containerfile and
 // context files remain on the unit for the plan builder to handle uniformly.
-func RenderBuild(unit *model.BuildUnit, resolveFor BuildResolverFactory) (RenderedUnit, error) {
-	r := RenderUnit(unit)
+func NewRenderedUnitFromBuild(unit *model.BuildUnit, resolveFor BuildResolverFactory) (RenderedUnit, error) {
+	r := NewUnitRenderer(unit)
 	r.Override(SectionBuild, KeyBuildFile, resolveFor(unit.Ref().Name(), "Containerfile"))
 	r.Override(SectionXSyslet, KeyXSysletReclaimPolicy, string(unit.ReclaimPolicy))
 	return r.RenderedUnit()
