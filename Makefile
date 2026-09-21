@@ -1,4 +1,4 @@
-.PHONY: deps check fmt test coverage build build-bin clean
+.PHONY: deps check fmt test coverage build build-bin clean docs docs-serve
 
 deps:
 	go mod tidy
@@ -40,5 +40,13 @@ build-bin:
 	GOOS=linux GOARCH=amd64 go build -o ./build/syslet-linux-amd64 ./cmd/syslet
 	GOOS=linux GOARCH=arm64 go build -o ./build/syslet-linux-arm64 ./cmd/syslet
 
+docs:
+	uvx zensical build --strict
+
+docs-serve:
+	uvx zensical serve
+
 clean:
 	rm -rf ./build
+	rm -rf ./site
+	rm -rf ./.cache

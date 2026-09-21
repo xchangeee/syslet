@@ -1,0 +1,78 @@
+[project]
+site_name = "syslet"
+site_description = "A GitOps-friendly deployment tool for Podman containers using systemd and quadlets."
+repo_url = "https://codeberg.org/xchangeee/syslet"
+repo_name = "xchangeee/syslet"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Tutorials" = [
+    { "Overview" = "tutorials/index.md" },
+    { "First deployment" = "tutorials/01-first-deployment.md" },
+    { "Updating and diffing" = "tutorials/02-updating-and-diffing.md" },
+  ] },
+  { "How-to Guides" = [
+    { "Overview" = "how-to/index.md" },
+    { "Deploy over SSH" = "how-to/deploy-over-ssh.md" },
+    { "Deploy from a directory" = "how-to/deploy-from-a-directory.md" },
+    { "Set up GitOps with webhookd" = "how-to/set-up-gitops-with-webhookd.md" },
+    { "Preview changes with --diff" = "how-to/preview-changes-with-diff.md" },
+    { "Build a container image" = "how-to/build-a-container-image.md" },
+    { "Mount config files and dirs" = "how-to/mount-config-files-and-dirs.md" },
+    { "Reload config without restart" = "how-to/reload-config-without-restart.md" },
+    { "Build and preview the docs locally" = "how-to/build-and-preview-docs-locally.md" },
+  ] },
+  { "Explanation" = [
+    { "Overview" = "explanation/index.md" },
+    { "Motivation" = "explanation/motivation.md" },
+    { "Alternatives and comparisons" = "explanation/alternatives-and-comparisons.md" },
+    { "Workflow" = "explanation/workflow.md" },
+    { "Safety mechanisms" = "explanation/safety-mechanisms.md" },
+    { "Unit types" = "explanation/unit-types.md" },
+    { "Reconciliation model" = "explanation/reconciliation-model.md" },
+  ] },
+  { "Reference" = [
+    { "Overview" = "reference/index.md" },
+    { "Architecture" = "reference/architecture.md" },
+    { "CLI" = "reference/cli.md" },
+    { "Daemon config" = "reference/daemon-config.md" },
+    { "Spec schema" = [
+      { "Overview" = "reference/spec-schema/index.md" },
+      { "Container" = "reference/spec-schema/container.md" },
+      { "Build" = "reference/spec-schema/build.md" },
+      { "Network" = "reference/spec-schema/network.md" },
+      { "Volume" = "reference/spec-schema/volume.md" },
+    ] },
+    { "File layout" = "reference/file-layout.md" },
+    { "Quadlet options" = "reference/quadlet-options.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+def_list = {}
+toc.permalink = true
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
