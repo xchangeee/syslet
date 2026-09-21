@@ -28,6 +28,32 @@ paths:
 
 Define the project's vocabulary once and prefer it over free-form wording to keep grep-ability across the test suite.
 
+### This project's vocabulary
+
+Domain nouns used as the subject of a scenario: `Container`, `OneshotContainer`,
+`Build`, `Network`, `Volume`, `Secret`, `ContainerConfigFile`,
+`ContainerConfigDir`. Prefix with `New` or `Stale` for the lifecycle state
+(`TestStaleBuild_...`, `TestNewVolume_...`) rather than trailing `_New` / `_Stale`.
+
+Outcome terms, beyond the generic ones above:
+
+- `WritesUnitOnly` — the quadlet unit file is written and daemon-reloaded, with no
+  service transition.
+- `RemovesUnit`, `StopsAndRemovesUnit` — unit file pruned, with or without a stop first.
+- `RestartsService`, `ReloadsService` — the stop/start pair versus an in-place reload.
+  These are distinct outcomes, never interchangeable.
+- `RestartsWithoutReload` — restarted, and specifically *not* also reloaded.
+- `NoRecreation` — the unit is rewritten but its backing podman resource is left
+  alone and no service transitions. Distinct from `NoAction`, which means nothing
+  happened at all; a metadata-only change still costs a daemon-reload.
+- `DoesNotRestartContainers` — the negative form of a restart, matching `DoesNotStart`.
+  Do not spell this `ContainerNotRestarted` or `NoContainerRestart`.
+- `DeletesPodman<Resource>` — reclamation of the podman-side image, volume or network,
+  as opposed to the unit file.
+
+Say `Mode`, not `Permissions`, for file modes — it matches `model.ContainerConfigFile`.
+Outcomes are active and subject-first (`RemovesFile`, not `DeletedFromDisk`).
+
 
 ## Test Naming Scheme
 

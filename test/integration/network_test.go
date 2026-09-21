@@ -24,7 +24,7 @@ func makeContainerSpecWithNetwork(name, image string, state model.DesiredState, 
 	)
 }
 
-func TestApply_Network_MeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
+func TestNetworkMeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
 	frontendNetworkSpec := makeNetworkSpec("frontend", "macvlan")
 	webappSpec := makeContainerSpecWithNetwork("webapp", "nginx:latest", model.DesiredStateRunning, "frontend")
 
@@ -57,7 +57,7 @@ func TestApply_Network_MeaningfulChange_RecreatesAndRestartsContainers(t *testin
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_Network_MetadataOnlyChange_NoRecreation(t *testing.T) {
+func TestNetworkMetadataOnlyChange_NoRecreation(t *testing.T) {
 	// New spec: RemovalAllowed=true (metadata-only change), same Driver=bridge
 	frontendNetworkSpec := makeStaleNetworkSpec("frontend", "bridge")
 	webappSpec := makeContainerSpecWithNetwork("webapp", "nginx:latest", model.DesiredStateRunning, "frontend")
@@ -89,7 +89,7 @@ func TestApply_Network_MetadataOnlyChange_NoRecreation(t *testing.T) {
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_Network_New_WritesUnitOnly(t *testing.T) {
+func TestNewNetwork_WritesUnitOnly(t *testing.T) {
 	specs := []model.Unit{makeNetworkSpec("frontend", "bridge")}
 	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
 
@@ -100,7 +100,7 @@ func TestApply_Network_New_WritesUnitOnly(t *testing.T) {
 	testutil.AssertNoStartStop(t, mockConn)
 }
 
-func TestApply_Network_Stale_RemovesUnit(t *testing.T) {
+func TestStaleNetwork_RemovesUnit(t *testing.T) {
 	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	staleNetworkSpec := makeStaleNetworkSpec("oldnet", "bridge")
 	fs := afero.NewMemMapFs()
@@ -121,7 +121,7 @@ func TestApply_Network_Stale_RemovesUnit(t *testing.T) {
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_Network_StaleWithDeletePolicy_DeletesPodmanNetwork(t *testing.T) {
+func TestStaleNetworkWithDeletePolicy_DeletesPodmanNetwork(t *testing.T) {
 	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 
 	staleNetworkSpec := makeStaleNetworkSpecWithDelete("oldnet", "bridge")

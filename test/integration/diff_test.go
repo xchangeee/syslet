@@ -15,9 +15,9 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 )
 
-// TestDisplayPlan_SecretChanges verifies that syslet.DisplayPlan groups secret upserts and
+// TestPlanWithSecretChanges_GroupsBySpec verifies that syslet.DisplayPlan groups secret upserts and
 // deletes by spec name, showing plaintext new values and "(secret)" for old values.
-func TestDisplayPlan_SecretChanges(t *testing.T) {
+func TestPlanWithSecretChanges_GroupsBySpec(t *testing.T) {
 	tests := []struct {
 		name       string
 		upserts    []syslet.UpsertPodmanSecretOp
@@ -106,10 +106,10 @@ UNIT                                     STATUS     CHANGES
 	}
 }
 
-// TestValidationErrorsInPlan verifies that ValidateUnits failures are recorded
+// TestPlanWithValidationErrors_PrintsErrorsOnly verifies that ValidateUnits failures are recorded
 // in the plan (not returned as a fatal error), and that syslet.DisplayPlan suppresses
 // the diff when the plan contains errors.
-func TestValidationErrorsInPlan(t *testing.T) {
+func TestPlanWithValidationErrors_PrintsErrorsOnly(t *testing.T) {
 	// X-Syslet section is reserved; NoXSysletSection in ValidateUnits rejects this.
 	badSpec := model.NewContainerUnit(
 		model.ContainerUnitRef("myapp"),
@@ -149,10 +149,10 @@ func TestValidationErrorsInPlan(t *testing.T) {
 	}
 }
 
-// TestStagingErrorsSuppressDiff verifies that when staging validation records
+// TestPlanWithStagingErrors_SuppressesDiff verifies that when staging validation records
 // errors on an otherwise fully-built plan (with unit file changes), syslet.DisplayPlan
 // suppresses the diff and shows only the errors.
-func TestStagingErrorsSuppressDiff(t *testing.T) {
+func TestPlanWithStagingErrors_SuppressesDiff(t *testing.T) {
 	spec := makeContainerSpec("webapp", "nginx:alpine", model.DesiredStateRunning)
 	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 
@@ -196,9 +196,9 @@ func TestStagingErrorsSuppressDiff(t *testing.T) {
 	}
 }
 
-// TestDisplayDiff_ConfigDir verifies that syslet.DisplayPlan shows per-file unified diffs
+// TestPlanWithConfigDirChanges_ShowsFileDiff verifies that syslet.DisplayPlan shows per-file unified diffs
 // for configDir changes. Requires a real OS filesystem because versioned dirs use symlinks.
-func TestDisplayDiff_ConfigDir(t *testing.T) {
+func TestPlanWithConfigDirChanges_ShowsFileDiff(t *testing.T) {
 	const mountPath = "/etc/app/config"
 
 	store := newConfigStore(t)
@@ -245,9 +245,9 @@ webapp.container                         updated    configDir updated, reloaded 
 	}
 }
 
-// TestDisplayDiff_ConfigDir_ModeChange verifies that syslet.DisplayPlan shows a mode-change
+// TestPlanWithConfigDirModeChange_ShowsModeDiff verifies that syslet.DisplayPlan shows a mode-change
 // line when only the file permission bits change (content is identical).
-func TestDisplayDiff_ConfigDir_ModeChange(t *testing.T) {
+func TestPlanWithConfigDirModeChange_ShowsModeDiff(t *testing.T) {
 	const mountPath = "/etc/app/config"
 
 	store := newConfigStore(t)
@@ -291,7 +291,7 @@ webapp.container                         updated    configDir updated, reloaded 
 	}
 }
 
-func TestDisplayDiff(t *testing.T) {
+func TestPlanDiffOutput(t *testing.T) {
 	tests := []struct {
 		name           string
 		spec           *model.ContainerUnit

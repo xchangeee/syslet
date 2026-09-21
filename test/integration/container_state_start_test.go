@@ -11,7 +11,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 )
 
-func TestApply_Container_NewWithRunningState_StartsService(t *testing.T) {
+func TestNewRunningContainer_StartsService(t *testing.T) {
 	specs := []model.Unit{makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)}
 	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
 
@@ -23,7 +23,7 @@ func TestApply_Container_NewWithRunningState_StartsService(t *testing.T) {
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_Container_QuadletError_DoesNotStart(t *testing.T) {
+func TestContainerQuadletError_DoesNotStart(t *testing.T) {
 	specs := []model.Unit{makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)}
 
 	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})

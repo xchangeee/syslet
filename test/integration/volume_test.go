@@ -44,7 +44,7 @@ func makeContainerSpecWithVolume(name string, state model.DesiredState, volumeNa
 	)
 }
 
-func TestApply_Volume_New_WritesUnitOnly(t *testing.T) {
+func TestNewVolume_WritesUnitOnly(t *testing.T) {
 	specs := []model.Unit{makeVolumeSpec("data", "tmpfs")}
 	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
 
@@ -55,28 +55,56 @@ func TestApply_Volume_New_WritesUnitOnly(t *testing.T) {
 	testutil.AssertNoStartStop(t, mockConn)
 }
 
-func TestApply_Volume_MetadataOnlyChange_WritesUnit(t *testing.T) {
+// TestVolumeMetadataOnlyChange covers a volume spec whose [X-Syslet] metadata
+// changed while Device= — the part podman actually materializes — did not. The
+// distinction is what keeps a reclaim-policy edit from being destructive: the
+// unit file is rewritten, but the backing podman volume survives and containers
+// mounting it keep running. Both halves are asserted here because either one
+// failing alone would still lose data or availability.
+func TestVolumeMetadataOnlyChange(t *testing.T) {
 	// removalAllowed flips from false to true — metadata-only, same Device=.
-	newVolumeSpec := makeStaleVolumeSpec("data", "tmpfs")
-	oldVolumeSpec := makeVolumeSpec("data", "tmpfs")
+	t.Run("WritesUnit", func(t *testing.T) {
+		newVolumeSpec := makeStaleVolumeSpec("data", "tmpfs")
+		oldVolumeSpec := makeVolumeSpec("data", "tmpfs")
 
-	fs := afero.NewMemMapFs()
+		fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs:         []model.Unit{newVolumeSpec},
-		existingUnits: map[string]string{"data.volume": renderVolume(t, oldVolumeSpec)},
+		ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
+			specs:         []model.Unit{newVolumeSpec},
+			existingUnits: map[string]string{"data.volume": renderVolume(t, oldVolumeSpec)},
+		})
+
+		mustApply(t, ctx, fs, sd, mockPodman, raw)
+
+		mockPc := mockPodman.(*mockPodmanClient)
+		if len(mockPc.deletedVolumes) != 0 {
+			t.Errorf("expected no deleted volumes, got: %v", mockPc.deletedVolumes)
+		}
+		testutil.AssertUnitExists(t, sd, "data.volume")
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
+	t.Run("DoesNotRestartContainers", func(t *testing.T) {
+		newVolumeSpec := makeStaleVolumeSpec("data", "tmpfs")
+		oldVolumeSpec := makeVolumeSpec("data", "tmpfs")
+		webappSpec := makeContainerSpecWithVolume("webapp", model.DesiredStateRunning, "data", "/data")
+		fs := afero.NewMemMapFs()
 
-	mockPc := mockPodman.(*mockPodmanClient)
-	if len(mockPc.deletedVolumes) != 0 {
-		t.Errorf("expected no deleted volumes, got: %v", mockPc.deletedVolumes)
-	}
-	testutil.AssertUnitExists(t, sd, "data.volume")
+		ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
+			specs: []model.Unit{newVolumeSpec, webappSpec},
+			existingUnits: map[string]string{
+				"data.volume":      renderVolume(t, oldVolumeSpec),
+				"webapp.container": renderContainer(t, fs, webappSpec),
+			},
+			existingState: map[string]string{"webapp.service": "active"},
+		})
+
+		mustApply(t, ctx, fs, sd, mockPodman, raw)
+
+		testutil.AssertNoStartStop(t, mockConn)
+	})
 }
 
-func TestApply_Volume_MeaningfulChange_WithDeletePolicy_DeletesAndRecreatesUnit(t *testing.T) {
+func TestVolumeMeaningfulChangeWithDeletePolicy_DeletesAndRecreatesUnit(t *testing.T) {
 	newVolumeSpec := makeVolumeSpecWithDelete("data", "tmpfs")
 	oldVolumeSpec := makeVolumeSpecWithDelete("data", "old-device") // existing unit must carry the flags
 
@@ -97,7 +125,7 @@ func TestApply_Volume_MeaningfulChange_WithDeletePolicy_DeletesAndRecreatesUnit(
 	testutil.AssertUnitExists(t, sd, "data.volume")
 }
 
-func TestApply_Volume_MeaningfulChange_WithoutDeletePolicy_Errors(t *testing.T) {
+func TestVolumeMeaningfulChangeWithoutDeletePolicy_Errors(t *testing.T) {
 	newVolumeSpec := makeVolumeSpec("data", "tmpfs") // no delete policy
 	oldVolumeSpec := makeVolumeSpec("data", "old-device")
 
@@ -123,7 +151,46 @@ func TestApply_Volume_MeaningfulChange_WithoutDeletePolicy_Errors(t *testing.T) 
 	}
 }
 
-func TestApply_Volume_Stale_RemovesUnit(t *testing.T) {
+// TestVolumeChanged_StagesAllUnitTypes verifies that all rendered unit types
+// (container, volume, network, build) appear in the staging directory even when only
+// the volume has changed. The quadlet generator needs the full picture to validate correctly.
+func TestVolumeChanged_StagesAllUnitTypes(t *testing.T) {
+	containerSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
+	oldVolumeSpec := makeVolumeSpec("data", "tmpfs")      // removalAllowed=false
+	newVolumeSpec := makeStaleVolumeSpec("data", "tmpfs") // removalAllowed=true — metadata-only change, no recreation
+	netSpec := makeNetworkSpec("frontend", "bridge")
+	buildSpec := makeBuildSpec("myapp", "localhost/myapp:latest")
+
+	fs := afero.NewMemMapFs()
+	ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
+		specs: []model.Unit{containerSpec, newVolumeSpec, netSpec, buildSpec},
+		existingUnits: map[string]string{
+			"webapp.container": renderContainer(t, fs, containerSpec),
+			"data.volume":      renderVolume(t, oldVolumeSpec),
+			"frontend.network": renderNetwork(t, netSpec),
+			"myapp.build":      renderBuild(t, fs, buildSpec),
+		},
+		existingState: map[string]string{"webapp.service": "active"},
+	})
+
+	gen := &recordingQuadletGenerator{fs: fs}
+	mgrs := newTestFileManagers(fs)
+	if _, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw); err != nil {
+		t.Fatalf("BuildPlan failed: %v", err)
+	}
+
+	staged := make(map[string]bool, len(gen.stagedFiles))
+	for _, f := range gen.stagedFiles {
+		staged[f] = true
+	}
+	for _, want := range []string{"webapp.container", "data.volume", "frontend.network", "myapp.build"} {
+		if !staged[want] {
+			t.Errorf("expected %s to be staged", want)
+		}
+	}
+}
+
+func TestStaleVolume_RemovesUnit(t *testing.T) {
 	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	staleVolumeSpec := makeStaleVolumeSpec("olddata", "tmpfs")
 	fs := afero.NewMemMapFs()
@@ -144,7 +211,7 @@ func TestApply_Volume_Stale_RemovesUnit(t *testing.T) {
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_Volume_StaleWithDeletePolicy_DeletesPodmanVolume(t *testing.T) {
+func TestStaleVolumeWithDeletePolicy_DeletesPodmanVolume(t *testing.T) {
 	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 
 	staleVolumeSpec := makeStaleVolumeSpecWithDelete("olddata", "tmpfs")

@@ -127,7 +127,7 @@ func sortedUpsertNames(ops []syslet.UpsertPodmanSecretOp) []string {
 	return names
 }
 
-func TestSecret_New_UpsertsAllKeys(t *testing.T) {
+func TestNewSecret_UpsertsAllKeys(t *testing.T) {
 	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
 	ct := encryptedCiphertext(t)
 	raw := loadResultWithSecret(t, "myapp", ct, nil)
@@ -149,28 +149,72 @@ func TestSecret_New_UpsertsAllKeys(t *testing.T) {
 	}
 }
 
-func TestSecret_Unchanged_NoAction(t *testing.T) {
-	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
-	ct := encryptedCiphertext(t)
-	hash := secretContentHash(t)
+// TestSecretUnchanged pins the two halves of the no-op case for a secret whose
+// stored hash still matches the desired content. The plan must neither touch the
+// podman secret store nor disturb containers that reference the secret: because
+// the ciphertext is re-encrypted on every SOPS write, a hash comparison is the
+// only thing standing between an untouched spec and a restart of everything that
+// consumes it.
+func TestSecretUnchanged(t *testing.T) {
+	t.Run("NoAction", func(t *testing.T) {
+		ctx, fs, sd, _, mockPodman := secretTestSetup(t)
+		ct := encryptedCiphertext(t)
+		hash := secretContentHash(t)
 
-	mockPodman.existingSecrets = []podman.SecretMeta{
-		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": hash}},
-		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
-	}
-	raw := loadResultWithSecret(t, "myapp", ct, nil)
+		mockPodman.existingSecrets = []podman.SecretMeta{
+			{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": hash}},
+			{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
+		}
+		raw := loadResultWithSecret(t, "myapp", ct, nil)
 
-	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
+		plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
 
-	if len(plan.UpsertPodmanSecrets) != 0 {
-		t.Errorf("expected no upserts, got %v", plan.UpsertPodmanSecrets)
-	}
-	if len(plan.DeletePodmanSecrets) != 0 {
-		t.Errorf("expected no deletes, got %v", plan.DeletePodmanSecrets)
-	}
+		if len(plan.UpsertPodmanSecrets) != 0 {
+			t.Errorf("expected no upserts, got %v", plan.UpsertPodmanSecrets)
+		}
+		if len(plan.DeletePodmanSecrets) != 0 {
+			t.Errorf("expected no deletes, got %v", plan.DeletePodmanSecrets)
+		}
+	})
+
+	t.Run("DoesNotRestartContainers", func(t *testing.T) {
+		ctx, fs, sd, mockConn, mockPodman := secretTestSetup(t)
+		ct := encryptedCiphertext(t)
+		hash := secretContentHash(t)
+
+		webappSpec := model.NewContainerUnit(
+			model.ContainerUnitRef("webapp"),
+			model.UnitOptions{
+				"Container": {
+					model.SectionKey("Image"):  model.UV("nginx:latest"),
+					model.SectionKey("Secret"): model.UV("myapp-db-password"),
+				},
+			},
+			model.DesiredStateRunning, nil, false,
+		)
+
+		mockPodman.existingSecrets = []podman.SecretMeta{
+			{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": hash}},
+			{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
+		}
+
+		// Pre-write the unit file so the plan sees no unit change.
+		webappContent := renderContainer(t, fs, webappSpec)
+		if err := sd.WriteUnitFile("webapp.container", []byte(webappContent)); err != nil {
+			t.Fatalf("pre-write unit file: %v", err)
+		}
+		mockConn.SetUnitState("webapp.service", systemd.ActiveStateActive)
+
+		raw := loadResultWithSecret(t, "myapp", ct, []model.Unit{webappSpec})
+		plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
+
+		if len(plan.StopSystemdServices) != 0 || len(plan.StartSystemdServices) != 0 {
+			t.Errorf("expected no restart: stops=%v starts=%v", plan.StopSystemdServices, plan.StartSystemdServices)
+		}
+	})
 }
 
-func TestSecret_ContentChanged_UpsertsAllKeys(t *testing.T) {
+func TestSecretContentChanged_UpsertsAllKeys(t *testing.T) {
 	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
 	ct := encryptedCiphertext(t)
 
@@ -190,7 +234,7 @@ func TestSecret_ContentChanged_UpsertsAllKeys(t *testing.T) {
 	}
 }
 
-func TestSecret_OrphanKey_DeletesKey(t *testing.T) {
+func TestOrphanSecretKey_DeletesKey(t *testing.T) {
 	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
 	ct := encryptedCiphertext(t)
 	hash := secretContentHash(t)
@@ -212,7 +256,7 @@ func TestSecret_OrphanKey_DeletesKey(t *testing.T) {
 	}
 }
 
-func TestSecret_SpecRemoved_DeletesAllKeys(t *testing.T) {
+func TestSecretSpecRemoved_DeletesAllKeys(t *testing.T) {
 	// No secret specs in the input, but syslet-managed secrets exist on host.
 	ctx, fs, sd, _, mockPodman := secretTestSetup(t)
 
@@ -253,7 +297,7 @@ func TestSecret_SpecRemoved_DeletesAllKeys(t *testing.T) {
 	}
 }
 
-func TestSecret_Changed_RestartsReferencingContainers(t *testing.T) {
+func TestSecretChanged_RestartsReferencingContainers(t *testing.T) {
 	ctx, fs, sd, mockConn, mockPodman := secretTestSetup(t)
 	ct := encryptedCiphertext(t)
 
@@ -297,41 +341,5 @@ func TestSecret_Changed_RestartsReferencingContainers(t *testing.T) {
 	}
 	if !stopped || !started {
 		t.Errorf("expected webapp to be restarted (stopped=%v started=%v)", stopped, started)
-	}
-}
-
-func TestSecret_Unchanged_NoContainerRestart(t *testing.T) {
-	ctx, fs, sd, mockConn, mockPodman := secretTestSetup(t)
-	ct := encryptedCiphertext(t)
-	hash := secretContentHash(t)
-
-	webappSpec := model.NewContainerUnit(
-		model.ContainerUnitRef("webapp"),
-		model.UnitOptions{
-			"Container": {
-				model.SectionKey("Image"):  model.UV("nginx:latest"),
-				model.SectionKey("Secret"): model.UV("myapp-db-password"),
-			},
-		},
-		model.DesiredStateRunning, nil, false,
-	)
-
-	mockPodman.existingSecrets = []podman.SecretMeta{
-		{Name: "myapp-api-key", Labels: map[string]string{"syslet/hash": hash}},
-		{Name: "myapp-db-password", Labels: map[string]string{"syslet/hash": hash}},
-	}
-
-	// Pre-write the unit file so the plan sees no unit change.
-	webappContent := renderContainer(t, fs, webappSpec)
-	if err := sd.WriteUnitFile("webapp.container", []byte(webappContent)); err != nil {
-		t.Fatalf("pre-write unit file: %v", err)
-	}
-	mockConn.SetUnitState("webapp.service", systemd.ActiveStateActive)
-
-	raw := loadResultWithSecret(t, "myapp", ct, []model.Unit{webappSpec})
-	plan := buildSecretPlan(t, ctx, fs, sd, mockPodman, secretTestDecryptor(t), raw)
-
-	if len(plan.StopSystemdServices) != 0 || len(plan.StartSystemdServices) != 0 {
-		t.Errorf("expected no restart: stops=%v starts=%v", plan.StopSystemdServices, plan.StartSystemdServices)
 	}
 }

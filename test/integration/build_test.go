@@ -31,7 +31,7 @@ func preWriteBuildContext(t *testing.T, fs afero.Fs, unitName, fileName, content
 	}
 }
 
-func TestApply_Build_Stale_RemovesUnit(t *testing.T) {
+func TestStaleBuild_RemovesUnit(t *testing.T) {
 	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	staleBuildSpec := makeStaleBuildSpec("oldapp", "oldapp:latest")
 	fs := afero.NewMemMapFs()
@@ -57,33 +57,73 @@ func TestApply_Build_Stale_RemovesUnit(t *testing.T) {
 	}
 }
 
-func TestApply_Build_StaleWithDeletePolicy_DeletesPodmanImage(t *testing.T) {
-	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
+// TestStaleBuildWithDeletePolicy covers what a stale build unit carrying the
+// Delete reclaim policy triggers: the unit file goes away (as it would under any
+// policy) and, unlike the default policy, the backing podman image is reclaimed.
+// The second outcome guards the blast radius — reclamation must not reach images
+// belonging to builds that are still in the desired set.
+func TestStaleBuildWithDeletePolicy(t *testing.T) {
+	t.Run("DeletesPodmanImage", func(t *testing.T) {
+		webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 
-	staleBuildSpec := makeStaleBuildSpec("oldapp", "oldapp:latest")
-	staleBuildSpec = makeStaleBuildSpecWithDelete(staleBuildSpec.Ref().Name(), "oldapp:latest")
-	fs := afero.NewMemMapFs()
+		staleBuildSpec := makeStaleBuildSpec("oldapp", "oldapp:latest")
+		staleBuildSpec = makeStaleBuildSpecWithDelete(staleBuildSpec.Ref().Name(), "oldapp:latest")
+		fs := afero.NewMemMapFs()
 
-	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{webappSpec},
-		existingUnits: map[string]string{
-			"webapp.container": renderContainer(t, fs, webappSpec),
-			"oldapp.build":     renderBuild(t, fs, staleBuildSpec),
-		},
-		existingState: map[string]string{"webapp.service": "active"},
+		ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
+			specs: []model.Unit{webappSpec},
+			existingUnits: map[string]string{
+				"webapp.container": renderContainer(t, fs, webappSpec),
+				"oldapp.build":     renderBuild(t, fs, staleBuildSpec),
+			},
+			existingState: map[string]string{"webapp.service": "active"},
+		})
+
+		mustApply(t, ctx, fs, sd, mockPodman, raw)
+
+		testutil.AssertUnitAbsent(t, sd, "oldapp.build")
+
+		mockPc := mockPodman.(*mockPodmanClient)
+		if len(mockPc.deletedImages) != 1 || mockPc.deletedImages[0] != "oldapp:latest" {
+			t.Errorf("expected DeleteImage('oldapp:latest'), got: %v", mockPc.deletedImages)
+		}
 	})
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
+	t.Run("DeletesOnlyTaggedImage", func(t *testing.T) {
+		// myapp is active and referenced by a container; oldapp is stale and unreferenced.
+		// Only oldapp's image tag should be deleted; myapp's tag must be left untouched.
+		webappSpec := makeContainerSpec("webapp", "myapp.build", model.DesiredStateRunning)
 
-	testutil.AssertUnitAbsent(t, sd, "oldapp.build")
+		activeBuildSpec := makeBuildSpec("myapp", "localhost/myapp:latest")
 
-	mockPc := mockPodman.(*mockPodmanClient)
-	if len(mockPc.deletedImages) != 1 || mockPc.deletedImages[0] != "oldapp:latest" {
-		t.Errorf("expected DeleteImage('oldapp:latest'), got: %v", mockPc.deletedImages)
-	}
+		staleBuildSpec := makeStaleBuildSpec("oldapp", "oldapp:latest")
+		staleBuildSpec = makeStaleBuildSpecWithDelete(staleBuildSpec.Ref().Name(), "oldapp:latest")
+
+		fs := afero.NewMemMapFs()
+
+		ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
+			specs: []model.Unit{webappSpec, activeBuildSpec},
+			existingUnits: map[string]string{
+				"webapp.container": renderContainer(t, fs, webappSpec),
+				"myapp.build":      renderBuild(t, fs, activeBuildSpec),
+				"oldapp.build":     renderBuild(t, fs, staleBuildSpec),
+			},
+			existingState: map[string]string{"webapp.service": "active"},
+		})
+
+		mustApply(t, ctx, fs, sd, mockPodman, raw)
+
+		testutil.AssertUnitAbsent(t, sd, "oldapp.build")
+		testutil.AssertUnitExists(t, sd, "myapp.build")
+
+		mockPc := mockPodman.(*mockPodmanClient)
+		if len(mockPc.deletedImages) != 1 || mockPc.deletedImages[0] != "oldapp:latest" {
+			t.Errorf("expected only DeleteImage('oldapp:latest'), got: %v", mockPc.deletedImages)
+		}
+	})
 }
 
-func TestApply_Build_MeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
+func TestBuildMeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
 	// New spec changes ImageTag — a meaningful change in the [Build] section.
 	newMyappSpec := makeBuildSpec("myapp", "localhost/myapp:v2")
 	webappSpec := makeContainerSpecWithBuild("webapp", model.DesiredStateRunning, "myapp")
@@ -119,7 +159,7 @@ func TestApply_Build_MeaningfulChange_RecreatesAndRestartsContainers(t *testing.
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_Build_ContextFileChange_RecreatesAndRestartsContainers(t *testing.T) {
+func TestBuildContextFileChange_RecreatesAndRestartsContainers(t *testing.T) {
 	// Unit file is unchanged; only the Containerfile content differs.
 	myappSpec := makeBuildSpec("myapp", "localhost/myapp:latest")
 	webappSpec := makeContainerSpecWithBuild("webapp", model.DesiredStateRunning, "myapp")
@@ -154,7 +194,7 @@ func TestApply_Build_ContextFileChange_RecreatesAndRestartsContainers(t *testing
 	// No daemon-reload: the quadlet unit file is unchanged, only the Containerfile changed.
 }
 
-func TestApply_Build_MetadataOnlyChange_NoRecreation(t *testing.T) {
+func TestBuildMetadataOnlyChange_NoRecreation(t *testing.T) {
 	// New spec changes ReclaimPolicy (written to [X-Syslet]) — a metadata-only change.
 	newMyappSpec := makeStaleBuildSpecWithDelete("myapp", "localhost/myapp:latest")
 	webappSpec := makeContainerSpecWithBuild("webapp", model.DesiredStateRunning, "myapp")
@@ -186,37 +226,4 @@ func TestApply_Build_MetadataOnlyChange_NoRecreation(t *testing.T) {
 	}
 
 	testutil.AssertReloaded(t, mockConn)
-}
-
-func TestApply_Build_StaleWithDeletePolicy_OnlyDeletesSpecificImageTag(t *testing.T) {
-	// myapp is active and referenced by a container; oldapp is stale and unreferenced.
-	// Only oldapp's image tag should be deleted; myapp's tag must be left untouched.
-	webappSpec := makeContainerSpec("webapp", "myapp.build", model.DesiredStateRunning)
-
-	activeBuildSpec := makeBuildSpec("myapp", "localhost/myapp:latest")
-
-	staleBuildSpec := makeStaleBuildSpec("oldapp", "oldapp:latest")
-	staleBuildSpec = makeStaleBuildSpecWithDelete(staleBuildSpec.Ref().Name(), "oldapp:latest")
-
-	fs := afero.NewMemMapFs()
-
-	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{webappSpec, activeBuildSpec},
-		existingUnits: map[string]string{
-			"webapp.container": renderContainer(t, fs, webappSpec),
-			"myapp.build":      renderBuild(t, fs, activeBuildSpec),
-			"oldapp.build":     renderBuild(t, fs, staleBuildSpec),
-		},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertUnitAbsent(t, sd, "oldapp.build")
-	testutil.AssertUnitExists(t, sd, "myapp.build")
-
-	mockPc := mockPodman.(*mockPodmanClient)
-	if len(mockPc.deletedImages) != 1 || mockPc.deletedImages[0] != "oldapp:latest" {
-		t.Errorf("expected only DeleteImage('oldapp:latest'), got: %v", mockPc.deletedImages)
-	}
 }

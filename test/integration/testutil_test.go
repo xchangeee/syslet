@@ -57,6 +57,17 @@ func makeContainerSpec(name, image string, state model.DesiredState) *model.Cont
 	)
 }
 
+// makeContainerSpecWithMounts builds a running container spec from a mount slice
+// that table-driven tests vary per case. An empty slice yields a spec with no
+// config mounts at all — identical to makeContainerSpec — so that "no configs"
+// is expressible as a table row rather than a separate construction path.
+func makeContainerSpecWithMounts(name, image string, mounts []model.ContainerFileMount) *model.ContainerUnit {
+	if len(mounts) == 0 {
+		return makeContainerSpec(name, image, model.DesiredStateRunning)
+	}
+	return makeContainerSpecWithConfigs(name, image, model.DesiredStateRunning, mounts...)
+}
+
 func makeContainerSpecWithConfigs(name, image string, state model.DesiredState, configs ...model.ContainerFileMount) *model.ContainerUnit {
 	return model.NewContainerUnit(
 		model.ContainerUnitRef(name),

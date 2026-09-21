@@ -81,7 +81,7 @@ func preWriteConfigDir(t *testing.T, store *filestore.ContainerConfigFileStore, 
 
 // --- Reload scenarios ---
 
-func TestApply_ContainerConfigDir_FilesUnchanged_NoAction(t *testing.T) {
+func TestContainerConfigDirUnchanged_NoAction(t *testing.T) {
 	mountPath := model.ContainerMountPath("/etc/app/")
 	files := []model.ContainerConfigFile{
 		model.NewContainerConfigFile("app.conf", "key=value", 0),
@@ -103,140 +103,83 @@ func TestApply_ContainerConfigDir_FilesUnchanged_NoAction(t *testing.T) {
 	testutil.AssertContainerNotReloaded(t, mockConn)
 }
 
-func TestApply_ContainerConfigDir_FileContentChanged_ReloadsService(t *testing.T) {
+// TestContainerConfigDirFileChanges varies the kind of change made to a mounted
+// config directory while the container's own unit file stays byte-identical.
+// Every variant must take the cheap path: the contents are re-synced and the
+// service is reloaded in place, never stopped and started. Restart-worthy
+// changes (a new or removed directory, a changed unit) live in their own tests
+// below, since there the outcome differs rather than the condition.
+func TestContainerConfigDirFileChanges(t *testing.T) {
 	mountPath := model.ContainerMountPath("/etc/app/")
-	oldFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("app.conf", "old", 0),
+
+	tests := []struct {
+		name     string
+		oldFiles []model.ContainerConfigFile
+		newFiles []model.ContainerConfigFile
+	}{
+		{
+			name:     "ContentChanged",
+			oldFiles: []model.ContainerConfigFile{model.NewContainerConfigFile("app.conf", "old", 0)},
+			newFiles: []model.ContainerConfigFile{model.NewContainerConfigFile("app.conf", "new", 0)},
+		},
+		{
+			name: "OneOfMultipleChanged",
+			oldFiles: []model.ContainerConfigFile{
+				model.NewContainerConfigFile("a.conf", "unchanged", 0),
+				model.NewContainerConfigFile("b.conf", "old", 0),
+			},
+			newFiles: []model.ContainerConfigFile{
+				model.NewContainerConfigFile("a.conf", "unchanged", 0),
+				model.NewContainerConfigFile("b.conf", "new", 0),
+			},
+		},
+		{
+			name:     "FileAdded",
+			oldFiles: []model.ContainerConfigFile{model.NewContainerConfigFile("a.conf", "content", 0)},
+			newFiles: []model.ContainerConfigFile{
+				model.NewContainerConfigFile("a.conf", "content", 0),
+				model.NewContainerConfigFile("b.conf", "new file", 0),
+			},
+		},
+		{
+			name: "FileRemoved",
+			oldFiles: []model.ContainerConfigFile{
+				model.NewContainerConfigFile("a.conf", "content", 0),
+				model.NewContainerConfigFile("b.conf", "to be removed", 0),
+			},
+			newFiles: []model.ContainerConfigFile{model.NewContainerConfigFile("a.conf", "content", 0)},
+		},
+		{
+			name:     "ModeChanged",
+			oldFiles: []model.ContainerConfigFile{model.NewContainerConfigFile("run.sh", "#!/bin/sh", os.FileMode(0644))},
+			newFiles: []model.ContainerConfigFile{model.NewContainerConfigFile("run.sh", "#!/bin/sh", os.FileMode(0755))},
+		},
 	}
-	newFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("app.conf", "new", 0),
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
+				model.NewContainerDirMount(string(mountPath), tt.newFiles...))
+
+			store := newConfigStore(t)
+			ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
+				specs:         []model.Unit{spec},
+				existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
+				existingState: map[string]string{"webapp.service": "active"},
+			})
+			preWriteConfigDir(t, store, "webapp", mountPath, 1, tt.oldFiles...)
+
+			mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
+
+			testutil.AssertNoStartStop(t, mockConn)
+			testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
+		})
 	}
-	oldSpec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
-		model.NewContainerDirMount(string(mountPath), oldFiles...))
-	newSpec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
-		model.NewContainerDirMount(string(mountPath), newFiles...))
-
-	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
-		specs:         []model.Unit{newSpec},
-		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, oldSpec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
-
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
-}
-
-func TestApply_ContainerConfigDir_MultipleFiles_OneChanged_ReloadsService(t *testing.T) {
-	mountPath := model.ContainerMountPath("/etc/app/")
-	oldFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("a.conf", "unchanged", 0),
-		model.NewContainerConfigFile("b.conf", "old", 0),
-	}
-	newFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("a.conf", "unchanged", 0),
-		model.NewContainerConfigFile("b.conf", "new", 0),
-	}
-	spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
-		model.NewContainerDirMount(string(mountPath), newFiles...))
-
-	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
-
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
-}
-
-func TestApply_ContainerConfigDir_FileAdded_ReloadsService(t *testing.T) {
-	mountPath := model.ContainerMountPath("/etc/app/")
-	oldFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("a.conf", "content", 0),
-	}
-	newFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("a.conf", "content", 0),
-		model.NewContainerConfigFile("b.conf", "new file", 0),
-	}
-	spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
-		model.NewContainerDirMount(string(mountPath), newFiles...))
-
-	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
-
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
-}
-
-func TestApply_ContainerConfigDir_FileRemoved_ReloadsService(t *testing.T) {
-	mountPath := model.ContainerMountPath("/etc/app/")
-	oldFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("a.conf", "content", 0),
-		model.NewContainerConfigFile("b.conf", "to be removed", 0),
-	}
-	newFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("a.conf", "content", 0),
-	}
-	spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
-		model.NewContainerDirMount(string(mountPath), newFiles...))
-
-	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
-
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
-}
-
-func TestApply_ContainerConfigDir_FileModeChanged_ReloadsService(t *testing.T) {
-	mountPath := model.ContainerMountPath("/etc/app/")
-	oldFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("run.sh", "#!/bin/sh", os.FileMode(0644)),
-	}
-	newFiles := []model.ContainerConfigFile{
-		model.NewContainerConfigFile("run.sh", "#!/bin/sh", os.FileMode(0755)),
-	}
-	spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
-		model.NewContainerDirMount(string(mountPath), newFiles...))
-
-	store := newConfigStore(t)
-	ctx, memFs, sd, mockConn, mgrs, raw := setupConfigDirTest(t, store, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFiles...)
-
-	mustApplyWithMgrs(t, ctx, memFs, mgrs, sd, newMockPodmanClient(), raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertContainerReloaded(t, mockConn, "webapp.service")
 }
 
 // --- Restart scenarios ---
 
-func TestApply_ContainerConfigDir_NewDir_RestartsService(t *testing.T) {
+func TestNewContainerConfigDir_RestartsService(t *testing.T) {
 	mountPath := model.ContainerMountPath("/etc/app/")
 	newSpec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
 		model.NewContainerDirMount(string(mountPath),
@@ -256,7 +199,7 @@ func TestApply_ContainerConfigDir_NewDir_RestartsService(t *testing.T) {
 	testutil.AssertContainerNotReloaded(t, mockConn)
 }
 
-func TestApply_ContainerConfigDir_NewDirNoFiles_CreatesDir(t *testing.T) {
+func TestNewEmptyContainerConfigDir_CreatesDir(t *testing.T) {
 	mountPath := model.ContainerMountPath("/etc/app/")
 	newSpec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
 		model.NewContainerDirMount(string(mountPath)))
@@ -284,7 +227,7 @@ func TestApply_ContainerConfigDir_NewDirNoFiles_CreatesDir(t *testing.T) {
 	testutil.AssertRestarted(t, mockConn, "webapp.service")
 }
 
-func TestApply_ContainerConfigDir_DirRemoved_RestartsService(t *testing.T) {
+func TestContainerConfigDirRemoved_RestartsService(t *testing.T) {
 	mountPath := model.ContainerMountPath("/etc/app/")
 	files := []model.ContainerConfigFile{
 		model.NewContainerConfigFile("app.conf", "content", 0),
@@ -309,7 +252,7 @@ func TestApply_ContainerConfigDir_DirRemoved_RestartsService(t *testing.T) {
 
 // --- No-action on stopped container ---
 
-func TestApply_ContainerConfigDir_Stopped_FilesChanged_NoAction(t *testing.T) {
+func TestStoppedContainerConfigDirChanged_NoAction(t *testing.T) {
 	mountPath := model.ContainerMountPath("/etc/app/")
 	oldFiles := []model.ContainerConfigFile{
 		model.NewContainerConfigFile("app.conf", "old", 0),
@@ -336,7 +279,7 @@ func TestApply_ContainerConfigDir_Stopped_FilesChanged_NoAction(t *testing.T) {
 
 // --- Restart subsumes reload ---
 
-func TestApply_ContainerConfigDir_FilesChangedAndUnitChanged_RestartOnly(t *testing.T) {
+func TestContainerConfigDirAndUnitChanged_RestartsWithoutReload(t *testing.T) {
 	mountPath := model.ContainerMountPath("/etc/app/")
 	oldFiles := []model.ContainerConfigFile{
 		model.NewContainerConfigFile("app.conf", "old", 0),

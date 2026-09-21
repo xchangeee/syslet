@@ -15,7 +15,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 )
 
-func TestApply_Container_Unchanged_NoAction(t *testing.T) {
+func TestContainerUnchanged_NoAction(t *testing.T) {
 	spec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	fs := afero.NewMemMapFs()
 
@@ -31,9 +31,9 @@ func TestApply_Container_Unchanged_NoAction(t *testing.T) {
 	testutil.AssertNotReloaded(t, mockConn)
 }
 
-// TestApply_Container_UnitReordered_NoAction verifies that pure reordering of multi-value
+// TestContainerUnitReordered_NoAction verifies that pure reordering of multi-value
 // entries like Network= is not semantically meaningful and must not cause downtime.
-func TestApply_Container_UnitReordered_NoAction(t *testing.T) {
+func TestContainerUnitReordered_NoAction(t *testing.T) {
 	spec := model.NewContainerUnit(
 		model.ContainerUnitRef("webapp"),
 		model.UnitOptions{
@@ -77,7 +77,7 @@ func TestApply_Container_UnitReordered_NoAction(t *testing.T) {
 	}
 }
 
-func TestApply_Container_ConfigUnchanged_NoAction(t *testing.T) {
+func TestContainerConfigUnchanged_NoAction(t *testing.T) {
 	script := "#!/bin/sh\necho hello"
 	mountPath := "/usr/local/bin/run.sh"
 
@@ -99,7 +99,7 @@ func TestApply_Container_ConfigUnchanged_NoAction(t *testing.T) {
 	testutil.AssertFileMode(t, fs, configFilePath("webapp", mountPath), 0755)
 }
 
-func TestApply_OneshotContainer_New_WritesUnitOnly(t *testing.T) {
+func TestNewOneshotContainer_WritesUnitOnly(t *testing.T) {
 	specs := []model.Unit{makeOneshotContainerSpec("oneshot-container", "alpine:latest", model.DesiredStateRunning)}
 	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
 
@@ -110,7 +110,7 @@ func TestApply_OneshotContainer_New_WritesUnitOnly(t *testing.T) {
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_OneshotContainer_UnitChanged_NoAction(t *testing.T) {
+func TestOneshotContainerUnitChanged_NoAction(t *testing.T) {
 	spec := makeOneshotContainerSpec("oneshot-container", "alpine:edge", model.DesiredStateRunning)
 	oldSpec := makeOneshotContainerSpec("oneshot-container", "alpine:latest", model.DesiredStateRunning)
 	fs := afero.NewMemMapFs()
@@ -128,7 +128,7 @@ func TestApply_OneshotContainer_UnitChanged_NoAction(t *testing.T) {
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_OneshotContainer_Stale_RemovesUnitWithoutStop(t *testing.T) {
+func TestStaleOneshotContainer_RemovesUnitWithoutStop(t *testing.T) {
 	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	staleSpec := makeStaleOneshotContainerSpec("old-oneshot", "alpine:latest")
 	fs := afero.NewMemMapFs()
@@ -151,25 +151,4 @@ func TestApply_OneshotContainer_Stale_RemovesUnitWithoutStop(t *testing.T) {
 	testutil.AssertUnitExists(t, sd, "webapp.container")
 	testutil.AssertNoStartStop(t, mockConn)
 	testutil.AssertReloaded(t, mockConn)
-}
-
-func TestApply_Volume_MetadataOnlyChange_ContainerNotRestarted(t *testing.T) {
-	// Container referencing a volume whose metadata changed must not be restarted.
-	newVolumeSpec := makeStaleVolumeSpec("data", "tmpfs") // removalAllowed flips, same Device=
-	oldVolumeSpec := makeVolumeSpec("data", "tmpfs")
-	webappSpec := makeContainerSpecWithVolume("webapp", model.DesiredStateRunning, "data", "/data")
-	fs := afero.NewMemMapFs()
-
-	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{newVolumeSpec, webappSpec},
-		existingUnits: map[string]string{
-			"data.volume":      renderVolume(t, oldVolumeSpec),
-			"webapp.container": renderContainer(t, fs, webappSpec),
-		},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
 }

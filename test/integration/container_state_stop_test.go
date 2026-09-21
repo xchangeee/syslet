@@ -11,7 +11,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 )
 
-func TestApply_Container_NewWithStoppedState_WritesUnitOnly(t *testing.T) {
+func TestNewStoppedContainer_WritesUnitOnly(t *testing.T) {
 	specs := []model.Unit{makeContainerSpec("webapp", "nginx:latest", model.DesiredStateStopped)}
 	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
 
@@ -22,7 +22,7 @@ func TestApply_Container_NewWithStoppedState_WritesUnitOnly(t *testing.T) {
 	testutil.AssertReloaded(t, mockConn)
 }
 
-func TestApply_Container_DesiredStateStopped_StopsService(t *testing.T) {
+func TestContainerDesiredStateStopped_StopsService(t *testing.T) {
 	spec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateStopped)
 	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	fs := afero.NewMemMapFs()
@@ -39,7 +39,7 @@ func TestApply_Container_DesiredStateStopped_StopsService(t *testing.T) {
 	testutil.AssertNoneStarted(t, mockConn)
 }
 
-func TestApply_Container_Stale_StopsAndRemovesUnit(t *testing.T) {
+func TestStaleContainer_StopsAndRemovesUnit(t *testing.T) {
 	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
 	oldSpec := makeStaleContainerSpec("old", "redis:latest")
 	fs := afero.NewMemMapFs()
