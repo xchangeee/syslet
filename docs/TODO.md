@@ -6,6 +6,9 @@ Tracked gaps that are deliberately out of scope for the initial docs structure:
 - **CUE-based spec authoring docs** — plain-JSON spec authoring was found painful in practice; wrapping syslet specs with CUE is the likely direction, but the wrapper itself isn't implemented/decided yet. Document once that lands.
 - **Apply phase ordering as a removal guarantee** — dropped from [removing-specs.md](explanation/removing-specs.md) rather than half-explained. The ordering is what keeps reclamation from tripping over a live container in the two cases validation doesn't cover: removing a container together with its volume (neither is in the input, so the reference check is silent, and the container's stop in phase 1 is what lets the volume delete in phase 5 succeed), and recreating a changed volume or network (unit and containers all stay in the input, containers stopped in phase 1 and restarted in phase 7 around the delete). Decide whether this belongs here, in [workflow.md](explanation/workflow.md), or nowhere.
 
+- **Install instructions assume a GitHub release** — [01-first-deployment.md](tutorials/01-first-deployment.md) tells users to download a GoReleaser tarball from `github.com/xchangeee/syslet/releases`. The canonical remote is still Codeberg and no release has been published, so the URL and the archive names (`syslet_Linux_x86_64.tar.gz`) are unverified. Confirm the mirror/release setup, then check the link.
+- **No `--version` flag** — nothing in `cmd/syslet` reports a version, so the install step can't be verified and GoReleaser's injected build info is invisible. Add one, then add the check back to the tutorial.
+
 ## Implementation gaps
 
 Found while writing the docs; left undocumented on purpose until fixed, so the docs don't describe a hole as if it were a design.

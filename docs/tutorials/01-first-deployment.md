@@ -1,20 +1,23 @@
 # First deployment
 
-This tutorial walks through deploying a single container with syslet, from building the binary to seeing it running under systemd.
+This tutorial walks through deploying a single container with syslet, from installing the binary to seeing it running under systemd.
 
 ## Prerequisites
 
 - A Linux server with [Podman](https://podman.io/) installed (e.g. `dnf install podman`) and systemd.
 - Root access on that server (syslet needs it for systemd D-Bus operations).
-- Go 1.27+ on your local machine to build syslet, and SSH access to the server.
+- SSH access to the server.
 
-## 1. Build syslet
+## 1. Install syslet
+
+Releases are published on [GitHub](https://github.com/xchangeee/syslet/releases) as tarballs for `linux/amd64`, `linux/arm64` and `linux/386`. On the server, download the one matching its architecture and put the binary on `PATH`:
 
 ```sh
-make build-bin
+curl -sSfL https://github.com/xchangeee/syslet/releases/latest/download/syslet_Linux_x86_64.tar.gz \
+  | sudo tar -xz -C /usr/local/bin syslet
 ```
 
-This cross-compiles the `syslet` binary for macOS and Linux into `build/`. Copy the binary matching your server's architecture, e.g. `build/syslet-linux-amd64`, onto the server and make sure it's on `PATH`.
+Replace `x86_64` with `arm64` or `i386` as needed.
 
 ## 2. Write a container spec
 
