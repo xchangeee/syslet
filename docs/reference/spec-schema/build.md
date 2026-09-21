@@ -26,4 +26,4 @@
 | `configs` | array | no | Build **context** files copied alongside the Containerfile (for `COPY`/`ADD`). Each entry: `filename` (relative, no path separators), `content`, optional `mode`. Not to be confused with a container's `configs`/`configDirs`, which bind-mount into a running container. |
 | `reclaimPolicy` | string | no | `"Retain"` (default) or `"Delete"`. Controls whether the built podman image is deleted along with the unit when the build is pruned. |
 
-There is no `removalAllowed` field distinct from other unit types. Build units follow the same `removalAllowed` pruning rule as volumes/networks (default `false`).
+Build units have no `removalAllowed` field, and unlike containers, volumes, and networks they are pruned unconditionally once the spec disappears from the input. Only the built image is protected, by `reclaimPolicy`. See [Removing units](../../explanation/removing-units.md).

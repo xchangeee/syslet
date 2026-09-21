@@ -4,6 +4,7 @@ Background and design rationale. See also [Why syslet](../index.md#why-syslet) o
 
 - [Workflow](workflow.md)
 - [Safety mechanisms](safety-mechanisms.md)
+- [Removing units](removing-units.md)
 - [Unit types](unit-types.md)
 - [Reconciliation model](reconciliation-model.md)
 - [Alternatives and comparisons](alternatives-and-comparisons.md)
