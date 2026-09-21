@@ -1,4 +1,6 @@
-package syslet
+//go:build integration
+
+package integration
 
 import (
 	"fmt"
@@ -33,7 +35,7 @@ func TestApply_Container_QuadletError_DoesNotStart(t *testing.T) {
 	err := testApply(t, ctx, fs, sd, mockPodman, raw, jr)
 
 	if err == nil {
-		t.Error("expected Apply to return an error when daemon-reload fails")
+		t.Error("expected syslet.Apply to return an error when daemon-reload fails")
 	}
 	testutil.AssertNoneStarted(t, mockConn)
 }

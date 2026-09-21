@@ -1,4 +1,6 @@
-package syslet
+//go:build integration
+
+package integration
 
 import (
 	"bytes"
@@ -8,26 +10,27 @@ import (
 	"github.com/spf13/afero"
 
 	"codeberg.org/xchangeee/syslet/internal/model"
+	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 )
 
-// TestDisplayPlan_SecretChanges verifies that DisplayPlan groups secret upserts and
+// TestDisplayPlan_SecretChanges verifies that syslet.DisplayPlan groups secret upserts and
 // deletes by spec name, showing plaintext new values and "(secret)" for old values.
 func TestDisplayPlan_SecretChanges(t *testing.T) {
 	tests := []struct {
 		name       string
-		upserts    []UpsertPodmanSecretOp
-		deletes    []DeletePodmanSecretOp
+		upserts    []syslet.UpsertPodmanSecretOp
+		deletes    []syslet.DeletePodmanSecretOp
 		wantOutput string
 	}{
 		{
 			name: "UpsertAndDelete",
-			upserts: []UpsertPodmanSecretOp{
+			upserts: []syslet.UpsertPodmanSecretOp{
 				{SpecName: "myapp", Name: "myapp-db-password", Value: model.Plaintext("s3cr3t"), Labels: map[string]string{"syslet/hash": "abc123"}},
 				{SpecName: "myapp", Name: "myapp-api-key", Value: model.Plaintext("newkey"), Labels: map[string]string{"syslet/hash": "def456"}},
 			},
-			deletes: []DeletePodmanSecretOp{
+			deletes: []syslet.DeletePodmanSecretOp{
 				{SpecName: "myapp", Name: "myapp-old-token"},
 			},
 			wantOutput: `
@@ -43,7 +46,7 @@ UNIT                                     STATUS     CHANGES
 		},
 		{
 			name: "UpsertOnly",
-			upserts: []UpsertPodmanSecretOp{
+			upserts: []syslet.UpsertPodmanSecretOp{
 				{SpecName: "infra", Name: "infra-cert", Value: model.Plaintext("pem-data"), Labels: map[string]string{"syslet/hash": "aaa"}},
 			},
 			wantOutput: `
@@ -57,7 +60,7 @@ UNIT                                     STATUS     CHANGES
 		},
 		{
 			name: "DeleteOnly",
-			deletes: []DeletePodmanSecretOp{
+			deletes: []syslet.DeletePodmanSecretOp{
 				{SpecName: "infra", Name: "infra-old-cert"},
 			},
 			wantOutput: `
@@ -71,7 +74,7 @@ UNIT                                     STATUS     CHANGES
 		},
 		{
 			name: "MultipleSpecs",
-			upserts: []UpsertPodmanSecretOp{
+			upserts: []syslet.UpsertPodmanSecretOp{
 				{SpecName: "app1", Name: "app1-token", Value: model.Plaintext("tok1"), Labels: map[string]string{"syslet/hash": "h1"}},
 				{SpecName: "app2", Name: "app2-key", Value: model.Plaintext("key2"), Labels: map[string]string{"syslet/hash": "h2"}},
 			},
@@ -90,12 +93,12 @@ UNIT                                     STATUS     CHANGES
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plan := &ApplyPlan{
+			plan := &syslet.ApplyPlan{
 				UpsertPodmanSecrets: tt.upserts,
 				DeletePodmanSecrets: tt.deletes,
 			}
 			var buf bytes.Buffer
-			DisplayPlan(&buf, plan)
+			syslet.DisplayPlan(&buf, plan)
 			if got := buf.String(); got != tt.wantOutput {
 				t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", tt.wantOutput, got)
 			}
@@ -104,7 +107,7 @@ UNIT                                     STATUS     CHANGES
 }
 
 // TestValidationErrorsInPlan verifies that ValidateUnits failures are recorded
-// in the plan (not returned as a fatal error), and that DisplayPlan suppresses
+// in the plan (not returned as a fatal error), and that syslet.DisplayPlan suppresses
 // the diff when the plan contains errors.
 func TestValidationErrorsInPlan(t *testing.T) {
 	// X-Syslet section is reserved; NoXSysletSection in ValidateUnits rejects this.
@@ -123,7 +126,7 @@ func TestValidationErrorsInPlan(t *testing.T) {
 	})
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan returned fatal error (want nil): %v", err)
 	}
@@ -135,7 +138,7 @@ func TestValidationErrorsInPlan(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	DisplayPlan(&buf, plan)
+	syslet.DisplayPlan(&buf, plan)
 	out := buf.String()
 
 	if strings.Contains(out, "Unit file changes:") {
@@ -147,7 +150,7 @@ func TestValidationErrorsInPlan(t *testing.T) {
 }
 
 // TestStagingErrorsSuppressDiff verifies that when staging validation records
-// errors on an otherwise fully-built plan (with unit file changes), DisplayPlan
+// errors on an otherwise fully-built plan (with unit file changes), syslet.DisplayPlan
 // suppresses the diff and shows only the errors.
 func TestStagingErrorsSuppressDiff(t *testing.T) {
 	spec := makeContainerSpec("webapp", "nginx:alpine", model.DesiredStateRunning)
@@ -173,7 +176,7 @@ func TestStagingErrorsSuppressDiff(t *testing.T) {
 	}
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, az, nil, nil, raw)
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, az, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan returned fatal error: %v", err)
 	}
@@ -182,7 +185,7 @@ func TestStagingErrorsSuppressDiff(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	DisplayPlan(&buf, plan)
+	syslet.DisplayPlan(&buf, plan)
 	out := buf.String()
 
 	if strings.Contains(out, "Unit file changes:") {
@@ -193,7 +196,7 @@ func TestStagingErrorsSuppressDiff(t *testing.T) {
 	}
 }
 
-// TestDisplayDiff_ConfigDir verifies that DisplayPlan shows per-file unified diffs
+// TestDisplayDiff_ConfigDir verifies that syslet.DisplayPlan shows per-file unified diffs
 // for configDir changes. Requires a real OS filesystem because versioned dirs use symlinks.
 func TestDisplayDiff_ConfigDir(t *testing.T) {
 	const mountPath = "/etc/app/config"
@@ -214,13 +217,13 @@ func TestDisplayDiff_ConfigDir(t *testing.T) {
 
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFile)
 
-	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
+	plan, err := syslet.BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
 
 	var buf bytes.Buffer
-	DisplayPlan(&buf, plan)
+	syslet.DisplayPlan(&buf, plan)
 	out := buf.String()
 
 	wantOutput := `
@@ -242,7 +245,7 @@ webapp.container                         updated    configDir updated, reloaded 
 	}
 }
 
-// TestDisplayDiff_ConfigDir_ModeChange verifies that DisplayPlan shows a mode-change
+// TestDisplayDiff_ConfigDir_ModeChange verifies that syslet.DisplayPlan shows a mode-change
 // line when only the file permission bits change (content is identical).
 func TestDisplayDiff_ConfigDir_ModeChange(t *testing.T) {
 	const mountPath = "/etc/app/config"
@@ -264,13 +267,13 @@ func TestDisplayDiff_ConfigDir_ModeChange(t *testing.T) {
 
 	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFile)
 
-	plan, err := BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
+	plan, err := syslet.BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
 
 	var buf bytes.Buffer
-	DisplayPlan(&buf, plan)
+	syslet.DisplayPlan(&buf, plan)
 	out := buf.String()
 
 	wantOutput := `
@@ -439,13 +442,13 @@ webapp.container                         updated    unit updated, config updated
 			}
 
 			mgrs := newTestFileManagers(fs)
-			plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
+			plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 			if err != nil {
 				t.Fatalf("BuildPlan failed: %v", err)
 			}
 
 			var buf bytes.Buffer
-			DisplayPlan(&buf, plan)
+			syslet.DisplayPlan(&buf, plan)
 			if got := buf.String(); got != tt.wantOutput {
 				t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", tt.wantOutput, got)
 			}

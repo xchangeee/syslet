@@ -1,4 +1,6 @@
-package syslet
+//go:build integration
+
+package integration
 
 import (
 	"bytes"
@@ -15,6 +17,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/render"
+	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 	"codeberg.org/xchangeee/syslet/internal/util"
@@ -93,11 +96,11 @@ func renderContainerWithStore(t *testing.T, store *filestore.ContainerConfigFile
 func testApplyWithMgrs(t *testing.T, ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, mockPodman podman.Interface, raw api.LoadResult) error {
 	t.Helper()
 	jr := &systemd.MockJournalReader{}
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, jr, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, jr, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		return err
 	}
-	return Apply(ctx, testutil.NewTestLogger(), sd, jr, mockPodman, mgrs, plan)
+	return syslet.Apply(ctx, testutil.NewTestLogger(), sd, jr, mockPodman, mgrs, plan)
 }
 
 // mustApplyWithMgrs calls testApplyWithMgrs and fails the test on any error.
@@ -506,11 +509,11 @@ func testApply(_ *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Clien
 	if len(jr) > 0 {
 		journalReader = jr[0]
 	}
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, journalReader, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, journalReader, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		return err
 	}
-	return Apply(ctx, testutil.NewTestLogger(), sd, journalReader, mockPodman, mgrs, plan)
+	return syslet.Apply(ctx, testutil.NewTestLogger(), sd, journalReader, mockPodman, mgrs, plan)
 }
 
 // mustApply builds a plan and applies it, failing the test on any error.

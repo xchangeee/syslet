@@ -1,4 +1,6 @@
-package syslet
+//go:build integration
+
+package integration
 
 import (
 	"context"
@@ -8,14 +10,15 @@ import (
 
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/model"
+	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 )
 
-func buildTestPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, raw api.LoadResult) (*ApplyPlan, error) {
+func buildTestPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, raw api.LoadResult) (*syslet.ApplyPlan, error) {
 	t.Helper()
 	mgrs := newTestFileManagers(fs)
-	return BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
+	return syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 }
 
 func makeVolumeSpecWithDelete(name, device string) *model.VolumeUnit {

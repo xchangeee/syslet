@@ -1,4 +1,6 @@
-package syslet
+//go:build integration
+
+package integration
 
 import (
 	"testing"

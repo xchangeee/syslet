@@ -1,4 +1,6 @@
-package syslet
+//go:build integration
+
+package integration
 
 import (
 	"testing"
@@ -6,6 +8,7 @@ import (
 	"github.com/spf13/afero"
 
 	"codeberg.org/xchangeee/syslet/internal/model"
+	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 )
 
@@ -33,7 +36,7 @@ func TestStaging_AllUnitTypes_StagedWhenVolumeChanges(t *testing.T) {
 
 	gen := &recordingQuadletGenerator{fs: fs}
 	mgrs := newTestFileManagers(fs)
-	if _, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw); err != nil {
+	if _, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw); err != nil {
 		t.Fatalf("BuildPlan failed: %v", err)
 	}
 

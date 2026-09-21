@@ -1,8 +1,10 @@
-package syslet
+//go:build integration
+
+package integration
 
 // Integration tests for the secret plan+apply lifecycle.
 //
-// Each test uses real SOPS-encrypted fixtures from internal/syslet/testdata.
+// Each test uses real SOPS-encrypted fixtures from test/integration/testdata.
 // The fixture contains two keys: "db-password"="hunter2" and "api-key"="s3cr3t"
 // (hyphen-separated to satisfy the [a-z0-9-] key name validation rule).
 //
@@ -24,6 +26,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/podman"
 	"codeberg.org/xchangeee/syslet/internal/sops"
+	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/util"
 )
@@ -100,11 +103,11 @@ func secretTestSetup(t *testing.T) (context.Context, afero.Fs, *systemd.Client, 
 	return ctx, fs, sd, mockConn, mockPodman
 }
 
-// buildSecretPlan calls BuildPlan with a real decryptor and the mock podman client.
-func buildSecretPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman *mockPodmanClient, decryptor *sops.Decryptor, raw api.LoadResult) *ApplyPlan {
+// buildSecretPlan calls syslet.BuildPlan with a real decryptor and the mock podman client.
+func buildSecretPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd.Client, mockPodman *mockPodmanClient, decryptor *sops.Decryptor, raw api.LoadResult) *syslet.ApplyPlan {
 	t.Helper()
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, mockPodman, decryptor, raw)
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, mockPodman, decryptor, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -115,7 +118,7 @@ func buildSecretPlan(t *testing.T, ctx context.Context, fs afero.Fs, sd *systemd
 }
 
 // sortedUpsertNames extracts and sorts the Name field from UpsertPodmanSecrets.
-func sortedUpsertNames(ops []UpsertPodmanSecretOp) []string {
+func sortedUpsertNames(ops []syslet.UpsertPodmanSecretOp) []string {
 	names := make([]string, len(ops))
 	for i, op := range ops {
 		names[i] = op.Name
@@ -226,7 +229,7 @@ func TestSecret_SpecRemoved_DeletesAllKeys(t *testing.T) {
 	}
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, mockPodman, nil, raw)
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, mockPodman, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -283,12 +286,12 @@ func TestSecret_Changed_RestartsReferencingContainers(t *testing.T) {
 
 	var stopped, started bool
 	for _, op := range plan.StopSystemdServices {
-		if op.ref.FullName() == "webapp.container" {
+		if op.Ref().FullName() == "webapp.container" {
 			stopped = true
 		}
 	}
 	for _, op := range plan.StartSystemdServices {
-		if op.ref.FullName() == "webapp.container" {
+		if op.Ref().FullName() == "webapp.container" {
 			started = true
 		}
 	}

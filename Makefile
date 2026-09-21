@@ -12,10 +12,20 @@ check:
 	golangci-lint run ./...
 
 test:
-	go test ./...
+	go test $$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
+
+test-integration:
+	go test -tags=integration -count=1 ./test/integration/... -parallel 4
 
 coverage:
-	go test -coverpkg=./... -coverprofile=build/coverage.out ./...
+	mkdir -p build
+	go test -coverpkg=./... -coverprofile=build/unit.out \
+		$$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
+	go test -tags=integration -coverpkg=./... -coverprofile=build/integration.out -count=1 \
+		./test/integration/...
+	@printf 'mode: set\n' > build/coverage.out
+	@tail -n +2 build/unit.out >> build/coverage.out
+	@tail -n +2 build/integration.out >> build/coverage.out
 	go tool cover -html=build/coverage.out -o build/coverage.html
 	@echo "Coverage report generated: build/coverage.html"
 

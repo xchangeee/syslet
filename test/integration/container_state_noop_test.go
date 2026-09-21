@@ -1,4 +1,6 @@
-package syslet
+//go:build integration
+
+package integration
 
 import (
 	"os"
@@ -8,6 +10,7 @@ import (
 	"github.com/spf13/afero"
 
 	"codeberg.org/xchangeee/syslet/internal/model"
+	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/testutil"
 )
@@ -61,7 +64,7 @@ func TestApply_Container_UnitReordered_NoAction(t *testing.T) {
 	})
 
 	mgrs := newTestFileManagers(fs)
-	plan, err := BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
+	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}

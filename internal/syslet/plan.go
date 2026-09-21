@@ -67,6 +67,11 @@ type StopSystemdServiceOp struct {
 	ref model.UnitRef
 }
 
+// Ref exposes the unit this op stops. Op fields stay unexported so only the
+// plan builders can construct ops; this accessor lets out-of-package callers
+// (notably the integration tests in test/integration) inspect a built plan.
+func (op StopSystemdServiceOp) Ref() model.UnitRef { return op.ref }
+
 type DeleteFsQuadletUnitFileOp struct {
 	fullUnitName model.FullUnitName
 }
@@ -174,6 +179,10 @@ type ReloadSystemdServiceOp struct {
 type StartSystemdServiceOp struct {
 	ref model.UnitRef
 }
+
+// Ref exposes the unit this op starts. See [StopSystemdServiceOp.Ref] for why
+// the accessor exists.
+func (op StartSystemdServiceOp) Ref() model.UnitRef { return op.ref }
 
 // ApplyResult tracks the outcome for a single unit.
 type ApplyResult struct {

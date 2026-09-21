@@ -2,20 +2,23 @@
   "permissions": {
     "allow": [
       "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(mv:*)",
+      "Bash(sed:*)",
+      "Bash(tree:*)",
+      "Bash(xargs ls:*)",
       "Bash(go build:*)",
       "Bash(go doc:*)",
       "Bash(go get:*)",
       "Bash(go test:*)",
-      "Bash(grep:*)",
       "Bash(make build:*)",
       "Bash(make check:*)",
       "Bash(make coverage:*)",
+      "Bash(make check coverage)",
       "Bash(make deps:*)",
-      "Bash(make fmt:*)",
-      "Bash(make test:*)",
-      "Bash(sed:*)",
-      "Bash(tree:*)",
-      "Bash(xargs ls:*)"
+      "Bash(make test-e2e)",
+      "Bash(make test-integration)",
+      "Bash(make test)"
     ]
   }
 }
