@@ -48,4 +48,4 @@ Deploy both specs together. syslet validates that every `<name>.build` a contain
 
 ## 3. Reclaiming stale builds
 
-A build unit removed from the spec set is pruned unconditionally — build units have no `removalAllowed` marker, since the unit and its context are fully regenerable from the spec (see [Removing units](../explanation/removing-units.md)). Set `"reclaimPolicy": "Delete"` on the build spec to also delete the built podman image when the unit is reclaimed; the default, `"Retain"`, leaves the image on disk.
+A build unit removed from the spec set is pruned unconditionally — build units have no `removalAllowed` marker, since the unit and its context are fully regenerable from the spec (see [Removing specs](../explanation/removing-specs.md)). Set `"reclaimPolicy": "Delete"` on the build spec to also delete the built podman image when the unit is reclaimed; the default, `"Retain"`, leaves the image on disk.

@@ -1,4 +1,4 @@
-# Removing units
+# Removing specs
 
 syslet has no delete command. You drop a spec from the input, apply, and syslet works out what on the host is now unaccounted for. This page covers how stale units are found, what syslet does to each kind, and what happens to the podman resources they leave behind.
 

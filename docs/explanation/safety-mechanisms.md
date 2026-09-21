@@ -4,7 +4,7 @@ syslet applies changes on a live system without a human confirming each one, so 
 
 ## Removal guardrails
 
-Deletion is the one operation with no undo, so it has guardrails of its own: `removalAllowed` gates whether a stale unit is removed at all, and `reclaimPolicy` decides how far that removal reaches into podman's own resources. Both are covered in detail, per unit type, in [Removing units](removing-units.md).
+Deletion is the one operation with no undo, so it has guardrails of its own: `removalAllowed` gates whether a stale unit is removed at all, and `reclaimPolicy` decides how far that removal reaches into podman's own resources. Both are covered in detail, per unit type, in [Removing specs](removing-specs.md).
 
 ## Multi-stage validation
 

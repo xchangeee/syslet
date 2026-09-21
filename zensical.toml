@@ -26,16 +26,12 @@ nav = [
     { "Overview" = "explanation/index.md" },
     { "Workflow" = "explanation/workflow.md" },
     { "Spec types" = "explanation/spec-types.md" },
-    { "Removing units" = "explanation/removing-units.md" },
+    { "Quadlet options" = "explanation/quadlet-options.md" },
+    { "Removing specs" = "explanation/removing-specs.md" },
     { "Safety mechanisms" = "explanation/safety-mechanisms.md" },
   ] },
   { "Reference" = [
     { "Overview" = "reference/index.md" },
-    { "Architecture" = "reference/architecture.md" },
-    { "Reconciliation model" = "reference/reconciliation-model.md" },
-    { "Alternatives and comparisons" = "reference/alternatives-and-comparisons.md" },
-    { "CLI" = "reference/cli.md" },
-    { "Daemon config" = "reference/daemon-config.md" },
     { "Spec schema" = [
       { "Overview" = "reference/spec-schema/index.md" },
       { "Container" = "reference/spec-schema/container.md" },
@@ -44,8 +40,12 @@ nav = [
       { "Volume" = "reference/spec-schema/volume.md" },
       { "Secret" = "reference/spec-schema/secret.md" },
     ] },
+    { "CLI" = "reference/cli.md" },
+    { "Daemon config" = "reference/daemon-config.md" },
     { "File layout" = "reference/file-layout.md" },
-    { "Quadlet options" = "reference/quadlet-options.md" },
+    { "Architecture" = "reference/architecture.md" },
+    { "Reconciliation model" = "reference/reconciliation-model.md" },
+    { "Comparisons" = "reference/alternatives-and-comparisons.md" },
   ] },
 ]
 

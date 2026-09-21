@@ -4,5 +4,6 @@ Background and design rationale. See also [Why syslet](../index.md#why-syslet) o
 
 - [Workflow](workflow.md)
 - [Spec types](spec-types.md)
-- [Removing units](removing-units.md)
+- [Quadlet options](quadlet-options.md)
+- [Removing specs](removing-specs.md)
 - [Safety mechanisms](safety-mechanisms.md)

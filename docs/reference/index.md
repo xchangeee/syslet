@@ -9,4 +9,3 @@ Information-oriented reference material.
 - [Daemon config](daemon-config.md)
 - [Spec schema](spec-schema/index.md)
 - [File layout](file-layout.md)
-- [Quadlet options](quadlet-options.md)
