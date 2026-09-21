@@ -25,9 +25,9 @@ nav = [
   { "Explanation" = [
     { "Overview" = "explanation/index.md" },
     { "Workflow" = "explanation/workflow.md" },
-    { "Safety mechanisms" = "explanation/safety-mechanisms.md" },
+    { "Spec types" = "explanation/spec-types.md" },
     { "Removing units" = "explanation/removing-units.md" },
-    { "Unit types" = "explanation/unit-types.md" },
+    { "Safety mechanisms" = "explanation/safety-mechanisms.md" },
     { "Reconciliation model" = "explanation/reconciliation-model.md" },
     { "Alternatives and comparisons" = "explanation/alternatives-and-comparisons.md" },
   ] },
