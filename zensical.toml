@@ -11,7 +11,7 @@ nav = [
     { "First deployment" = "tutorials/01-first-deployment.md" },
     { "Updating and diffing" = "tutorials/02-updating-and-diffing.md" },
   ] },
-  { "How-to Guides" = [
+  { "How-to guides" = [
     { "Overview" = "how-to/index.md" },
     { "Deploy over SSH" = "how-to/deploy-over-ssh.md" },
     { "Deploy from a directory" = "how-to/deploy-from-a-directory.md" },
@@ -24,12 +24,11 @@ nav = [
   ] },
   { "Explanation" = [
     { "Overview" = "explanation/index.md" },
-    { "Motivation" = "explanation/motivation.md" },
-    { "Alternatives and comparisons" = "explanation/alternatives-and-comparisons.md" },
     { "Workflow" = "explanation/workflow.md" },
     { "Safety mechanisms" = "explanation/safety-mechanisms.md" },
     { "Unit types" = "explanation/unit-types.md" },
     { "Reconciliation model" = "explanation/reconciliation-model.md" },
+    { "Alternatives and comparisons" = "explanation/alternatives-and-comparisons.md" },
   ] },
   { "Reference" = [
     { "Overview" = "reference/index.md" },

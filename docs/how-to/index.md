@@ -1,4 +1,4 @@
-# How-to Guides
+# How-to guides
 
 Task-oriented recipes for specific deployment scenarios.
 
