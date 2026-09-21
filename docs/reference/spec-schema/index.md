@@ -6,5 +6,8 @@ Every spec file (or stream element) is a JSON object with a `type` field selecti
 - [Build](build.md)
 - [Network](network.md)
 - [Volume](volume.md)
+- [Secret](secret.md)
 
-All four share a `unit` object, whose keys are quadlet unit file section names (`Container`, `Volume`, `Network`, `Build`, `Service`, ...) mapping 1:1 to that section's options; see [Quadlet options](../quadlet-options.md) for the full set podman supports. syslet does not validate unknown quadlet options; it passes them through and lets podman's own quadlet generator reject anything invalid at [staging time](../../explanation/safety-mechanisms.md).
+`secret` is the exception: it has no `unit` object, and its `name` is a prefix for the podman secrets it produces rather than a unit name.
+
+The other four share a `unit` object, whose keys are quadlet unit file section names (`Container`, `Volume`, `Network`, `Build`, `Service`, ...) mapping 1:1 to that section's options; see [Quadlet options](../quadlet-options.md) for the full set podman supports. syslet does not validate unknown quadlet options; it passes them through and lets podman's own quadlet generator reject anything invalid at [staging time](../../explanation/safety-mechanisms.md).

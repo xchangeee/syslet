@@ -6,5 +6,3 @@ Background and design rationale. See also [Why syslet](../index.md#why-syslet) o
 - [Spec types](spec-types.md)
 - [Removing units](removing-units.md)
 - [Safety mechanisms](safety-mechanisms.md)
-- [Reconciliation model](reconciliation-model.md)
-- [Alternatives and comparisons](alternatives-and-comparisons.md)

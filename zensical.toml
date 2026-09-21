@@ -28,12 +28,12 @@ nav = [
     { "Spec types" = "explanation/spec-types.md" },
     { "Removing units" = "explanation/removing-units.md" },
     { "Safety mechanisms" = "explanation/safety-mechanisms.md" },
-    { "Reconciliation model" = "explanation/reconciliation-model.md" },
-    { "Alternatives and comparisons" = "explanation/alternatives-and-comparisons.md" },
   ] },
   { "Reference" = [
     { "Overview" = "reference/index.md" },
     { "Architecture" = "reference/architecture.md" },
+    { "Reconciliation model" = "reference/reconciliation-model.md" },
+    { "Alternatives and comparisons" = "reference/alternatives-and-comparisons.md" },
     { "CLI" = "reference/cli.md" },
     { "Daemon config" = "reference/daemon-config.md" },
     { "Spec schema" = [
@@ -42,6 +42,7 @@ nav = [
       { "Build" = "reference/spec-schema/build.md" },
       { "Network" = "reference/spec-schema/network.md" },
       { "Volume" = "reference/spec-schema/volume.md" },
+      { "Secret" = "reference/spec-schema/secret.md" },
     ] },
     { "File layout" = "reference/file-layout.md" },
     { "Quadlet options" = "reference/quadlet-options.md" },

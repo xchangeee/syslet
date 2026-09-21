@@ -12,7 +12,7 @@ syslet keeps a few things that make the Kubernetes user experience good, without
 - validation that catches bad config before it's pushed,
 - pushing that spec to the remote system and having it start/stop containers for you, instead of doing so by hand.
 
-Its niche is a single host (or a small, independently-managed fleet of hosts) running Podman containers via systemd, where a spec repository and `git push`/`ssh` is a better fit than standing up a scheduler and its supporting infrastructure. See [Reconciliation model](explanation/reconciliation-model.md) for how syslet gets this without running continuously, and [Alternatives and comparisons](explanation/alternatives-and-comparisons.md) for how it stacks up against the other tools in this space.
+Its niche is a single host (or a small, independently-managed fleet of hosts) running Podman containers via systemd, where a spec repository and `git push`/`ssh` is a better fit than standing up a scheduler and its supporting infrastructure. See [Reconciliation model](reference/reconciliation-model.md) for how syslet gets this without running continuously, and [Alternatives and comparisons](reference/alternatives-and-comparisons.md) for how it stacks up against the other tools in this space.
 
 ## Where to go next
 
