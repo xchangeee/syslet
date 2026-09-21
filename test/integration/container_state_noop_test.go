@@ -7,45 +7,28 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/afero"
-
 	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/syslet"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/internal/testutil"
+	"codeberg.org/xchangeee/syslet/test/integration/systest"
 )
 
 func TestContainerUnchanged_NoAction(t *testing.T) {
-	spec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
-	fs := afero.NewMemMapFs()
+	env := systest.New(t)
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
+	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
 
-	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, spec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
+	env.Apply()
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertNotReloaded(t, mockConn)
+	env.AssertNoStartStop()
+	env.AssertNotReloaded()
 }
 
 // TestContainerUnitReordered_NoAction verifies that pure reordering of multi-value
 // entries like Network= is not semantically meaningful and must not cause downtime.
 func TestContainerUnitReordered_NoAction(t *testing.T) {
-	spec := model.NewContainerUnit(
-		model.ContainerUnitRef("webapp"),
-		model.UnitOptions{
-			"Container": {
-				model.SectionKey("Image"):   model.UV("nginx:latest"),
-				model.SectionKey("Network"): multiUV(t, "backend.network", "frontend.network"),
-			},
-		},
-		model.DesiredStateRunning, nil, false,
-	)
-	fs := afero.NewMemMapFs()
-	canonical := renderContainer(t, fs, spec)
+	env := systest.New(t)
+	spec := systest.NewContainer("webapp", "nginx:latest",
+		systest.WithNetwork("backend"), systest.WithNetwork("frontend"))
+	canonical := env.Render(spec)
 
 	// Swap the two Network= lines to simulate a file written in a different order.
 	reordered := strings.Replace(
@@ -57,98 +40,68 @@ func TestContainerUnitReordered_NoAction(t *testing.T) {
 		t.Fatal("test setup error: reordered content is identical to canonical")
 	}
 
-	ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
-		specs:         []model.Unit{spec, model.NewNetworkUnit(model.NetworkUnitRef("backend"), nil, false, ""), model.NewNetworkUnit(model.NetworkUnitRef("frontend"), nil, false, "")},
-		existingUnits: map[string]string{"webapp.container": reordered},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
+	env.SeedUnitFile("webapp.container", reordered)
+	env.SetUnitState("webapp.service", "active")
+	env.Specs(spec, systest.NewNetwork("backend", ""), systest.NewNetwork("frontend", ""))
 
-	mgrs := newTestFileManagers(fs)
-	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
-	if err != nil {
-		t.Fatalf("BuildPlan: %v", err)
-	}
+	env.Apply()
 
-	if len(plan.StopSystemdServices) != 0 {
-		t.Errorf("reordering should not stop the container, got StopContainers: %v", plan.StopSystemdServices)
-	}
-	if len(plan.StartSystemdServices) != 0 {
-		t.Errorf("reordering should not start the container, got StartContainers: %v", plan.StartSystemdServices)
-	}
+	env.AssertNoStartStop()
 }
 
 func TestContainerConfigUnchanged_NoAction(t *testing.T) {
 	script := "#!/bin/sh\necho hello"
 	mountPath := "/usr/local/bin/run.sh"
 
-	spec := makeContainerSpecWithConfigs("webapp", "alpine:latest", model.DesiredStateRunning,
-		model.NewContainerFileMount(mountPath, script, os.FileMode(0755)))
-	fs := afero.NewMemMapFs()
+	spec := systest.NewContainer("webapp", "alpine:latest",
+		systest.Files(model.NewContainerFileMount(mountPath, script, os.FileMode(0755))))
 
-	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, spec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
+	env := systest.New(t)
+	env.SeedActive(spec)
+	env.SeedConfigFile("webapp", mountPath, script, 0755)
+	env.Specs(spec)
 
-	preWriteConfig(t, fs, "webapp", mountPath, script, 0755)
+	env.Apply()
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertFileMode(t, fs, configFilePath("webapp", mountPath), 0755)
+	env.AssertNoStartStop()
+	env.AssertFiles("webapp", systest.WantFile{MountPath: mountPath, Mode: 0755})
 }
 
 func TestNewOneshotContainer_WritesUnitOnly(t *testing.T) {
-	specs := []model.Unit{makeOneshotContainerSpec("oneshot-container", "alpine:latest", model.DesiredStateRunning)}
-	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
+	env := systest.New(t)
+	env.Specs(systest.NewContainer("oneshot-container", "alpine:latest", systest.Oneshot))
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
+	env.Apply()
 
-	testutil.AssertUnitExists(t, sd, "oneshot-container.container")
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertReloaded(t, mockConn)
+	env.AssertUnitExists("oneshot-container.container")
+	env.AssertNoStartStop()
+	env.AssertReloaded()
 }
 
 func TestOneshotContainerUnitChanged_NoAction(t *testing.T) {
-	spec := makeOneshotContainerSpec("oneshot-container", "alpine:edge", model.DesiredStateRunning)
-	oldSpec := makeOneshotContainerSpec("oneshot-container", "alpine:latest", model.DesiredStateRunning)
-	fs := afero.NewMemMapFs()
+	env := systest.New(t)
+	env.SeedUnit(systest.NewContainer("oneshot-container", "alpine:latest", systest.Oneshot))
+	env.SetUnitState("oneshot-container.service", "inactive")
+	env.Specs(systest.NewContainer("oneshot-container", "alpine:edge", systest.Oneshot))
 
-	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"oneshot-container.container": renderContainer(t, fs, oldSpec)},
-		existingState: map[string]string{"oneshot-container.service": "inactive"},
-	})
+	env.Apply()
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertUnitExists(t, sd, "oneshot-container.container")
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertReloaded(t, mockConn)
+	env.AssertUnitExists("oneshot-container.container")
+	env.AssertNoStartStop()
+	env.AssertReloaded()
 }
 
 func TestStaleOneshotContainer_RemovesUnitWithoutStop(t *testing.T) {
-	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
-	staleSpec := makeStaleOneshotContainerSpec("old-oneshot", "alpine:latest")
-	fs := afero.NewMemMapFs()
+	env := systest.New(t)
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
+	env.SeedUnit(systest.NewContainer("old-oneshot", "alpine:latest", systest.Oneshot, systest.Stale))
+	env.SetUnitState("old-oneshot.service", "inactive")
+	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
 
-	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{webappSpec},
-		existingUnits: map[string]string{
-			"webapp.container":      renderContainer(t, fs, webappSpec),
-			"old-oneshot.container": renderContainer(t, fs, staleSpec),
-		},
-		existingState: map[string]string{
-			"webapp.service":      "active",
-			"old-oneshot.service": "inactive",
-		},
-	})
+	env.Apply()
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertUnitAbsent(t, sd, "old-oneshot.container")
-	testutil.AssertUnitExists(t, sd, "webapp.container")
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertReloaded(t, mockConn)
+	env.AssertUnitAbsent("old-oneshot.container")
+	env.AssertUnitExists("webapp.container")
+	env.AssertNoStartStop()
+	env.AssertReloaded()
 }

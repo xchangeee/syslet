@@ -3,8 +3,6 @@
 package integration
 
 import (
-	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -12,7 +10,8 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/internal/testutil"
+	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
+	"codeberg.org/xchangeee/syslet/test/integration/systest"
 )
 
 // TestPlanWithSecretChanges_GroupsBySpec verifies that syslet.DisplayPlan groups secret upserts and
@@ -97,11 +96,7 @@ UNIT                                     STATUS     CHANGES
 				UpsertPodmanSecrets: tt.upserts,
 				DeletePodmanSecrets: tt.deletes,
 			}
-			var buf bytes.Buffer
-			syslet.DisplayPlan(&buf, plan)
-			if got := buf.String(); got != tt.wantOutput {
-				t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", tt.wantOutput, got)
-			}
+			systest.AssertPlanOutput(t, plan, tt.wantOutput)
 		})
 	}
 }
@@ -120,80 +115,45 @@ func TestPlanWithValidationErrors_PrintsErrorsOnly(t *testing.T) {
 		model.DesiredStateRunning, nil, false,
 	)
 
-	fs := afero.NewMemMapFs()
-	ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{badSpec},
-	})
+	env := systest.New(t)
+	env.Specs(badSpec)
 
-	mgrs := newTestFileManagers(fs)
-	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
-	if err != nil {
-		t.Fatalf("BuildPlan returned fatal error (want nil): %v", err)
-	}
-	if plan == nil {
-		t.Fatal("BuildPlan returned nil plan")
-	}
-	if !plan.HasErrors() {
-		t.Error("plan.HasErrors() == false, want true")
-	}
+	// Plan fatals if BuildPlan itself errored, which is half the contract here:
+	// a validation failure must be recorded on the plan, not returned.
+	plan := env.Plan()
+	systest.AssertPlanHasErrors(t, plan)
 
-	var buf bytes.Buffer
-	syslet.DisplayPlan(&buf, plan)
-	out := buf.String()
-
-	if strings.Contains(out, "Unit file changes:") {
-		t.Error("DisplayPlan must not show diff when plan has errors")
-	}
-	if !strings.Contains(out, "X-Syslet") {
-		t.Errorf("DisplayPlan should include the validation error message, got:\n%s", out)
-	}
+	systest.AssertPlanOutputOmits(t, plan, "Unit file changes:")
+	systest.AssertPlanOutputContains(t, plan, "X-Syslet")
 }
 
 // TestPlanWithStagingErrors_SuppressesDiff verifies that when staging validation records
 // errors on an otherwise fully-built plan (with unit file changes), syslet.DisplayPlan
 // suppresses the diff and shows only the errors.
 func TestPlanWithStagingErrors_SuppressesDiff(t *testing.T) {
-	spec := makeContainerSpec("webapp", "nginx:alpine", model.DesiredStateRunning)
-	oldSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
-
 	fs := afero.NewMemMapFs()
-	ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, oldSpec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-
-	az := &systemd.MockSystemdAnalyzeRunner{
+	az := &systemdtest.MockAnalyzeRunner{
 		Result: systemd.AnalyzeResult{
 			ExitCode: 0,
 			Stderr:   "Invalid memory limit 'asd', ignoring: Invalid argument",
 		},
 	}
 	// Generator writes the generated service file so staging has something to verify.
-	gen := &testutil.MockQuadletGenerator{
+	gen := &systemdtest.FakeQuadletGenerator{
 		Fs:    fs,
 		Files: map[string]string{"webapp.service": "[Service]\nExecStart=podman start webapp\n"},
 	}
 
-	mgrs := newTestFileManagers(fs)
-	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, gen, az, nil, nil, raw)
-	if err != nil {
-		t.Fatalf("BuildPlan returned fatal error: %v", err)
-	}
-	if !plan.HasErrors() {
-		t.Error("plan.HasErrors() == false, want true")
-	}
+	env := systest.New(t, systest.WithFs(fs),
+		systest.WithQuadletGenerator(gen), systest.WithAnalyzeRunner(az))
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
+	env.Specs(systest.NewContainer("webapp", "nginx:alpine"))
 
-	var buf bytes.Buffer
-	syslet.DisplayPlan(&buf, plan)
-	out := buf.String()
+	plan := env.Plan()
+	systest.AssertPlanHasErrors(t, plan)
 
-	if strings.Contains(out, "Unit file changes:") {
-		t.Error("DisplayPlan must not show diff when plan has errors")
-	}
-	if !strings.Contains(out, "Invalid memory limit") {
-		t.Errorf("DisplayPlan should show the staging error, got:\n%s", out)
-	}
+	systest.AssertPlanOutputOmits(t, plan, "Unit file changes:")
+	systest.AssertPlanOutputContains(t, plan, "Invalid memory limit")
 }
 
 // TestPlanWithConfigDirChanges_ShowsFileDiff verifies that syslet.DisplayPlan shows per-file unified diffs
@@ -201,30 +161,18 @@ func TestPlanWithStagingErrors_SuppressesDiff(t *testing.T) {
 func TestPlanWithConfigDirChanges_ShowsFileDiff(t *testing.T) {
 	const mountPath = "/etc/app/config"
 
-	store := newConfigStore(t)
-
 	oldFile := model.NewContainerConfigFile("app.conf", "key=old\n", 0644)
 	newFile := model.NewContainerConfigFile("app.conf", "key=new\n", 0644)
 
-	spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
-		model.NewContainerDirMount(mountPath, newFile))
+	spec := systest.NewContainer("webapp", "nginx:latest",
+		systest.Dirs(model.NewContainerDirMount(mountPath, newFile)))
 
-	ctx, memFs, sd, _, mgrs, raw := setupConfigDirTest(t, store, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
+	env := systest.New(t, systest.WithOSConfigStore())
+	env.SeedActive(spec)
+	env.SeedConfigDir("webapp", mountPath, 1, oldFile)
+	env.Specs(spec)
 
-	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFile)
-
-	plan, err := syslet.BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
-	if err != nil {
-		t.Fatalf("BuildPlan failed: %v", err)
-	}
-
-	var buf bytes.Buffer
-	syslet.DisplayPlan(&buf, plan)
-	out := buf.String()
+	plan := env.Plan()
 
 	wantOutput := `
 ConfigDir changes:
@@ -240,9 +188,7 @@ UNIT                                     STATUS     CHANGES
 webapp.container                         updated    configDir updated, reloaded (desired: running)
 `
 
-	if out != wantOutput {
-		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", wantOutput, out)
-	}
+	systest.AssertPlanOutput(t, plan, wantOutput)
 }
 
 // TestPlanWithConfigDirModeChange_ShowsModeDiff verifies that syslet.DisplayPlan shows a mode-change
@@ -250,31 +196,19 @@ webapp.container                         updated    configDir updated, reloaded 
 func TestPlanWithConfigDirModeChange_ShowsModeDiff(t *testing.T) {
 	const mountPath = "/etc/app/config"
 
-	store := newConfigStore(t)
-
 	content := "key=value\n"
 	oldFile := model.NewContainerConfigFile("app.conf", content, 0644)
 	newFile := model.NewContainerConfigFile("app.conf", content, 0755)
 
-	spec := makeContainerSpecWithDirs("webapp", "nginx:latest", model.DesiredStateRunning,
-		model.NewContainerDirMount(mountPath, newFile))
+	spec := systest.NewContainer("webapp", "nginx:latest",
+		systest.Dirs(model.NewContainerDirMount(mountPath, newFile)))
 
-	ctx, memFs, sd, _, mgrs, raw := setupConfigDirTest(t, store, testFixture{
-		specs:         []model.Unit{spec},
-		existingUnits: map[string]string{"webapp.container": renderContainerWithStore(t, store, spec)},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
+	env := systest.New(t, systest.WithOSConfigStore())
+	env.SeedActive(spec)
+	env.SeedConfigDir("webapp", mountPath, 1, oldFile)
+	env.Specs(spec)
 
-	preWriteConfigDir(t, store, "webapp", mountPath, 1, oldFile)
-
-	plan, err := syslet.BuildPlan(ctx, memFs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
-	if err != nil {
-		t.Fatalf("BuildPlan failed: %v", err)
-	}
-
-	var buf bytes.Buffer
-	syslet.DisplayPlan(&buf, plan)
-	out := buf.String()
+	plan := env.Plan()
 
 	wantOutput := `
 ConfigDir changes:
@@ -286,26 +220,24 @@ UNIT                                     STATUS     CHANGES
 webapp.container                         updated    configDir updated, reloaded (desired: running)
 `
 
-	if out != wantOutput {
-		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", wantOutput, out)
-	}
+	systest.AssertPlanOutput(t, plan, wantOutput)
 }
 
 func TestPlanDiffOutput(t *testing.T) {
 	tests := []struct {
-		name           string
-		spec           *model.ContainerUnit
-		oldSpec        *model.ContainerUnit
-		preWriteConfig map[string]string // mountPath -> content to pre-write on fs
-		wantOutput     string
+		name       string
+		spec       *model.ContainerUnit
+		oldSpec    *model.ContainerUnit
+		seedConfig map[string]string // mountPath -> content already on disk
+		wantOutput string
 	}{
 		{
 			name: "ConfigFileChanges",
-			spec: makeContainerSpecWithConfigs("webapp", "nginx:latest", model.DesiredStateRunning,
-				model.NewContainerFileMount("/etc/nginx/nginx.conf", "server {\n  listen 8080;\n  server_name new.example.com;\n}\n", 0)),
-			oldSpec: makeContainerSpecWithConfigs("webapp", "nginx:latest", model.DesiredStateRunning,
-				model.NewContainerFileMount("/etc/nginx/nginx.conf", "server {\n  listen 80;\n  server_name old.example.com;\n}\n", 0)),
-			preWriteConfig: map[string]string{"/etc/nginx/nginx.conf": "server {\n  listen 80;\n  server_name old.example.com;\n}\n"},
+			spec: systest.NewContainer("webapp", "nginx:latest", systest.Files(
+				model.NewContainerFileMount("/etc/nginx/nginx.conf", "server {\n  listen 8080;\n  server_name new.example.com;\n}\n", 0))),
+			oldSpec: systest.NewContainer("webapp", "nginx:latest", systest.Files(
+				model.NewContainerFileMount("/etc/nginx/nginx.conf", "server {\n  listen 80;\n  server_name old.example.com;\n}\n", 0))),
+			seedConfig: map[string]string{"/etc/nginx/nginx.conf": "server {\n  listen 80;\n  server_name old.example.com;\n}\n"},
 			wantOutput: `
 Config file changes:
 --- webapp:/etc/nginx/nginx.conf (current)
@@ -331,8 +263,8 @@ webapp.container                         updated    config updated, restarted (d
 		},
 		{
 			name:    "UnitFileChanges",
-			spec:    makeContainerSpec("webapp", "nginx:alpine", model.DesiredStateRunning),
-			oldSpec: makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning),
+			spec:    systest.NewContainer("webapp", "nginx:alpine"),
+			oldSpec: systest.NewContainer("webapp", "nginx:latest"),
 			wantOutput: `
 Unit file changes:
 
@@ -357,9 +289,9 @@ webapp.container                         updated    unit updated, restarted (des
 		},
 		{
 			name: "NewConfigFile",
-			spec: makeContainerSpecWithConfigs("webapp", "nginx:latest", model.DesiredStateRunning,
-				model.NewContainerFileMount("/etc/app/config.yaml", "new config content", 0)),
-			oldSpec: makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning),
+			spec: systest.NewContainer("webapp", "nginx:latest", systest.Files(
+				model.NewContainerFileMount("/etc/app/config.yaml", "new config content", 0))),
+			oldSpec: systest.NewContainer("webapp", "nginx:latest"),
 			wantOutput: `
 Unit file changes:
 
@@ -389,11 +321,11 @@ webapp.container                         updated    unit updated, config updated
 		},
 		{
 			name: "MixedChanges",
-			spec: makeContainerSpecWithConfigs("webapp", "nginx:alpine", model.DesiredStateRunning,
-				model.NewContainerFileMount("/etc/app/app.conf", "updated config", 0)),
-			oldSpec: makeContainerSpecWithConfigs("webapp", "nginx:latest", model.DesiredStateRunning,
-				model.NewContainerFileMount("/etc/app/app.conf", "old config", 0)),
-			preWriteConfig: map[string]string{"/etc/app/app.conf": "old config"},
+			spec: systest.NewContainer("webapp", "nginx:alpine", systest.Files(
+				model.NewContainerFileMount("/etc/app/app.conf", "updated config", 0))),
+			oldSpec: systest.NewContainer("webapp", "nginx:latest", systest.Files(
+				model.NewContainerFileMount("/etc/app/app.conf", "old config", 0))),
+			seedConfig: map[string]string{"/etc/app/app.conf": "old config"},
 			wantOutput: `
 Unit file changes:
 
@@ -429,29 +361,16 @@ webapp.container                         updated    unit updated, config updated
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fs := afero.NewMemMapFs()
-
-			ctx, sd, _, _, raw := setupTestWithFS(t, fs, testFixture{
-				specs:         []model.Unit{tt.spec},
-				existingUnits: map[string]string{"webapp.container": renderContainer(t, fs, tt.oldSpec)},
-				existingState: map[string]string{"webapp.service": "active"},
-			})
-
-			for mountPath, content := range tt.preWriteConfig {
-				preWriteConfig(t, fs, "webapp", mountPath, content, 0644)
+			env := systest.New(t)
+			env.SeedActive(tt.oldSpec)
+			for mountPath, content := range tt.seedConfig {
+				env.SeedConfigFile("webapp", mountPath, content, 0644)
 			}
+			env.Specs(tt.spec)
 
-			mgrs := newTestFileManagers(fs)
-			plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, &systemd.MockJournalReader{}, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{}, nil, nil, raw)
-			if err != nil {
-				t.Fatalf("BuildPlan failed: %v", err)
-			}
+			plan := env.Plan()
 
-			var buf bytes.Buffer
-			syslet.DisplayPlan(&buf, plan)
-			if got := buf.String(); got != tt.wantOutput {
-				t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", tt.wantOutput, got)
-			}
+			systest.AssertPlanOutput(t, plan, tt.wantOutput)
 		})
 	}
 }

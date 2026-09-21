@@ -1,4 +1,4 @@
-package systemd
+package systemd_test
 
 import (
 	"context"
@@ -7,13 +7,15 @@ import (
 	"github.com/spf13/afero"
 
 	"codeberg.org/xchangeee/syslet/internal/model"
+	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
 )
 
 func TestClient_DaemonReload(t *testing.T) {
 	ctx := context.Background()
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	err := client.DaemonReload(ctx)
 	if err != nil {
@@ -26,19 +28,19 @@ func TestClient_DaemonReload(t *testing.T) {
 
 func TestClient_RuntimeState_Active(t *testing.T) {
 	ctx := context.Background()
-	mockConn := NewMockDBusConn()
-	mockConn.UnitStates["webapp.service"] = &UnitState{
-		ActiveState: ActiveStateActive,
+	mockConn := systemdtest.NewMockDBusConn()
+	mockConn.UnitStates["webapp.service"] = &systemd.UnitState{
+		ActiveState: systemd.ActiveStateActive,
 		Enabled:     true,
 	}
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	state, err := client.RuntimeState(ctx, "webapp.service")
 	if err != nil {
 		t.Fatalf("RuntimeState failed: %v", err)
 	}
-	if state.ActiveState != ActiveStateActive {
+	if state.ActiveState != systemd.ActiveStateActive {
 		t.Errorf("expected active state, got %q", state.ActiveState)
 	}
 	if !state.Enabled {
@@ -48,16 +50,16 @@ func TestClient_RuntimeState_Active(t *testing.T) {
 
 func TestClient_RuntimeState_Inactive(t *testing.T) {
 	ctx := context.Background()
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// Unit doesn't exist in mock, should return default inactive state
 	state, err := client.RuntimeState(ctx, "nonexistent.service")
 	if err != nil {
 		t.Fatalf("RuntimeState failed: %v", err)
 	}
-	if state.ActiveState != ActiveStateInactive {
+	if state.ActiveState != systemd.ActiveStateInactive {
 		t.Errorf("expected inactive state, got %q", state.ActiveState)
 	}
 	if state.Enabled {
@@ -67,9 +69,9 @@ func TestClient_RuntimeState_Inactive(t *testing.T) {
 
 func TestClient_StartUnit(t *testing.T) {
 	ctx := context.Background()
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	err := client.StartUnit(ctx, model.ContainerUnitRef("webapp").ServiceUnitName())
 	if err != nil {
@@ -84,10 +86,10 @@ func TestClient_StartUnit(t *testing.T) {
 
 func TestClient_StopUnit(t *testing.T) {
 	ctx := context.Background()
-	mockConn := NewMockDBusConn()
-	mockConn.UnitStates["webapp.service"] = &UnitState{ActiveState: ActiveStateActive}
+	mockConn := systemdtest.NewMockDBusConn()
+	mockConn.UnitStates["webapp.service"] = &systemd.UnitState{ActiveState: systemd.ActiveStateActive}
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	err := client.StopUnit(ctx, model.ContainerUnitRef("webapp").ServiceUnitName())
 	if err != nil {
@@ -101,27 +103,27 @@ func TestClient_StopUnit(t *testing.T) {
 
 func TestClient_ContainerState(t *testing.T) {
 	ctx := context.Background()
-	mockConn := NewMockDBusConn()
-	mockConn.UnitStates["myapp.service"] = &UnitState{
-		ActiveState: ActiveStateActive,
+	mockConn := systemdtest.NewMockDBusConn()
+	mockConn.UnitStates["myapp.service"] = &systemd.UnitState{
+		ActiveState: systemd.ActiveStateActive,
 		Enabled:     true,
 	}
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	state, err := client.ContainerState(ctx, model.ContainerUnitRef("myapp"))
 	if err != nil {
 		t.Fatalf("ContainerState failed: %v", err)
 	}
-	if state.ActiveState != ActiveStateActive {
+	if state.ActiveState != systemd.ActiveStateActive {
 		t.Errorf("expected active state, got %q", state.ActiveState)
 	}
 }
 
 func TestClient_WriteUnitFile(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	content := []byte("[Container]\nImage=nginx:latest\n")
 	err := client.WriteUnitFile("webapp.container", content)
@@ -140,9 +142,9 @@ func TestClient_WriteUnitFile(t *testing.T) {
 }
 
 func TestClient_WriteUnitFile_CreatesDirectory(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// Directory doesn't exist yet
 	err := client.WriteUnitFile("webapp.container", []byte("content"))
@@ -151,7 +153,7 @@ func TestClient_WriteUnitFile_CreatesDirectory(t *testing.T) {
 	}
 
 	// Verify directory was created
-	exists, err := afero.DirExists(fs, QuadletUnitDir)
+	exists, err := afero.DirExists(fs, systemd.QuadletUnitDir)
 	if err != nil {
 		t.Fatalf("failed to check directory: %v", err)
 	}
@@ -161,9 +163,9 @@ func TestClient_WriteUnitFile_CreatesDirectory(t *testing.T) {
 }
 
 func TestClient_ReadUnitFile(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// Write a unit file first
 	expectedContent := []byte("[Container]\nImage=redis:latest\n")
@@ -180,9 +182,9 @@ func TestClient_ReadUnitFile(t *testing.T) {
 }
 
 func TestClient_RemoveUnitFile(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// Write a unit file
 	_ = client.WriteUnitFile("old.container", []byte("content"))
@@ -200,9 +202,9 @@ func TestClient_RemoveUnitFile(t *testing.T) {
 }
 
 func TestClient_RemoveUnitFile_NonexistentOK(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// Removing nonexistent file should not error
 	err := client.RemoveUnitFile("nonexistent.container")
@@ -212,9 +214,9 @@ func TestClient_RemoveUnitFile_NonexistentOK(t *testing.T) {
 }
 
 func TestClient_UnitFileExists(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// File doesn't exist
 	if client.UnitFileExists("webapp.container") {
@@ -231,9 +233,9 @@ func TestClient_UnitFileExists(t *testing.T) {
 }
 
 func TestClient_ListUnitFiles_Empty(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// Directory doesn't exist yet
 	files, err := client.ListUnitFiles(".container")
@@ -246,9 +248,9 @@ func TestClient_ListUnitFiles_Empty(t *testing.T) {
 }
 
 func TestClient_ListUnitFiles_ByExtension(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// Write different types of unit files
 	_ = client.WriteUnitFile("webapp.container", []byte("content"))
@@ -285,9 +287,9 @@ func TestClient_ListUnitFiles_ByExtension(t *testing.T) {
 }
 
 func TestClient_ListUnitFiles_IgnoresDirectories(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
-	client := NewClient(mockConn, fs)
+	client := systemd.NewClient(mockConn, fs)
 
 	// Write a unit file
 	_ = client.WriteUnitFile("webapp.container", []byte("content"))
@@ -306,10 +308,10 @@ func TestClient_ListUnitFiles_IgnoresDirectories(t *testing.T) {
 }
 
 func TestClient_CustomQuadletDir(t *testing.T) {
-	mockConn := NewMockDBusConn()
+	mockConn := systemdtest.NewMockDBusConn()
 	fs := afero.NewMemMapFs()
 	customDir := "/custom/path/systemd"
-	client := NewClientWithPaths(mockConn, fs, customDir)
+	client := systemd.NewClientWithPaths(mockConn, fs, customDir)
 
 	// Write a unit file
 	_ = client.WriteUnitFile("test.container", []byte("content"))

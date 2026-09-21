@@ -11,7 +11,8 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/model"
 	"codeberg.org/xchangeee/syslet/internal/render"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/internal/testutil"
+	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
+	"codeberg.org/xchangeee/syslet/internal/testlog"
 )
 
 func newTestStaging(t *testing.T, fs afero.Fs, gen systemd.QuadletGeneratorRunner, az systemd.AnalyzeRunner) *Staging {
@@ -33,9 +34,9 @@ func stageUnit(s *Staging, ref model.ContainerUnitRef, content string) {
 // TestStaging_NoFiles_ReturnsNil verifies the early-return when no files are staged.
 func TestStaging_NoFiles_ReturnsNil(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	s := newTestStaging(t, fs, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{})
+	s := newTestStaging(t, fs, &systemdtest.NoopQuadletGenerator{}, &systemdtest.MockAnalyzeRunner{})
 
-	msgs := s.Validate(context.Background(), testutil.NewTestLogger(), &systemd.MockJournalReader{})
+	msgs := s.Validate(context.Background(), testlog.New(), &systemdtest.MockJournalReader{})
 	if len(msgs) != 0 {
 		t.Errorf("expected no messages for empty staging, got: %v", msgs)
 	}
@@ -45,13 +46,13 @@ func TestStaging_NoFiles_ReturnsNil(t *testing.T) {
 // surfaced as an error message and journal messages are appended.
 func TestStaging_GeneratorFails_ReturnsError(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	gen := &systemd.MockQuadletGeneratorRunner{GenerateErr: errors.New("generator crashed")}
-	jr := &systemd.MockJournalReader{Messages: []string{"foo.container: unknown key Bar"}}
+	gen := &systemdtest.NoopQuadletGenerator{GenerateErr: errors.New("generator crashed")}
+	jr := &systemdtest.MockJournalReader{Messages: []string{"foo.container: unknown key Bar"}}
 
-	s := newTestStaging(t, fs, gen, &systemd.MockSystemdAnalyzeRunner{})
+	s := newTestStaging(t, fs, gen, &systemdtest.MockAnalyzeRunner{})
 	stageUnit(s, "foo", "[Container]\nImage=nginx:latest\n")
 
-	msgs := s.Validate(context.Background(), testutil.NewTestLogger(), jr)
+	msgs := s.Validate(context.Background(), testlog.New(), jr)
 	if len(msgs) == 0 {
 		t.Fatal("expected error messages, got none")
 	}
@@ -79,13 +80,13 @@ func TestStaging_GeneratorFails_ReturnsError(t *testing.T) {
 // and the generator error still returned.
 func TestStaging_GeneratorFails_JournalReadError_StillReturnsGeneratorError(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	gen := &systemd.MockQuadletGeneratorRunner{GenerateErr: errors.New("generator crashed")}
-	jr := &systemd.MockJournalReader{Err: errors.New("journal unavailable")}
+	gen := &systemdtest.NoopQuadletGenerator{GenerateErr: errors.New("generator crashed")}
+	jr := &systemdtest.MockJournalReader{Err: errors.New("journal unavailable")}
 
-	s := newTestStaging(t, fs, gen, &systemd.MockSystemdAnalyzeRunner{})
+	s := newTestStaging(t, fs, gen, &systemdtest.MockAnalyzeRunner{})
 	stageUnit(s, "foo", "[Container]\nImage=nginx:latest\n")
 
-	msgs := s.Validate(context.Background(), testutil.NewTestLogger(), jr)
+	msgs := s.Validate(context.Background(), testlog.New(), jr)
 	if len(msgs) == 0 {
 		t.Fatal("expected generator error message, got none")
 	}
@@ -98,10 +99,10 @@ func TestStaging_GeneratorFails_JournalReadError_StillReturnsGeneratorError(t *t
 // generator succeeds, no output files to verify (mock generator writes nothing).
 func TestStaging_GeneratorSucceeds_NoOutputFiles_ReturnsNil(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	s := newTestStaging(t, fs, &systemd.MockQuadletGeneratorRunner{}, &systemd.MockSystemdAnalyzeRunner{})
+	s := newTestStaging(t, fs, &systemdtest.NoopQuadletGenerator{}, &systemdtest.MockAnalyzeRunner{})
 	stageUnit(s, "foo", "[Container]\nImage=nginx:latest\n")
 
-	msgs := s.Validate(context.Background(), testutil.NewTestLogger(), &systemd.MockJournalReader{})
+	msgs := s.Validate(context.Background(), testlog.New(), &systemdtest.MockJournalReader{})
 	if len(msgs) != 0 {
 		t.Errorf("expected no messages when generator produces no output files, got: %v", msgs)
 	}
@@ -111,13 +112,13 @@ func TestStaging_GeneratorSucceeds_NoOutputFiles_ReturnsNil(t *testing.T) {
 // on generated unit files are surfaced as error messages.
 func TestStaging_AnalyzerFails_ReturnsErrorPerFile(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	az := &systemd.MockSystemdAnalyzeRunner{
+	az := &systemdtest.MockAnalyzeRunner{
 		Result: systemd.AnalyzeResult{
 			ExitCode: 1,
 			Stderr:   "unit validation failed",
 		},
 	}
-	gen := &testutil.MockQuadletGenerator{
+	gen := &systemdtest.FakeQuadletGenerator{
 		Fs:    fs,
 		Files: map[string]string{"foo.service": "[Service]\nExecStart=/bin/sh\n"},
 	}
@@ -125,7 +126,7 @@ func TestStaging_AnalyzerFails_ReturnsErrorPerFile(t *testing.T) {
 	s := newTestStaging(t, fs, gen, az)
 	stageUnit(s, "foo", "[Container]\nImage=nginx:latest\n")
 
-	msgs := s.Validate(context.Background(), testutil.NewTestLogger(), &systemd.MockJournalReader{})
+	msgs := s.Validate(context.Background(), testlog.New(), &systemdtest.MockJournalReader{})
 	if len(msgs) == 0 {
 		t.Fatal("expected error messages from analyzer, got none")
 	}
@@ -139,13 +140,13 @@ func TestStaging_AnalyzerFails_ReturnsErrorPerFile(t *testing.T) {
 // as a warning message rather than silently dropped.
 func TestStaging_AnalyzerWarns_ReturnsWarning(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	az := &systemd.MockSystemdAnalyzeRunner{
+	az := &systemdtest.MockAnalyzeRunner{
 		Result: systemd.AnalyzeResult{
 			ExitCode: 0,
 			Stderr:   "mosquitto.service:8: Invalid memory limit 'asd', ignoring: Invalid argument",
 		},
 	}
-	gen := &testutil.MockQuadletGenerator{
+	gen := &systemdtest.FakeQuadletGenerator{
 		Fs:    fs,
 		Files: map[string]string{"mosquitto.service": "[Service]\nExecStart=/bin/mosquitto\n"},
 	}
@@ -153,7 +154,7 @@ func TestStaging_AnalyzerWarns_ReturnsWarning(t *testing.T) {
 	s := newTestStaging(t, fs, gen, az)
 	stageUnit(s, "mosquitto", "[Container]\nImage=mosquitto:latest\n")
 
-	msgs := s.Validate(context.Background(), testutil.NewTestLogger(), &systemd.MockJournalReader{})
+	msgs := s.Validate(context.Background(), testlog.New(), &systemdtest.MockJournalReader{})
 	if len(msgs) == 0 {
 		t.Fatal("expected warning message from analyzer stderr, got none")
 	}
@@ -166,10 +167,10 @@ func TestStaging_AnalyzerWarns_ReturnsWarning(t *testing.T) {
 // produces no error messages.
 func TestStaging_AnalyzerSucceeds_ReturnsNil(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	az := &systemd.MockSystemdAnalyzeRunner{
+	az := &systemdtest.MockAnalyzeRunner{
 		Result: systemd.AnalyzeResult{ExitCode: 0},
 	}
-	gen := &testutil.MockQuadletGenerator{
+	gen := &systemdtest.FakeQuadletGenerator{
 		Fs:    fs,
 		Files: map[string]string{"foo.service": "[Service]\nExecStart=/bin/sh\n"},
 	}
@@ -177,7 +178,7 @@ func TestStaging_AnalyzerSucceeds_ReturnsNil(t *testing.T) {
 	s := newTestStaging(t, fs, gen, az)
 	stageUnit(s, "foo", "[Container]\nImage=nginx:latest\n")
 
-	msgs := s.Validate(context.Background(), testutil.NewTestLogger(), &systemd.MockJournalReader{})
+	msgs := s.Validate(context.Background(), testlog.New(), &systemdtest.MockJournalReader{})
 	if len(msgs) != 0 {
 		t.Errorf("expected no messages when analyzer passes, got: %v", msgs)
 	}
@@ -190,10 +191,10 @@ func TestStaging_MultipleOutputFiles_AllAnalyzed(t *testing.T) {
 
 	var analyzedPaths []string
 	az := &countingAnalyzeRunner{
-		inner:   &systemd.MockSystemdAnalyzeRunner{Result: systemd.AnalyzeResult{ExitCode: 0}},
+		inner:   &systemdtest.MockAnalyzeRunner{Result: systemd.AnalyzeResult{ExitCode: 0}},
 		visited: &analyzedPaths,
 	}
-	gen := &testutil.MockQuadletGenerator{
+	gen := &systemdtest.FakeQuadletGenerator{
 		Fs: fs,
 		Files: map[string]string{
 			"foo.service": "[Service]\nExecStart=/bin/sh\n",
@@ -205,7 +206,7 @@ func TestStaging_MultipleOutputFiles_AllAnalyzed(t *testing.T) {
 	stageUnit(s, "foo", "[Container]\nImage=nginx:latest\n")
 	stageUnit(s, "bar", "[Container]\nImage=nginx:latest\n")
 
-	msgs := s.Validate(context.Background(), testutil.NewTestLogger(), &systemd.MockJournalReader{})
+	msgs := s.Validate(context.Background(), testlog.New(), &systemdtest.MockJournalReader{})
 	if len(msgs) != 0 {
 		t.Errorf("expected no error messages, got: %v", msgs)
 	}

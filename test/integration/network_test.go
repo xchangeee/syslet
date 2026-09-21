@@ -5,143 +5,80 @@ package integration
 import (
 	"testing"
 
-	"github.com/spf13/afero"
-
 	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/testutil"
+	"codeberg.org/xchangeee/syslet/test/integration/systest"
 )
 
-func makeContainerSpecWithNetwork(name, image string, state model.DesiredState, networkName string) *model.ContainerUnit {
-	return model.NewContainerUnit(
-		model.ContainerUnitRef(name),
-		model.UnitOptions{
-			"Container": {
-				model.SectionKey("Image"):   model.UV(image),
-				model.SectionKey("Network"): model.UV(networkName + ".network"),
-			},
-		},
-		state, nil, false,
-	)
-}
-
 func TestNetworkMeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
-	frontendNetworkSpec := makeNetworkSpec("frontend", "macvlan")
-	webappSpec := makeContainerSpecWithNetwork("webapp", "nginx:latest", model.DesiredStateRunning, "frontend")
+	env := systest.New(t)
+	env.SeedUnit(systest.NewNetwork("frontend", "bridge"))
+	env.SetUnitState("frontend-network.service", "active")
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest", systest.WithNetwork("frontend")))
+	env.Specs(
+		systest.NewNetwork("frontend", "macvlan"),
+		systest.NewContainer("webapp", "nginx:latest", systest.WithNetwork("frontend")),
+	)
 
-	fs := afero.NewMemMapFs()
-	oldFrontendNetworkSpec := makeNetworkSpec("frontend", "bridge")
+	env.Apply()
 
-	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{frontendNetworkSpec, webappSpec},
-		existingUnits: map[string]string{
-			"frontend.network": renderNetwork(t, oldFrontendNetworkSpec),
-			"webapp.container": renderContainer(t, fs, webappSpec),
-		},
-		existingState: map[string]string{
-			"webapp.service":           "active",
-			"frontend-network.service": "active",
-		},
-	})
-
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertStopped(t, mockConn, "webapp.service", "frontend-network.service")
-	testutil.AssertStarted(t, mockConn, "webapp.service")
-
-	mockPc := mockPodman.(*mockPodmanClient)
-	if len(mockPc.deletedNetworks) != 1 || mockPc.deletedNetworks[0] != "frontend" {
-		t.Errorf("expected DeleteNetwork('frontend'), got: %v", mockPc.deletedNetworks)
-	}
-
-	testutil.AssertUnitExists(t, sd, "frontend.network")
-	testutil.AssertReloaded(t, mockConn)
+	env.AssertStopped("webapp.service", "frontend-network.service")
+	env.AssertStarted("webapp.service")
+	env.AssertNetworksDeleted("frontend")
+	env.AssertUnitExists("frontend.network")
+	env.AssertReloaded()
 }
 
 func TestNetworkMetadataOnlyChange_NoRecreation(t *testing.T) {
-	// New spec: RemovalAllowed=true (metadata-only change), same Driver=bridge
-	frontendNetworkSpec := makeStaleNetworkSpec("frontend", "bridge")
-	webappSpec := makeContainerSpecWithNetwork("webapp", "nginx:latest", model.DesiredStateRunning, "frontend")
+	env := systest.New(t)
+	// Old spec: RemovalAllowed=false.
+	env.SeedUnit(systest.NewNetwork("frontend", "bridge"))
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest", systest.WithNetwork("frontend")))
+	// New spec: RemovalAllowed=true (metadata-only change), same Driver=bridge.
+	env.Specs(
+		systest.NewNetwork("frontend", "bridge", systest.Removable),
+		systest.NewContainer("webapp", "nginx:latest", systest.WithNetwork("frontend")),
+	)
 
-	fs := afero.NewMemMapFs()
-	// Old spec: RemovalAllowed=false
-	oldFrontendNetworkSpec := makeNetworkSpec("frontend", "bridge")
+	env.Apply()
 
-	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{frontendNetworkSpec, webappSpec},
-		existingUnits: map[string]string{
-			"frontend.network": renderNetwork(t, oldFrontendNetworkSpec),
-			"webapp.container": renderContainer(t, fs, webappSpec),
-		},
-		existingState: map[string]string{
-			"webapp.service": "active",
-		},
-	})
-
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertNoStartStop(t, mockConn)
-
-	mockPc := mockPodman.(*mockPodmanClient)
-	if len(mockPc.deletedNetworks) != 0 {
-		t.Errorf("expected no network deletions, got: %v", mockPc.deletedNetworks)
-	}
-
-	testutil.AssertReloaded(t, mockConn)
+	env.AssertNoStartStop()
+	env.AssertNoNetworksDeleted()
+	env.AssertReloaded()
 }
 
 func TestNewNetwork_WritesUnitOnly(t *testing.T) {
-	specs := []model.Unit{makeNetworkSpec("frontend", "bridge")}
-	ctx, fs, sd, mockConn, mockPodman, raw := setupTest(t, testFixture{specs: specs})
+	env := systest.New(t)
+	env.Specs(systest.NewNetwork("frontend", "bridge"))
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
+	env.Apply()
 
-	testutil.AssertUnitExists(t, sd, "frontend.network")
-	testutil.AssertReloaded(t, mockConn)
-	testutil.AssertNoStartStop(t, mockConn)
+	env.AssertUnitExists("frontend.network")
+	env.AssertReloaded()
+	env.AssertNoStartStop()
 }
 
 func TestStaleNetwork_RemovesUnit(t *testing.T) {
-	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
-	staleNetworkSpec := makeStaleNetworkSpec("oldnet", "bridge")
-	fs := afero.NewMemMapFs()
+	env := systest.New(t)
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
+	env.SeedUnit(systest.NewNetwork("oldnet", "bridge", systest.Removable))
+	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
 
-	ctx, sd, mockConn, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{webappSpec},
-		existingUnits: map[string]string{
-			"webapp.container": renderContainer(t, fs, webappSpec),
-			"oldnet.network":   renderNetwork(t, staleNetworkSpec),
-		},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
+	env.Apply()
 
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertUnitAbsent(t, sd, "oldnet.network")
-	testutil.AssertNoStartStop(t, mockConn)
-	testutil.AssertReloaded(t, mockConn)
+	env.AssertUnitAbsent("oldnet.network")
+	env.AssertNoStartStop()
+	env.AssertReloaded()
 }
 
 func TestStaleNetworkWithDeletePolicy_DeletesPodmanNetwork(t *testing.T) {
-	webappSpec := makeContainerSpec("webapp", "nginx:latest", model.DesiredStateRunning)
+	env := systest.New(t)
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
+	env.SeedUnit(systest.NewNetwork("oldnet", "bridge",
+		systest.Removable, systest.Reclaim(model.ReclaimPolicyDelete)))
+	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
 
-	staleNetworkSpec := makeStaleNetworkSpecWithDelete("oldnet", "bridge")
-	fs := afero.NewMemMapFs()
+	env.Apply()
 
-	ctx, sd, _, mockPodman, raw := setupTestWithFS(t, fs, testFixture{
-		specs: []model.Unit{webappSpec},
-		existingUnits: map[string]string{
-			"webapp.container": renderContainer(t, fs, webappSpec),
-			"oldnet.network":   renderNetwork(t, staleNetworkSpec),
-		},
-		existingState: map[string]string{"webapp.service": "active"},
-	})
-
-	mustApply(t, ctx, fs, sd, mockPodman, raw)
-
-	testutil.AssertUnitAbsent(t, sd, "oldnet.network")
-
-	mockPc := mockPodman.(*mockPodmanClient)
-	if len(mockPc.deletedNetworks) != 1 || mockPc.deletedNetworks[0] != "oldnet" {
-		t.Errorf("expected DeleteNetwork('oldnet'), got: %v", mockPc.deletedNetworks)
-	}
+	env.AssertUnitAbsent("oldnet.network")
+	env.AssertNetworksDeleted("oldnet")
 }
