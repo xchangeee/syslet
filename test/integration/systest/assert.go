@@ -5,14 +5,18 @@ package systest
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
 
 	"codeberg.org/xchangeee/syslet/internal/model"
+	"codeberg.org/xchangeee/syslet/internal/podman/podmantest"
 	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
 	"codeberg.org/xchangeee/syslet/internal/util"
@@ -140,11 +144,40 @@ func (e *Env) AssertContainerNotReloaded() {
 }
 
 // AssertUnitExists checks that a unit file is present on disk.
+//
+// Existence alone is a weak claim in any test that seeded the unit first: the
+// file was already there before apply ran, so the assertion holds whether or
+// not apply rewrote it. Where a test's subject is a unit that *changed*, use
+// AssertUnitMatches instead.
 func (e *Env) AssertUnitExists(name string) {
 	e.t.Helper()
 	if !e.Systemd.UnitFileExists(name) {
 		e.t.Errorf("expected unit file %s to exist", name)
 	}
+}
+
+// AssertUnitContent checks a unit file's bytes on disk.
+func (e *Env) AssertUnitContent(name model.FullUnitName, want string) {
+	e.t.Helper()
+	got, err := e.Systemd.ReadUnitFile(name)
+	if err != nil {
+		e.t.Errorf("reading unit file %s: %v", name, err)
+		return
+	}
+	if string(got) != want {
+		e.t.Errorf("unit file %s:\ngot:\n%s\nwant:\n%s", name, string(got), want)
+	}
+}
+
+// AssertUnitMatches checks that the installed unit file is exactly what the
+// spec renders to.
+//
+// This is what most tests naming a changed unit actually mean. A unit file that
+// apply forgot to rewrite, or wrote from the wrong spec, is invisible to an
+// existence check and produces a host running last deploy's configuration.
+func (e *Env) AssertUnitMatches(spec model.Unit) {
+	e.t.Helper()
+	e.AssertUnitContent(spec.Ref().FullName(), e.Render(spec))
 }
 
 // AssertUnitAbsent checks that a unit file is not present on disk.
@@ -249,6 +282,36 @@ func (e *Env) AssertNoSecretsDeleted() {
 	}
 }
 
+// AssertSecretLabels checks the labels a named secret was upserted with.
+func (e *Env) AssertSecretLabels(name string, want map[string]string) {
+	e.t.Helper()
+	for _, u := range e.Podman.UpsertedSecrets() {
+		if u.Name != name {
+			continue
+		}
+		if !maps.Equal(u.Labels, want) {
+			e.t.Errorf("secret %q upserted with labels %v, want %v", name, u.Labels, want)
+		}
+		return
+	}
+	e.t.Errorf("secret %q was never upserted", name)
+}
+
+// AssertSecretHashLabel checks the syslet/hash label a named secret was
+// upserted with.
+//
+// This label is the whole of syslet's change detection for secrets: the plan
+// compares it against the hash of the desired ciphertext, and a mismatch is what
+// makes a secret — and every container consuming it — get rewritten. Upserting
+// with a missing or wrong hash is therefore invisible on the run that does it
+// and pathological on every run after, which re-upserts and restarts
+// indefinitely. Nothing about the upsert itself reveals that; only the label
+// does.
+func (e *Env) AssertSecretHashLabel(name, wantHash string) {
+	e.t.Helper()
+	e.AssertSecretLabels(name, map[string]string{"syslet/hash": wantHash})
+}
+
 // AssertSecretValue checks the plaintext a named secret was upserted with,
 // proving decryption carried through apply rather than stopping at the plan.
 func (e *Env) AssertSecretValue(name, want string) {
@@ -275,9 +338,9 @@ func (e *Env) AssertSecretDeletesPrecedeUpserts() {
 	seenUpsert := false
 	for _, c := range e.Podman.SecretCalls() {
 		switch c.Op {
-		case SecretUpsert:
+		case podmantest.SecretUpsert:
 			seenUpsert = true
-		case SecretDelete:
+		case podmantest.SecretDelete:
 			if seenUpsert {
 				e.t.Errorf("secret delete of %q issued after an upsert; call order was %v",
 					c.Name, e.Podman.SecretCalls())
@@ -293,8 +356,15 @@ func (e *Env) AssertSecretDeletesPrecedeUpserts() {
 // store's business, and Env has the store to ask. A test naming a mount path
 // should never have to know the hashed filename it lands under.
 
-// WantFile is the expected on-disk result for one mounted config file. An empty
-// Content means the case only cares about the mode.
+// AnyContent is the Content of a WantFile whose case is about the mode alone.
+//
+// It exists so that leaving Content unset cannot quietly mean "do not check the
+// content": a forgotten field and a deliberate omission must not look the same,
+// or a case named for the thing it checks ends up checking nothing.
+const AnyContent = "\x00any-content"
+
+// WantFile is the expected on-disk result for one mounted config file. Set
+// Content to AnyContent to assert the mode alone.
 type WantFile struct {
 	MountPath string
 	Mode      os.FileMode
@@ -312,7 +382,7 @@ func (e *Env) ConfigFilePath(container, mountPath string) string {
 func (e *Env) AssertConfigFileExists(container, mountPath string) {
 	e.t.Helper()
 	path := e.ConfigFilePath(container, mountPath)
-	if _, err := e.Fs.Stat(path); err != nil {
+	if _, err := e.configFs.Stat(path); err != nil {
 		e.t.Errorf("expected config file %q to exist: %v", path, err)
 	}
 }
@@ -321,7 +391,7 @@ func (e *Env) AssertConfigFileExists(container, mountPath string) {
 func (e *Env) AssertConfigFileAbsent(container, mountPath string) {
 	e.t.Helper()
 	path := e.ConfigFilePath(container, mountPath)
-	if _, err := e.Fs.Stat(path); err == nil {
+	if _, err := e.configFs.Stat(path); err == nil {
 		e.t.Errorf("expected config file %q to be absent", path)
 	}
 }
@@ -331,7 +401,13 @@ func (e *Env) AssertConfigFileAbsent(container, mountPath string) {
 func (e *Env) AssertConfigDirEmpty(container string) {
 	e.t.Helper()
 	files, err := e.Mgrs.Config.ListFiles(model.ContainerUnitRef(container))
-	if err == nil && len(files) > 0 {
+	if err != nil {
+		// A store error must fail rather than pass: treating it as "nothing
+		// found" would let a broken store satisfy an emptiness check.
+		e.t.Errorf("listing config files for %q: %v", container, err)
+		return
+	}
+	if len(files) > 0 {
 		e.t.Errorf("expected config directory for %q to be empty, found: %v", container, files)
 	}
 }
@@ -354,16 +430,219 @@ func (e *Env) AssertConfigDirExists(container string, mountPath model.ContainerM
 	}
 }
 
-// AssertFiles checks the mode, and where given the content, of each expected
-// config file of a container.
+// AssertFiles checks that a container's config store holds exactly the expected
+// files, with the expected modes and contents.
+//
+// The set is exact, so a file that should have been removed is caught as an
+// extra rather than passing unnoticed, and an empty want asserts the container
+// has no config files at all rather than asserting nothing.
 func (e *Env) AssertFiles(container string, want ...WantFile) {
 	e.t.Helper()
+
+	wantNames := make(map[string]bool, len(want))
 	for _, w := range want {
+		wantNames[e.Mgrs.Config.InternalFilename(model.ContainerMountPath(w.MountPath))] = true
+
 		path := e.ConfigFilePath(container, w.MountPath)
+		AssertFileMode(e.t, e.configFs, path, w.Mode)
+		if w.Content != AnyContent {
+			AssertFileContent(e.t, e.configFs, path, w.Content)
+		}
+	}
+
+	got, err := e.Mgrs.Config.ListFiles(model.ContainerUnitRef(container))
+	if err != nil {
+		e.t.Errorf("listing config files for %q: %v", container, err)
+		return
+	}
+	for _, name := range got {
+		if !wantNames[name] {
+			e.t.Errorf("unexpected config file %q for %q; want exactly %d file(s)",
+				name, container, len(want))
+		}
+	}
+}
+
+// --- ConfigDir contents ---
+//
+// A configDir is not asserted like a file mount. Its contents live in a
+// numbered version directory, and the container sees them through the ..data
+// symlink, so "what is on disk" and "what the container would read" are
+// different questions. These assertions all ask the second one: they resolve
+// the symlink first, exactly as a bind mount would.
+//
+// This matters because the cheap path for a configDir change is an in-place
+// reload rather than a restart. A reload tells the application to re-read files
+// that syslet claims to have updated — so a reload issued over stale or missing
+// content is worse than no reload at all, and the reload assertion alone cannot
+// tell the two apart.
+
+// AssertConfigDirFiles checks that a container's configDir holds exactly the
+// expected files, with the expected contents and modes, as seen through ..data.
+func (e *Env) AssertConfigDirFiles(container string, mountPath model.ContainerMountPath, want ...model.ContainerConfigFile) {
+	e.t.Helper()
+	ref := model.ContainerUnitRef(container)
+
+	version, err := e.Mgrs.Config.CurrentDirVersion(ref, mountPath)
+	if err != nil {
+		e.t.Fatalf("resolving current configDir version for %q %s: %v", container, mountPath, err)
+	}
+	contents, err := e.Mgrs.Config.ReadVersionedDirFiles(ref, mountPath, version)
+	if err != nil {
+		e.t.Fatalf("reading configDir files for %q %s: %v", container, mountPath, err)
+	}
+	modes, err := e.Mgrs.Config.ReadVersionedDirFileModes(ref, mountPath, version)
+	if err != nil {
+		e.t.Fatalf("reading configDir modes for %q %s: %v", container, mountPath, err)
+	}
+
+	wantNames := make(map[string]bool, len(want))
+	for _, w := range want {
+		wantNames[w.Name] = true
+		got, ok := contents[w.Name]
+		if !ok {
+			e.t.Errorf("configDir %q %s: missing file %q (present: %v)",
+				container, mountPath, w.Name, sortedKeys(contents))
+			continue
+		}
+		if got != w.Content {
+			e.t.Errorf("configDir %q %s file %q:\ngot:  %q\nwant: %q",
+				container, mountPath, w.Name, got, w.Content)
+		}
+		wantMode := w.Mode
+		if wantMode == 0 {
+			wantMode = 0644
+		}
+		if modes[w.Name].Perm() != wantMode.Perm() {
+			e.t.Errorf("configDir %q %s file %q mode: got %04o, want %04o",
+				container, mountPath, w.Name, modes[w.Name].Perm(), wantMode.Perm())
+		}
+	}
+	for name := range contents {
+		if !wantNames[name] {
+			e.t.Errorf("configDir %q %s: unexpected file %q", container, mountPath, name)
+		}
+	}
+}
+
+// AssertConfigDirAbsent checks that a container's configDir is gone from disk.
+//
+// AssertConfigDirEmpty cannot answer this: it lists the container's files, and a
+// configDir is a directory, so an abandoned one is invisible to it. A configDir
+// that outlives the mount referencing it is a leak that grows with every spec
+// change and is never reclaimed afterwards.
+func (e *Env) AssertConfigDirAbsent(container string, mountPath model.ContainerMountPath) {
+	e.t.Helper()
+	path := e.Mgrs.Config.Resolve(model.ContainerUnitRef(container), mountPath)
+	if _, err := e.configFs.Stat(path); err == nil {
+		e.t.Errorf("expected configDir %q to be absent from disk", path)
+	}
+}
+
+// AssertConfigDirVersion checks which version the ..data symlink resolves to,
+// pinning that a change produced a new version and a no-op did not.
+func (e *Env) AssertConfigDirVersion(container string, mountPath model.ContainerMountPath, want int) {
+	e.t.Helper()
+	got, err := e.Mgrs.Config.CurrentDirVersion(model.ContainerUnitRef(container), mountPath)
+	if err != nil {
+		e.t.Fatalf("resolving current configDir version for %q %s: %v", container, mountPath, err)
+	}
+	if got != want {
+		e.t.Errorf("configDir %q %s is at version %d, want %d", container, mountPath, got, want)
+	}
+}
+
+// AssertConfigDirVersionsKept checks exactly which version directories survive
+// on disk.
+//
+// Every configDir change writes a new numbered directory and repoints ..data at
+// it; the old ones are reclaimed afterwards. That reclamation is best-effort and
+// silent, so without this assertion a host accumulates a directory per deploy
+// forever — a slow leak that no test observing only the current version can see.
+func (e *Env) AssertConfigDirVersionsKept(container string, mountPath model.ContainerMountPath, want ...int) {
+	e.t.Helper()
+	dirPath := e.Mgrs.Config.Resolve(model.ContainerUnitRef(container), mountPath)
+	entries, err := afero.ReadDir(e.configFs, dirPath)
+	if err != nil {
+		e.t.Fatalf("listing configDir versions at %q: %v", dirPath, err)
+	}
+
+	var got []int
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if v, convErr := strconv.Atoi(entry.Name()); convErr == nil {
+			got = append(got, v)
+		}
+	}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		e.t.Errorf("configDir %q %s has versions %v on disk, want %v",
+			container, mountPath, got, want)
+	}
+}
+
+// sortedKeys returns a map's keys in order, for stable failure messages.
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// --- Build context store ---
+//
+// The build context is the input to a container image, and it is the half of a
+// build unit that does not live in the unit file: a changed Containerfile
+// triggers a rebuild with no unit-file diff at all. Asserting only that the
+// build service restarted would pass just as well against an apply that rebuilt
+// from the previous context.
+
+// BuildContextDir returns the directory a build unit's context files occupy.
+func (e *Env) BuildContextDir(unit string) string {
+	return filepath.Join(e.Mgrs.Build.BaseDirectory(), unit)
+}
+
+// AssertBuildContextFiles checks that a build unit's context directory holds
+// exactly the expected files, with the expected contents and modes.
+func (e *Env) AssertBuildContextFiles(unit string, want ...WantFile) {
+	e.t.Helper()
+
+	wantNames := make(map[string]bool, len(want))
+	for _, w := range want {
+		// A context file is named directly, not by mount path, so MountPath
+		// carries the filename.
+		wantNames[w.MountPath] = true
+		path := e.Mgrs.Build.Resolve(unit, w.MountPath)
 		AssertFileMode(e.t, e.Fs, path, w.Mode)
-		if w.Content != "" {
+		if w.Content != AnyContent {
 			AssertFileContent(e.t, e.Fs, path, w.Content)
 		}
+	}
+
+	entries, err := afero.ReadDir(e.Fs, e.BuildContextDir(unit))
+	if err != nil {
+		e.t.Errorf("listing build context for %q: %v", unit, err)
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && !wantNames[entry.Name()] {
+			e.t.Errorf("unexpected build context file %q for %q", entry.Name(), unit)
+		}
+	}
+}
+
+// AssertBuildContextAbsent checks that a build unit's context directory is
+// gone, proving a stale build reclaimed its files and not merely its unit.
+func (e *Env) AssertBuildContextAbsent(unit string) {
+	e.t.Helper()
+	path := e.BuildContextDir(unit)
+	if _, err := e.Fs.Stat(path); err == nil {
+		e.t.Errorf("expected build context directory %q to be absent", path)
 	}
 }
 

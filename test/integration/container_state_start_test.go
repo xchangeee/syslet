@@ -61,17 +61,45 @@ func TestContainerSpecValidationError(t *testing.T) {
 	})
 }
 
-func TestContainerQuadletError_DoesNotStart(t *testing.T) {
-	env := systest.New(t, systest.WithJournalReader(&systemdtest.MockJournalReader{
-		Messages: []string{"webapp.container: Invalid key 'BadKey' in section Container"},
-	}))
+// TestContainerQuadletError covers what a failed daemon-reload owes the
+// operator.
+//
+// When the reload fails, the reason is not in the error systemd returns — it is
+// in the journal, where the quadlet generator wrote which key of which unit it
+// rejected. syslet reads it back and logs it, and that log line is the only
+// place the cause ever surfaces. Asserting just the returned error would pass
+// equally against an apply that never opened the journal at all, so the read
+// and the surfacing are asserted separately from the refusal to start.
+func TestContainerQuadletError(t *testing.T) {
+	const quadletError = "webapp.container: Invalid key 'BadKey' in section Container"
+
+	journal := &systemdtest.MockJournalReader{Messages: []string{quadletError}}
+
+	env := systest.New(t, systest.WithJournalReader(journal))
 	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
 	env.Conn.ReloadErr = fmt.Errorf("daemon-reload failed")
 
 	err := env.ApplyErr()
 
-	if err == nil {
-		t.Error("expected syslet.Apply to return an error when daemon-reload fails")
-	}
-	env.AssertNoneStarted()
+	t.Run("Errors", func(t *testing.T) {
+		if err == nil {
+			t.Error("expected syslet.Apply to return an error when daemon-reload fails")
+		}
+	})
+
+	t.Run("DoesNotStart", func(t *testing.T) {
+		env.With(t).AssertNoneStarted()
+	})
+
+	t.Run("ReadsJournal", func(t *testing.T) {
+		if got := len(journal.Calls()); got != 1 {
+			t.Errorf("expected the journal to be consulted once, got %d calls", got)
+		}
+	})
+
+	t.Run("SurfacesGeneratorErrors", func(t *testing.T) {
+		if !env.Logs.Contains(quadletError) {
+			t.Errorf("expected the quadlet generator error to be logged, got:\n%s", env.Logs.String())
+		}
+	})
 }

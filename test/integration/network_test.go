@@ -10,12 +10,14 @@ import (
 )
 
 func TestNetworkMeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
+	updated := systest.NewNetwork("frontend", "macvlan")
+
 	env := systest.New(t)
 	env.SeedUnit(systest.NewNetwork("frontend", "bridge"))
 	env.SetUnitState("frontend-network.service", "active")
 	env.SeedActive(systest.NewContainer("webapp", "nginx:latest", systest.WithNetwork("frontend")))
 	env.Specs(
-		systest.NewNetwork("frontend", "macvlan"),
+		updated,
 		systest.NewContainer("webapp", "nginx:latest", systest.WithNetwork("frontend")),
 	)
 
@@ -24,7 +26,8 @@ func TestNetworkMeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
 	env.AssertStopped("webapp.service", "frontend-network.service")
 	env.AssertStarted("webapp.service")
 	env.AssertNetworksDeleted("frontend")
-	env.AssertUnitExists("frontend.network")
+	// Driver= must have actually changed on disk; the unit was already there.
+	env.AssertUnitMatches(updated)
 	env.AssertReloaded()
 }
 
@@ -47,12 +50,14 @@ func TestNetworkMetadataOnlyChange_NoRecreation(t *testing.T) {
 }
 
 func TestNewNetwork_WritesUnitOnly(t *testing.T) {
+	spec := systest.NewNetwork("frontend", "bridge")
+
 	env := systest.New(t)
-	env.Specs(systest.NewNetwork("frontend", "bridge"))
+	env.Specs(spec)
 
 	env.Apply()
 
-	env.AssertUnitExists("frontend.network")
+	env.AssertUnitMatches(spec)
 	env.AssertReloaded()
 	env.AssertNoStartStop()
 }

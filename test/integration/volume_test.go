@@ -19,12 +19,14 @@ func deletable() []systest.UnitOpt {
 }
 
 func TestNewVolume_WritesUnitOnly(t *testing.T) {
+	spec := systest.NewVolume("data", "tmpfs")
+
 	env := systest.New(t)
-	env.Specs(systest.NewVolume("data", "tmpfs"))
+	env.Specs(spec)
 
 	env.Apply()
 
-	env.AssertUnitExists("data.volume")
+	env.AssertUnitMatches(spec)
 	env.AssertReloaded()
 	env.AssertNoStartStop()
 }
@@ -38,14 +40,18 @@ func TestNewVolume_WritesUnitOnly(t *testing.T) {
 func TestVolumeMetadataOnlyChange(t *testing.T) {
 	// removalAllowed flips from false to true — metadata-only, same Device=.
 	t.Run("WritesUnit", func(t *testing.T) {
+		updated := systest.NewVolume("data", "tmpfs", systest.Removable)
+
 		env := systest.New(t)
 		env.SeedUnit(systest.NewVolume("data", "tmpfs"))
-		env.Specs(systest.NewVolume("data", "tmpfs", systest.Removable))
+		env.Specs(updated)
 
 		env.Apply()
 
 		env.AssertNoVolumesDeleted()
-		env.AssertUnitExists("data.volume")
+		// The unit was seeded, so its mere existence proves nothing; only its
+		// content shows the metadata change actually reached disk.
+		env.AssertUnitMatches(updated)
 	})
 
 	t.Run("DoesNotRestartContainers", func(t *testing.T) {
@@ -64,15 +70,17 @@ func TestVolumeMetadataOnlyChange(t *testing.T) {
 }
 
 func TestVolumeMeaningfulChangeWithDeletePolicy_DeletesAndRecreatesUnit(t *testing.T) {
+	updated := systest.NewVolume("data", "tmpfs", deletable()...)
+
 	env := systest.New(t)
 	// The existing unit must carry the flags, or the change is rejected instead.
 	env.SeedActive(systest.NewVolume("data", "old-device", deletable()...))
-	env.Specs(systest.NewVolume("data", "tmpfs", deletable()...))
+	env.Specs(updated)
 
 	env.Apply()
 
 	env.AssertVolumesDeleted("data")
-	env.AssertUnitExists("data.volume")
+	env.AssertUnitMatches(updated)
 }
 
 func TestVolumeMeaningfulChangeWithoutDeletePolicy_Errors(t *testing.T) {

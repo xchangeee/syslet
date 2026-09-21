@@ -44,9 +44,9 @@ func TestContainerConfigFileModes(t *testing.T) {
 				model.NewContainerFileMount("/etc/app/secret.conf", "secret", os.FileMode(0600)),
 			},
 			want: []systest.WantFile{
-				{MountPath: "/etc/app/app.conf", Mode: 0644},
-				{MountPath: "/usr/local/bin/run.sh", Mode: 0755},
-				{MountPath: "/etc/app/secret.conf", Mode: 0600},
+				{MountPath: "/etc/app/app.conf", Mode: 0644, Content: systest.AnyContent},
+				{MountPath: "/usr/local/bin/run.sh", Mode: 0755, Content: systest.AnyContent},
+				{MountPath: "/etc/app/secret.conf", Mode: 0600, Content: systest.AnyContent},
 			},
 		},
 	}
@@ -63,26 +63,11 @@ func TestContainerConfigFileModes(t *testing.T) {
 	}
 }
 
-func TestContainerConfigFileModeChanged_UpdatesMode(t *testing.T) {
-	script := "#!/bin/sh\necho hello"
-	mountPath := "/usr/local/bin/run.sh"
-
-	env := systest.New(t)
-	env.SeedActive(systest.NewContainer("webapp", "alpine:latest",
-		systest.Files(model.NewContainerFileMount(mountPath, script, 0))))
-	env.SeedConfigFile("webapp", mountPath, script, 0644)
-	env.AssertFiles("webapp", systest.WantFile{MountPath: mountPath, Mode: 0644})
-
-	env.Specs(systest.NewContainer("webapp", "alpine:latest",
-		systest.Files(model.NewContainerFileMount(mountPath, script, os.FileMode(0755)))))
-
-	env.Apply()
-
-	env.AssertFiles("webapp", systest.WantFile{MountPath: mountPath, Mode: 0755, Content: script})
-}
-
+// TestContainerConfigFileRemoved_RemovesFile pins that dropping one file mount
+// reclaims that file and leaves the others alone. The restart it also costs is
+// covered by TestContainerConfigChanges/OneRemoved, alongside the other
+// service-transition outcomes.
 func TestContainerConfigFileRemoved_RemovesFile(t *testing.T) {
-	// Container removes b.conf while a.conf content is unchanged — must still restart.
 	env := systest.New(t)
 	env.SeedActive(systest.NewContainer("webapp", "nginx:latest", systest.Files(
 		model.NewContainerFileMount("/etc/app/a.conf", "unchanged content", 0),

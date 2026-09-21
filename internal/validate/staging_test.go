@@ -12,7 +12,7 @@ import (
 	"codeberg.org/xchangeee/syslet/internal/render"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
-	"codeberg.org/xchangeee/syslet/internal/testlog"
+	"codeberg.org/xchangeee/syslet/test/log"
 )
 
 func newTestStaging(t *testing.T, fs afero.Fs, gen systemd.QuadletGeneratorRunner, az systemd.AnalyzeRunner) *Staging {

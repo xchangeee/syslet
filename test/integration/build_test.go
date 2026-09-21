@@ -13,11 +13,17 @@ func TestStaleBuild_RemovesUnit(t *testing.T) {
 	env := systest.New(t)
 	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
 	env.SeedUnit(systest.NewBuild("oldapp", "oldapp:latest"))
+	// The context must exist beforehand, or asserting it is gone afterwards
+	// proves nothing.
+	env.SeedBuildContext("oldapp", "Containerfile", "FROM scratch", 0644)
 	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
 
 	env.Apply()
 
 	env.AssertUnitAbsent("oldapp.build")
+	// The context directory goes with the unit: a stale build must reclaim its
+	// files, not just stop being referenced.
+	env.AssertBuildContextAbsent("oldapp")
 	env.AssertNoStartStop()
 	env.AssertReloaded()
 	env.AssertNoImagesDeleted()
@@ -63,13 +69,15 @@ func TestStaleBuildWithDeletePolicy(t *testing.T) {
 
 func TestBuildMeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
 	// New spec changes ImageTag — a meaningful change in the [Build] section.
+	updated := systest.NewBuild("myapp", "localhost/myapp:v2")
+
 	env := systest.New(t)
 	// Pre-write the same Containerfile so context files are unchanged.
 	env.SeedBuildContext("myapp", "Containerfile", "FROM scratch", 0644)
 	env.SeedUnit(systest.NewBuild("myapp", "localhost/myapp:v1"))
 	env.SeedActive(systest.NewBuiltContainer("webapp", "myapp"))
 	env.Specs(
-		systest.NewBuild("myapp", "localhost/myapp:v2"),
+		updated,
 		systest.NewBuiltContainer("webapp", "myapp"),
 	)
 
@@ -78,7 +86,7 @@ func TestBuildMeaningfulChange_RecreatesAndRestartsContainers(t *testing.T) {
 	env.AssertStopped("webapp.service", "myapp-build.service")
 	env.AssertStarted("webapp.service")
 	env.AssertNoImagesDeleted()
-	env.AssertUnitExists("myapp.build")
+	env.AssertUnitMatches(updated)
 	env.AssertReloaded()
 }
 
@@ -100,6 +108,10 @@ func TestBuildContextFileChange_RecreatesAndRestartsContainers(t *testing.T) {
 	env.AssertStarted("webapp.service")
 	env.AssertNoImagesDeleted()
 	env.AssertUnitExists("myapp.build")
+	// The rebuild is only correct if the new Containerfile actually reached the
+	// context directory — the restart alone would look identical if it had not.
+	env.AssertBuildContextFiles("myapp",
+		systest.WantFile{MountPath: "Containerfile", Mode: 0644, Content: "FROM scratch"})
 	// No daemon-reload: the quadlet unit file is unchanged, only the Containerfile changed.
 }
 

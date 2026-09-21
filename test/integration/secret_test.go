@@ -80,6 +80,12 @@ func TestNewSecret_UpsertsAllKeys(t *testing.T) {
 	env.Apply()
 
 	env.AssertSecretsUpserted("myapp-api-key", "myapp-db-password")
+	env.AssertSecretValue("myapp-api-key", "s3cr3t")
+	env.AssertSecretValue("myapp-db-password", "hunter2")
+	// Every key carries the content hash, which is the only thing that will
+	// tell the next run these secrets are already current.
+	env.AssertSecretHashLabel("myapp-api-key", secretContentHash(t))
+	env.AssertSecretHashLabel("myapp-db-password", secretContentHash(t))
 	env.AssertNoSecretsDeleted()
 }
 
@@ -135,6 +141,9 @@ func TestSecretContentChanged_UpsertsAllKeys(t *testing.T) {
 	// otherwise look identical here.
 	env.AssertSecretValue("myapp-api-key", "s3cr3t")
 	env.AssertSecretValue("myapp-db-password", "hunter2")
+	// The stored hash must advance to the new content, or the next run would
+	// see a mismatch again and re-upsert indefinitely.
+	env.AssertSecretHashLabel("myapp-api-key", secretContentHash(t))
 	env.AssertNoSecretsDeleted()
 }
 
@@ -188,6 +197,28 @@ func TestSecretContentChangedWithOrphanKey_DeletesBeforeUpserting(t *testing.T) 
 	env.AssertSecretsUpserted("myapp-api-key", "myapp-db-password")
 	env.AssertSecretsDeleted("myapp-old-token")
 	env.AssertSecretDeletesPrecedeUpserts()
+}
+
+// TestSecretSpecRemovedWithUnmanagedSecret_DeletesOnlyManagedKeys pins the
+// ownership rule that bounds orphan detection.
+//
+// syslet claims a podman secret only if it carries the syslet/hash label it
+// writes itself. Anything else on the host was put there by the operator or
+// another tool, and reclaiming it would destroy data syslet was never asked to
+// manage — the most expensive failure in this area, and one the positive
+// orphan-deletion tests cannot detect.
+func TestSecretSpecRemovedWithUnmanagedSecret_DeletesOnlyManagedKeys(t *testing.T) {
+	env := systest.New(t)
+	env.Podman.SeedSecrets(
+		podman.SecretMeta{Name: "hand-made"},                                         // created by hand: no labels
+		podman.SecretMeta{Name: "other-tool", Labels: map[string]string{"app": "x"}}, // labeled, but not by syslet
+		hashedSecrets("abc", "oldapp-key1")[0],                                       // syslet's own, now orphaned
+	)
+	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
+
+	env.Apply()
+
+	env.AssertSecretsDeleted("oldapp-key1")
 }
 
 func TestSecretChanged_RestartsReferencingContainers(t *testing.T) {

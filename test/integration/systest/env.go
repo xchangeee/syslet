@@ -11,11 +11,15 @@
 // The package carries //go:build integration because it wires together syslet,
 // the loader and the filestores — the whole production apply path — and is only
 // meaningful to the tagged suite in test/integration. Fakes that untagged unit
-// tests also need live in internal/systemd/systemdtest instead.
+// tests also need live beside the package they fake instead — see
+// internal/systemd/systemdtest and internal/podman/podmantest. What stays here
+// is what genuinely cannot leave: the recording filesystem and the phase
+// ranking, which are about the wiring rather than about one collaborator.
 package systest
 
 import (
 	"context"
+	"log/slog"
 	"path/filepath"
 	"testing"
 
@@ -23,11 +27,13 @@ import (
 
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/filestore"
+	"codeberg.org/xchangeee/syslet/internal/podman/podmantest"
 	"codeberg.org/xchangeee/syslet/internal/sops"
 	"codeberg.org/xchangeee/syslet/internal/syslet"
 	"codeberg.org/xchangeee/syslet/internal/systemd"
 	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
-	"codeberg.org/xchangeee/syslet/internal/testlog"
+	"codeberg.org/xchangeee/syslet/test/log"
+	"codeberg.org/xchangeee/syslet/test/oplog"
 )
 
 // quadletDir is where the harness installs unit files, matching the path the
@@ -50,8 +56,19 @@ type Env struct {
 	Fs      afero.Fs
 	Systemd *systemd.Client
 	Conn    *systemdtest.MockDBusConn
-	Podman  *FakePodman
+	Podman  *podmantest.FakePodman
 	Mgrs    filestore.FileManagers
+
+	// Log is the one ordered timeline every fake appends to. Apply resets it
+	// before running and checks it afterwards, which is what makes the phase
+	// boundaries in syslet.Apply assertable at all; see order.go.
+	Log *oplog.Log
+
+	// Logs captures what apply logged. Some outcomes — the quadlet generator's
+	// errors after a failed daemon-reload, a best-effort reclamation that did
+	// not happen — reach the operator only as log records, so a test needs to
+	// read them back.
+	Logs *testlog.Capture
 
 	t         *testing.T
 	raw       api.LoadResult
@@ -59,6 +76,13 @@ type Env struct {
 	journal   systemd.JournalReader
 	generator systemd.QuadletGeneratorRunner
 	analyze   systemd.AnalyzeRunner
+	logger    *slog.Logger
+
+	// configFs is the filesystem behind Mgrs.Config, which is not Fs whenever
+	// WithOSConfigStore is in play. Assertions that read the config store
+	// directly — listing configDir versions, say — must go through it rather
+	// than guessing which filesystem holds the bytes.
+	configFs afero.Fs
 }
 
 // Option customizes an Env at construction. Every axis the suite varies is an
@@ -133,30 +157,55 @@ func New(t *testing.T, opts ...Option) *Env {
 		cfg.fs = afero.NewMemMapFs()
 	}
 
+	// One log, shared by every fake: the systemd connection, the fake podman,
+	// and the filesystems behind all three stores. Recording into separate
+	// buckets would show that each effect happened but never that they happened
+	// in the order Apply's phases promise.
+	log := &oplog.Log{}
+
+	// The config store's directory is decided here rather than read back from
+	// the store, because the recorder has to classify paths before the store
+	// that owns them exists.
+	configDir := filestore.DefaultContainerConfigDir
+	configBaseFs := cfg.fs
+	if cfg.osConfigStore {
+		configDir = filepath.Join(t.TempDir(), "config")
+		configBaseFs = afero.NewOsFs()
+	}
+	rec := newFsRecorder(log, quadletDir, configDir, filestore.DefaultBuildContextDir)
+
+	unitFs := newRecordingFs(cfg.fs, rec)
 	conn := systemdtest.NewMockDBusConn()
-	sd := systemd.NewClientWithPaths(conn, cfg.fs, quadletDir)
+	conn.Log = log
+	sd := systemd.NewClientWithPaths(conn, unitFs, quadletDir)
 	t.Cleanup(sd.Close)
 
-	configStore := filestore.NewContainerConfigFileStore(cfg.fs)
-	if cfg.osConfigStore {
-		configStore = filestore.NewContainerConfigFileStoreAt(
-			afero.NewOsFs(), filepath.Join(t.TempDir(), "config"))
-	}
+	configFs := newRecordingFs(configBaseFs, rec)
+	configStore := filestore.NewContainerConfigFileStoreAt(configFs, configDir)
+
+	pc := podmantest.NewFakePodman()
+	pc.Log = log
+
+	logger, capture := testlog.NewCapture()
 
 	return &Env{
-		Fs:      cfg.fs,
+		Fs:      unitFs,
 		Systemd: sd,
 		Conn:    conn,
-		Podman:  NewFakePodman(),
+		Podman:  pc,
 		Mgrs: filestore.FileManagers{
 			Config: configStore,
-			Build:  filestore.NewBuildContextFileStore(cfg.fs),
+			Build:  filestore.NewBuildContextFileStore(newRecordingFs(cfg.fs, rec)),
 		},
+		Log:       log,
+		Logs:      capture,
 		t:         t,
 		decryptor: cfg.decryptor,
 		journal:   cfg.journal,
 		generator: cfg.generator,
 		analyze:   cfg.analyze,
+		logger:    logger,
+		configFs:  configFs,
 	}
 }
 
@@ -207,6 +256,13 @@ func (e *Env) PlanErr() (*syslet.ApplyPlan, error) {
 }
 
 // Apply builds and applies the plan, failing the test on any error.
+//
+// Every apply is also checked for phase order: the effects it produced must
+// follow the sequence syslet.Apply documents — stops, then file content, then
+// secrets, then unit files, then reclamation, then daemon-reload, then reloads
+// and starts. That check is automatic rather than opt-in because it protects
+// invariants no individual test would think to restate, and because a test
+// that forgets it silently loses the protection. See order.go.
 func (e *Env) Apply() {
 	e.t.Helper()
 	if err := e.ApplyErr(); err != nil {
@@ -222,5 +278,45 @@ func (e *Env) ApplyErr() error {
 	if err != nil {
 		return err
 	}
-	return syslet.Apply(context.Background(), testlog.New(), e.Systemd, e.journal, e.Podman, e.Mgrs, plan)
+	// Seeding writes through the same stores and the same filesystem that apply
+	// does, so the timeline is cleared here — after planning, immediately before
+	// the effects under test — rather than at construction.
+	e.Log.Reset()
+	applyErr := syslet.Apply(context.Background(), e.logger, e.Systemd, e.journal, e.Podman, e.Mgrs, plan)
+	e.assertPhaseOrder()
+	return applyErr
+}
+
+// ResetRecordings clears everything the fakes recorded while leaving the host
+// state — unit files, config files, active services, the podman secret store —
+// exactly as the last apply left it.
+//
+// This is the seam that makes a second apply assertable: the host carries over,
+// the record of how it got there does not.
+func (e *Env) ResetRecordings() {
+	e.t.Helper()
+	e.Log.Reset()
+	e.Logs.Reset()
+	e.Conn.Started = nil
+	e.Conn.Stopped = nil
+	e.Conn.ReloadedUnits = nil
+	e.Conn.Reloaded = false
+	e.Podman.ResetRecordings()
+}
+
+// AssertIdempotent applies, then applies again against the state the first
+// apply left behind, and fails unless the second run changes nothing at all.
+//
+// Reaching a fixed point in one pass is the defining property of a converger,
+// and it is the assertion that catches a whole class of bugs no single
+// after-the-fact check does: a unit file written with the wrong content, a
+// secret upserted without the syslet/hash label its own change detection reads,
+// a configDir whose files never made it to disk. Each of those looks correct in
+// isolation and betrays itself on the second run, as work that should not exist.
+func (e *Env) AssertIdempotent() {
+	e.t.Helper()
+	e.Apply()
+	e.ResetRecordings()
+	e.Apply()
+	e.AssertNoEffects()
 }

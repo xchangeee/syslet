@@ -17,12 +17,23 @@ import (
 	"context"
 
 	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"codeberg.org/xchangeee/syslet/test/oplog"
 )
+
+// systemdChannel labels this fake's entries on a shared oplog timeline.
+const systemdChannel = "systemd"
 
 // MockDBusConn implements systemd.DBusConn in memory. It records every
 // operation the client performs — reloads, starts, stops, in-place unit
 // reloads — so tests can assert on what the client asked systemd to do, and
 // serves unit properties out of UnitStates so tests can stage prior host state.
+//
+// The per-operation fields below answer "did this happen"; they cannot answer
+// "did this happen before that", because each lands in its own bucket. Tests
+// that need the relative order of systemd effects — against each other or
+// against podman and filesystem effects — set Log to a shared oplog.Log, which
+// every operation also appends to in arrival order. Log is optional: untagged
+// unit tests leave it nil and a nil Log discards what it is given.
 type MockDBusConn struct {
 	UnitStates      map[string]*systemd.UnitState
 	Reloaded        bool
@@ -36,6 +47,10 @@ type MockDBusConn struct {
 	StartJobResult  string
 	StopJobResult   string
 	ReloadJobResult string
+
+	// Log, when set, receives every operation in arrival order alongside the
+	// effects recorded by the other fakes sharing it.
+	Log *oplog.Log
 }
 
 // NewMockDBusConn creates a new mock DBus connection for testing.
@@ -53,6 +68,7 @@ func (m *MockDBusConn) Close() {}
 
 // ReloadContext records that a daemon-reload was requested.
 func (m *MockDBusConn) ReloadContext(_ context.Context) error {
+	m.Log.Record(systemdChannel, "daemon-reload", "")
 	m.Reloaded = true
 	return m.ReloadErr
 }
@@ -85,6 +101,7 @@ func (m *MockDBusConn) StartUnitContext(_ context.Context, name string, _ string
 	if m.StartErr != nil {
 		return 0, m.StartErr
 	}
+	m.Log.Record(systemdChannel, "start", name)
 	m.Started = append(m.Started, name)
 	if m.UnitStates[name] == nil {
 		m.UnitStates[name] = &systemd.UnitState{}
@@ -99,6 +116,7 @@ func (m *MockDBusConn) StopUnitContext(_ context.Context, name string, _ string,
 	if m.StopErr != nil {
 		return 0, m.StopErr
 	}
+	m.Log.Record(systemdChannel, "stop", name)
 	m.Stopped = append(m.Stopped, name)
 	if m.UnitStates[name] == nil {
 		m.UnitStates[name] = &systemd.UnitState{}
@@ -111,6 +129,7 @@ func (m *MockDBusConn) StopUnitContext(_ context.Context, name string, _ string,
 // ReloadUnitContext records an in-place reload of a single unit, as distinct
 // from the daemon-reload recorded by ReloadContext.
 func (m *MockDBusConn) ReloadUnitContext(_ context.Context, name string, _ string, ch chan<- string) (int, error) {
+	m.Log.Record(systemdChannel, "reload-unit", name)
 	m.ReloadedUnits = append(m.ReloadedUnits, name)
 	ch <- m.ReloadJobResult
 	return 0, nil

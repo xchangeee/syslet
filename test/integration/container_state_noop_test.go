@@ -64,7 +64,7 @@ func TestContainerConfigUnchanged_NoAction(t *testing.T) {
 	env.Apply()
 
 	env.AssertNoStartStop()
-	env.AssertFiles("webapp", systest.WantFile{MountPath: mountPath, Mode: 0755})
+	env.AssertFiles("webapp", systest.WantFile{MountPath: mountPath, Mode: 0755, Content: script})
 }
 
 func TestNewOneshotContainer_WritesUnitOnly(t *testing.T) {
@@ -104,4 +104,65 @@ func TestStaleOneshotContainer_RemovesUnitWithoutStop(t *testing.T) {
 	env.AssertUnitExists("webapp.container")
 	env.AssertNoStartStop()
 	env.AssertReloaded()
+}
+
+// --- ConfigDir scenarios that cost nothing ---
+//
+// These run with WithOSConfigStore: versioned directories use symlinks, which
+// afero.MemMapFs does not support.
+
+func TestContainerConfigDirUnchanged_NoAction(t *testing.T) {
+	mountPath := model.ContainerMountPath("/etc/app/")
+	files := []model.ContainerConfigFile{
+		model.NewContainerConfigFile("app.conf", "key=value", 0),
+	}
+	spec := systest.NewContainer("webapp", "nginx:latest",
+		systest.Dirs(model.NewContainerDirMount(string(mountPath), files...)))
+
+	env := systest.New(t, systest.WithOSConfigStore())
+	env.SeedActive(spec)
+	env.SeedConfigDir("webapp", mountPath, 1, files...)
+	env.Specs(spec)
+
+	env.Apply()
+
+	env.AssertNoStartStop()
+	env.AssertContainerNotReloaded()
+	// An unchanged configDir must not be rewritten into a new version: doing so
+	// would churn the ..data symlink on every deploy and, since a new version is
+	// what triggers the reload, reload the container for nothing.
+	env.AssertConfigDirVersion("webapp", mountPath, 1)
+	env.AssertConfigDirFiles("webapp", mountPath, files...)
+}
+
+// TestStoppedContainerConfigDirChanged_NoAction covers a configDir change on a
+// container that is not running.
+//
+// "No action" means no service transition. The new content is still written to
+// disk and the version advanced, so the container starts against current config
+// whenever it is next started; only the reload that would have pushed it into a
+// live container is skipped.
+func TestStoppedContainerConfigDirChanged_NoAction(t *testing.T) {
+	mountPath := model.ContainerMountPath("/etc/app/")
+	oldFiles := []model.ContainerConfigFile{
+		model.NewContainerConfigFile("app.conf", "old", 0),
+	}
+	newFiles := []model.ContainerConfigFile{
+		model.NewContainerConfigFile("app.conf", "new", 0),
+	}
+	spec := systest.NewContainer("webapp", "nginx:latest", systest.Stopped,
+		systest.Dirs(model.NewContainerDirMount(string(mountPath), newFiles...)))
+
+	env := systest.New(t, systest.WithOSConfigStore())
+	env.SeedUnit(spec)
+	env.SetUnitState("webapp.service", "inactive")
+	env.SeedConfigDir("webapp", mountPath, 1, oldFiles...)
+	env.Specs(spec)
+
+	env.Apply()
+
+	env.AssertNoStartStop()
+	env.AssertContainerNotReloaded()
+	env.AssertConfigDirFiles("webapp", mountPath, newFiles...)
+	env.AssertConfigDirVersion("webapp", mountPath, 2)
 }

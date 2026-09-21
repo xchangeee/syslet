@@ -71,6 +71,7 @@ func TestContainerConfigChanges(t *testing.T) {
 				model.NewContainerFileMount("/usr/local/bin/run.sh", "#!/bin/sh\necho hello", os.FileMode(0755)),
 			},
 			preWrite: []systest.WantFile{{MountPath: "/usr/local/bin/run.sh", Mode: 0644, Content: "#!/bin/sh\necho hello"}},
+			want:     []systest.WantFile{{MountPath: "/usr/local/bin/run.sh", Mode: 0755, Content: "#!/bin/sh\necho hello"}},
 		},
 		{
 			// Removing one config restarts even though the remaining config is unchanged.
@@ -82,6 +83,15 @@ func TestContainerConfigChanges(t *testing.T) {
 			},
 			newMounts: []model.ContainerFileMount{
 				model.NewContainerFileMount("/etc/app/a.conf", "unchanged content", 0),
+			},
+			preWrite: []systest.WantFile{
+				{MountPath: "/etc/app/a.conf", Mode: 0644, Content: "unchanged content"},
+				{MountPath: "/etc/app/b.conf", Mode: 0644, Content: "old content"},
+			},
+			// b.conf must be gone: AssertFiles is an exact set, so naming only
+			// a.conf asserts the removal reclaimed the file too.
+			want: []systest.WantFile{
+				{MountPath: "/etc/app/a.conf", Mode: 0644, Content: "unchanged content"},
 			},
 		},
 		{
@@ -107,6 +117,11 @@ func TestContainerConfigChanges(t *testing.T) {
 			for _, pw := range tt.preWrite {
 				env.SeedConfigFile("webapp", pw.MountPath, pw.Content, pw.Mode)
 			}
+			// Guard the premise before acting on it: a case that seeds the state
+			// it means to change, but seeds it wrong, asserts nothing afterwards
+			// — ModeChanged in particular would be comparing 0755 against 0755.
+			env.AssertFiles("webapp", tt.preWrite...)
+
 			env.Specs(systest.NewContainer("webapp", tt.image, systest.Files(tt.newMounts...)))
 
 			env.Apply()
@@ -186,4 +201,81 @@ func TestNetworkChanged_DoesNotRestartUnreferencedContainers(t *testing.T) {
 	env.AssertNotStopped("webapp.service")
 	env.AssertNoneStarted()
 	env.AssertReloaded()
+}
+
+// --- ConfigDir scenarios that cost a restart ---
+//
+// A configDir's *contents* can be re-synced under a live container (see
+// container_state_reload_test.go). Adding or removing the directory itself
+// cannot: it changes the container's bind mounts, which only exist at creation.
+// These tests run with WithOSConfigStore, since versioned directories use
+// symlinks that afero.MemMapFs does not support.
+
+func TestNewContainerConfigDir_RestartsService(t *testing.T) {
+	mountPath := model.ContainerMountPath("/etc/app/")
+
+	env := systest.New(t, systest.WithOSConfigStore())
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
+	env.Specs(systest.NewContainer("webapp", "nginx:latest",
+		systest.Dirs(model.NewContainerDirMount(string(mountPath),
+			model.NewContainerConfigFile("app.conf", "content", 0)))))
+
+	env.Apply()
+
+	env.AssertRestarted("webapp.service")
+	env.AssertContainerNotReloaded()
+	env.AssertConfigDirFiles("webapp", mountPath,
+		model.NewContainerConfigFile("app.conf", "content", 0))
+}
+
+func TestContainerConfigDirRemoved_RestartsService(t *testing.T) {
+	mountPath := model.ContainerMountPath("/etc/app/")
+	files := []model.ContainerConfigFile{
+		model.NewContainerConfigFile("app.conf", "content", 0),
+	}
+
+	env := systest.New(t, systest.WithOSConfigStore())
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest",
+		systest.Dirs(model.NewContainerDirMount(string(mountPath), files...))))
+	env.SeedConfigDir("webapp", mountPath, 1, files...)
+	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
+
+	env.Apply()
+
+	env.AssertRestarted("webapp.service")
+	env.AssertContainerNotReloaded()
+	env.AssertConfigDirEmpty("webapp")
+	// The directory itself must go, not just its files: AssertConfigDirEmpty
+	// lists files and a configDir is a directory, so it alone cannot see a
+	// group left behind.
+	env.AssertConfigDirAbsent("webapp", mountPath)
+}
+
+// TestContainerConfigDirAndUnitChanged_RestartsWithoutReload pins that a
+// restart subsumes the reload rather than being issued alongside it. Reloading
+// a container that is about to be stopped and started is wasted work at best,
+// and at worst pushes config into an instance that is about to disappear.
+func TestContainerConfigDirAndUnitChanged_RestartsWithoutReload(t *testing.T) {
+	mountPath := model.ContainerMountPath("/etc/app/")
+	oldFiles := []model.ContainerConfigFile{
+		model.NewContainerConfigFile("app.conf", "old", 0),
+	}
+	newFiles := []model.ContainerConfigFile{
+		model.NewContainerConfigFile("app.conf", "new", 0),
+	}
+
+	env := systest.New(t, systest.WithOSConfigStore())
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest",
+		systest.Dirs(model.NewContainerDirMount(string(mountPath), oldFiles...))))
+	env.SeedConfigDir("webapp", mountPath, 1, oldFiles...)
+	env.Specs(systest.NewContainer("webapp", "nginx:alpine",
+		systest.Dirs(model.NewContainerDirMount(string(mountPath), newFiles...))))
+
+	env.Apply()
+
+	env.AssertRestarted("webapp.service")
+	env.AssertContainerNotReloaded()
+	// The restart subsumes the reload, but the new content must still be on
+	// disk — the container is about to start against it.
+	env.AssertConfigDirFiles("webapp", mountPath, newFiles...)
 }
