@@ -1,6 +1,7 @@
 [project]
 site_name = "syslet"
 site_description = "A GitOps-friendly deployment tool for Podman containers using systemd and quadlets."
+site_url = "https://xchangeee.github.io/syslet/"
 repo_url = "https://github.com/xchangeee/syslet"
 repo_name = "xchangeee/syslet"
 
