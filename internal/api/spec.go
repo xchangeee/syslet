@@ -1,6 +1,8 @@
 // Package api loads syslet spec files (a directory of JSON files or a JSON
 // stream of spec objects) and deserializes them into domain-level LoadResult
-// values consumed by the loader package.
+// values consumed by the loader package. The JSON structs themselves live in
+// one sub-package per apiVersion (v1, ...); this package only reads the input
+// and routes each spec object to the package matching its apiVersion.
 package api
 
 import (
@@ -12,93 +14,16 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/afero"
+
+	v1 "codeberg.org/xchangeee/syslet/internal/api/v1"
 )
 
-// RawContainerSpec is the JSON deserialization target for a container spec file.
-type RawContainerSpec struct {
-	Type           string                    `json:"type"`
-	Name           string                    `json:"name"`
-	Unit           map[string]map[string]any `json:"unit"`
-	DesiredState   string                    `json:"desiredState,omitempty"`
-	RemovalAllowed bool                      `json:"removalAllowed,omitempty"`
-	ConfigFiles    []RawConfigFileEntry      `json:"configFiles,omitempty"`
-	ConfigDirs     []RawConfigDirEntry       `json:"configDirs,omitempty"`
-}
-
-// RawVolumeSpec is the JSON deserialization target for a volume spec file.
-type RawVolumeSpec struct {
-	Type           string                    `json:"type"`
-	Name           string                    `json:"name"`
-	Unit           map[string]map[string]any `json:"unit"`
-	RemovalAllowed bool                      `json:"removalAllowed,omitempty"`
-	ReclaimPolicy  string                    `json:"reclaimPolicy,omitempty"`
-}
-
-// RawNetworkSpec is the JSON deserialization target for a network spec file.
-type RawNetworkSpec struct {
-	Type           string                    `json:"type"`
-	Name           string                    `json:"name"`
-	Unit           map[string]map[string]any `json:"unit"`
-	RemovalAllowed bool                      `json:"removalAllowed,omitempty"`
-	ReclaimPolicy  string                    `json:"reclaimPolicy,omitempty"`
-}
-
-// RawBuildSpec is the JSON deserialization target for a build spec file.
-type RawBuildSpec struct {
-	Type          string                    `json:"type"`
-	Name          string                    `json:"name"`
-	Unit          map[string]map[string]any `json:"unit"`
-	ReclaimPolicy string                    `json:"reclaimPolicy,omitempty"`
-	Containerfile string                    `json:"containerfile"`
-	ContextFiles  []RawBuildFileEntry       `json:"contextFiles,omitempty"`
-}
-
-// RawConfigFileEntry is the JSON deserialization target for a container config entry.
-type RawConfigFileEntry struct {
-	MountPath string `json:"mountPath"`
-	Mode      string `json:"mode,omitempty"`
-	Content   string `json:"content"`
-}
-
-// RawConfigDirEntry is the JSON deserialization target for a container configDir entry.
-// A configDir is a directory bind-mounted into the container; its files are updated
-// atomically via versioned symlinks, enabling in-place reload without restarting.
-type RawConfigDirEntry struct {
-	MountPath string             `json:"mountPath"`
-	Files     []RawConfigDirFile `json:"files,omitempty"`
-}
-
-// RawConfigDirFile is a single file within a RawConfigDirEntry.
-type RawConfigDirFile struct {
-	Name    string `json:"name"`
-	Mode    string `json:"mode,omitempty"`
-	Content string `json:"content"`
-}
-
-// RawBuildFileEntry is the JSON deserialization target for a build context file entry.
-type RawBuildFileEntry struct {
-	Filename string `json:"filename"`
-	Mode     string `json:"mode,omitempty"`
-	Content  string `json:"content"`
-}
-
-// RawSecretSpec is the JSON deserialization target for a secret spec file.
-// Ciphertext holds the raw SOPS-encrypted YAML file content as a plain string
-// (not base64) so spec authors can embed the SOPS YAML text directly. Conversion
-// to model.Ciphertext ([]byte) happens in the loader.
-type RawSecretSpec struct {
-	Type       string `json:"type"`
-	Name       string `json:"name"`
-	Ciphertext string `json:"ciphertext"`
-}
-
-// LoadResult groups the deserialized raw specs by type.
+// LoadResult groups the decoded specs by apiVersion. Each supported version
+// has its own field holding that version package's structs; the loader converts
+// every field into domain objects. Adding a version means adding a field here,
+// a case in unmarshalInto, and a converter in the loader.
 type LoadResult struct {
-	Containers []RawContainerSpec
-	Volumes    []RawVolumeSpec
-	Networks   []RawNetworkSpec
-	Builds     []RawBuildSpec
-	Secrets    []RawSecretSpec
+	V1 v1.Specs
 }
 
 // LoadSpecsFS reads specs from a path, dispatching on whether it is a directory
@@ -240,51 +165,30 @@ func bytesTrimLeadingSpace(b []byte) []byte {
 }
 
 func (r LoadResult) empty() bool {
-	return len(r.Containers) == 0 && len(r.Volumes) == 0 && len(r.Networks) == 0 && len(r.Builds) == 0 && len(r.Secrets) == 0
+	return r.V1.Empty()
 }
 
-// unmarshalInto peeks at the type field and appends the deserialized spec to the correct slice.
+// unmarshalInto peeks at the apiVersion and type fields and hands the spec to
+// the matching version package. This switch is the only place that knows which
+// apiVersions exist. apiVersion is required, so the version a spec was written
+// for is always explicit and never guessed. Unknown versions are rejected rather
+// than decoded on a best-effort basis, so a spec written for a newer syslet
+// fails loudly.
 func unmarshalInto(data []byte, filename string, result *LoadResult) error {
 	var peek struct {
-		Type string `json:"type"`
+		APIVersion string `json:"apiVersion"`
+		Type       string `json:"type"`
 	}
 	if err := json.Unmarshal(data, &peek); err != nil {
 		return err
 	}
 
-	switch peek.Type {
-	case "container", "Container":
-		var s RawContainerSpec
-		if err := json.Unmarshal(data, &s); err != nil {
-			return err
-		}
-		result.Containers = append(result.Containers, s)
-	case "volume", "Volume":
-		var s RawVolumeSpec
-		if err := json.Unmarshal(data, &s); err != nil {
-			return err
-		}
-		result.Volumes = append(result.Volumes, s)
-	case "network", "Network":
-		var s RawNetworkSpec
-		if err := json.Unmarshal(data, &s); err != nil {
-			return err
-		}
-		result.Networks = append(result.Networks, s)
-	case "build", "Build":
-		var s RawBuildSpec
-		if err := json.Unmarshal(data, &s); err != nil {
-			return err
-		}
-		result.Builds = append(result.Builds, s)
-	case "secret", "Secret":
-		var s RawSecretSpec
-		if err := json.Unmarshal(data, &s); err != nil {
-			return err
-		}
-		result.Secrets = append(result.Secrets, s)
+	switch peek.APIVersion {
+	case "":
+		return fmt.Errorf("apiVersion is required (supported: %s)", v1.Version)
+	case v1.Version:
+		return v1.Decode(peek.Type, data, filename, &result.V1)
 	default:
-		return fmt.Errorf("unknown spec type %q in %s", peek.Type, filename)
+		return fmt.Errorf("apiVersion %q is not supported (supported: %s); upgrade syslet", peek.APIVersion, v1.Version)
 	}
-	return nil
 }

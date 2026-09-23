@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	containerJSON = `{"type":"container","name":"web","unit":{"Container":{"Image":"nginx:latest"}}}`
-	volumeJSON    = `{"type":"volume","name":"data","unit":{"Volume":{}}}`
-	networkJSON   = `{"type":"network","name":"backend","unit":{"Network":{}}}`
+	containerJSON = `{"apiVersion":"v1","type":"container","name":"web","unit":{"Container":{"Image":"nginx:latest"}}}`
+	volumeJSON    = `{"apiVersion":"v1","type":"volume","name":"data","unit":{"Volume":{}}}`
+	networkJSON   = `{"apiVersion":"v1","type":"network","name":"backend","unit":{"Network":{}}}`
 )
 
 func writeSpecFile(t *testing.T, fs afero.Fs, path, content string) {
@@ -38,14 +38,14 @@ func TestLoadSpecsFromDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSpecsDir failed: %v", err)
 	}
-	if len(result.Containers) != 1 {
-		t.Errorf("expected 1 container, got %d", len(result.Containers))
+	if len(result.V1.Containers) != 1 {
+		t.Errorf("expected 1 container, got %d", len(result.V1.Containers))
 	}
-	if len(result.Volumes) != 1 {
-		t.Errorf("expected 1 volume, got %d", len(result.Volumes))
+	if len(result.V1.Volumes) != 1 {
+		t.Errorf("expected 1 volume, got %d", len(result.V1.Volumes))
 	}
-	if len(result.Networks) != 1 {
-		t.Errorf("expected 1 network, got %d", len(result.Networks))
+	if len(result.V1.Networks) != 1 {
+		t.Errorf("expected 1 network, got %d", len(result.V1.Networks))
 	}
 }
 
@@ -69,14 +69,14 @@ func TestLoadSpecsFromDirectory_NonJSONFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSpecsDir failed: %v", err)
 	}
-	if len(result.Containers) != 1 {
-		t.Errorf("expected 1 container, got %d", len(result.Containers))
+	if len(result.V1.Containers) != 1 {
+		t.Errorf("expected 1 container, got %d", len(result.V1.Containers))
 	}
-	if len(result.Volumes) != 0 {
-		t.Errorf("expected 0 volumes (subdir ignored), got %d", len(result.Volumes))
+	if len(result.V1.Volumes) != 0 {
+		t.Errorf("expected 0 volumes (subdir ignored), got %d", len(result.V1.Volumes))
 	}
-	if result.Containers[0].Name != "web" {
-		t.Errorf("expected name 'web', got %s", result.Containers[0].Name)
+	if result.V1.Containers[0].Name != "web" {
+		t.Errorf("expected name 'web', got %s", result.V1.Containers[0].Name)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestLoadSpecsFromDirectory_ErrorCases(t *testing.T) {
 				if err := fs.Mkdir("/invalid", 0755); err != nil {
 					t.Fatalf("mkdir: %v", err)
 				}
-				writeSpecFile(t, fs, "/invalid/bad.json", `{"type":"container","name":"web"`)
+				writeSpecFile(t, fs, "/invalid/bad.json", `{"apiVersion":"v1","type":"container","name":"web"`)
 				return "/invalid"
 			},
 			wantErr: true,
@@ -116,7 +116,7 @@ func TestLoadSpecsFromDirectory_ErrorCases(t *testing.T) {
 				if err := fs.Mkdir("/unknown", 0755); err != nil {
 					t.Fatalf("mkdir: %v", err)
 				}
-				writeSpecFile(t, fs, "/unknown/x.json", `{"type":"unknown","name":"test"}`)
+				writeSpecFile(t, fs, "/unknown/x.json", `{"apiVersion":"v1","type":"unknown","name":"test"}`)
 				return "/unknown"
 			},
 			wantErr: true,
@@ -161,14 +161,14 @@ func TestLoadSpecsReader_InputShapes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadSpecsReader failed: %v", err)
 			}
-			if len(result.Containers) != 1 {
-				t.Errorf("expected 1 container, got %d", len(result.Containers))
+			if len(result.V1.Containers) != 1 {
+				t.Errorf("expected 1 container, got %d", len(result.V1.Containers))
 			}
-			if len(result.Volumes) != 1 {
-				t.Errorf("expected 1 volume, got %d", len(result.Volumes))
+			if len(result.V1.Volumes) != 1 {
+				t.Errorf("expected 1 volume, got %d", len(result.V1.Volumes))
 			}
-			if len(result.Networks) != 1 {
-				t.Errorf("expected 1 network, got %d", len(result.Networks))
+			if len(result.V1.Networks) != 1 {
+				t.Errorf("expected 1 network, got %d", len(result.V1.Networks))
 			}
 		})
 	}
@@ -178,9 +178,9 @@ func TestLoadSpecsReader_ErrorCases(t *testing.T) {
 	tests := map[string]string{
 		"empty":          "",
 		"whitespace":     "   \n\t ",
-		"invalidJSON":    `{"type":"container"`,
-		"unknownType":    `{"type":"unknown","name":"x"}`,
-		"unknownInArray": "[" + containerJSON + `,{"type":"unknown","name":"x"}]`,
+		"invalidJSON":    `{"apiVersion":"v1","type":"container"`,
+		"unknownType":    `{"apiVersion":"v1","type":"unknown","name":"x"}`,
+		"unknownInArray": "[" + containerJSON + `,{"apiVersion":"v1","type":"unknown","name":"x"}]`,
 	}
 
 	for name, input := range tests {
@@ -204,8 +204,8 @@ func TestLoadSpecsStream_WithPersistPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSpecsStream failed: %v", err)
 	}
-	if len(result.Containers) != 1 || len(result.Volumes) != 1 {
-		t.Errorf("decoded %d containers and %d volumes, want 1 and 1", len(result.Containers), len(result.Volumes))
+	if len(result.V1.Containers) != 1 || len(result.V1.Volumes) != 1 {
+		t.Errorf("decoded %d containers and %d volumes, want 1 and 1", len(result.V1.Containers), len(result.V1.Volumes))
 	}
 
 	persisted, err := afero.ReadFile(fs, "/etc/syslet/config.json")
@@ -226,8 +226,8 @@ func TestLoadSpecsStream_WithoutPersistPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSpecsStream failed: %v", err)
 	}
-	if len(result.Containers) != 1 {
-		t.Errorf("expected 1 container, got %d", len(result.Containers))
+	if len(result.V1.Containers) != 1 {
+		t.Errorf("expected 1 container, got %d", len(result.V1.Containers))
 	}
 
 	files, _ := afero.ReadDir(fs, "/")
@@ -250,8 +250,8 @@ func TestLoadSpecs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadSpecsFS (directory) failed: %v", err)
 		}
-		if len(result.Containers) != 1 {
-			t.Errorf("expected 1 container from directory, got %d", len(result.Containers))
+		if len(result.V1.Containers) != 1 {
+			t.Errorf("expected 1 container from directory, got %d", len(result.V1.Containers))
 		}
 	})
 
@@ -263,8 +263,8 @@ func TestLoadSpecs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadSpecsFS (file) failed: %v", err)
 		}
-		if len(result.Containers) != 1 || len(result.Volumes) != 1 {
-			t.Errorf("expected 1 container and 1 volume from file, got %d and %d", len(result.Containers), len(result.Volumes))
+		if len(result.V1.Containers) != 1 || len(result.V1.Volumes) != 1 {
+			t.Errorf("expected 1 container and 1 volume from file, got %d and %d", len(result.V1.Containers), len(result.V1.Volumes))
 		}
 	})
 
@@ -297,34 +297,34 @@ func TestUnmarshalInto_AllTypes(t *testing.T) {
 	}{
 		{
 			name: "container",
-			json: `{"type":"container","name":"web","unit":{"Container":{"Image":"nginx"}}}`,
+			json: `{"apiVersion":"v1","type":"container","name":"web","unit":{"Container":{"Image":"nginx"}}}`,
 			checkFunc: func(t *testing.T, result LoadResult) {
 				t.Helper()
-				if len(result.Containers) != 1 {
-					t.Fatalf("expected 1 container, got %d", len(result.Containers))
+				if len(result.V1.Containers) != 1 {
+					t.Fatalf("expected 1 container, got %d", len(result.V1.Containers))
 				}
-				if result.Containers[0].Name != "web" {
-					t.Errorf("expected name 'web', got %q", result.Containers[0].Name)
+				if result.V1.Containers[0].Name != "web" {
+					t.Errorf("expected name 'web', got %q", result.V1.Containers[0].Name)
 				}
 			},
 		},
 		{
 			name: "volume",
-			json: `{"type":"volume","name":"data","unit":{"Volume":{}}}`,
+			json: `{"apiVersion":"v1","type":"volume","name":"data","unit":{"Volume":{}}}`,
 			checkFunc: func(t *testing.T, result LoadResult) {
 				t.Helper()
-				if len(result.Volumes) != 1 || result.Volumes[0].Name != "data" {
-					t.Errorf("expected volume 'data', got %+v", result.Volumes)
+				if len(result.V1.Volumes) != 1 || result.V1.Volumes[0].Name != "data" {
+					t.Errorf("expected volume 'data', got %+v", result.V1.Volumes)
 				}
 			},
 		},
 		{
 			name: "network",
-			json: `{"type":"network","name":"backend","unit":{"Network":{}}}`,
+			json: `{"apiVersion":"v1","type":"network","name":"backend","unit":{"Network":{}}}`,
 			checkFunc: func(t *testing.T, result LoadResult) {
 				t.Helper()
-				if len(result.Networks) != 1 || result.Networks[0].Name != "backend" {
-					t.Errorf("expected network 'backend', got %+v", result.Networks)
+				if len(result.V1.Networks) != 1 || result.V1.Networks[0].Name != "backend" {
+					t.Errorf("expected network 'backend', got %+v", result.V1.Networks)
 				}
 			},
 		},
@@ -346,9 +346,9 @@ func TestUnmarshalInto_Errors(t *testing.T) {
 		name string
 		json string
 	}{
-		{"invalid_json", `{"type":"container"`},
-		{"unknown_type", `{"type":"unknown","name":"test"}`},
-		{"missing_type", `{"name":"test"}`},
+		{"invalid_json", `{"apiVersion":"v1","type":"container"`},
+		{"unknown_type", `{"apiVersion":"v1","type":"unknown","name":"test"}`},
+		{"missing_type", `{"apiVersion":"v1","name":"test"}`},
 	}
 
 	for _, tt := range tests {
@@ -356,6 +356,85 @@ func TestUnmarshalInto_Errors(t *testing.T) {
 			var result LoadResult
 			if err := unmarshalInto([]byte(tt.json), tt.name+".json", &result); err == nil {
 				t.Error("expected error for invalid spec")
+			}
+		})
+	}
+}
+
+// --- apiVersion tests ---
+
+// TestAPIVersion_V1_Accepted verifies that a spec with apiVersion "v1" loads as v1.
+func TestAPIVersion_V1_Accepted(t *testing.T) {
+	result, err := LoadSpecsReader(strings.NewReader(containerJSON))
+	if err != nil {
+		t.Fatalf("LoadSpecsReader failed: %v", err)
+	}
+	if len(result.V1.Containers) != 1 {
+		t.Errorf("expected 1 v1 container, got %d", len(result.V1.Containers))
+	}
+}
+
+// TestAPIVersion_Missing_ReturnsError verifies that apiVersion is required: a
+// spec without it is rejected in every input shape instead of being guessed as
+// v1, so the version a spec was written for is always explicit.
+func TestAPIVersion_Missing_ReturnsError(t *testing.T) {
+	missingJSON := `{"type":"container","name":"web","unit":{"Container":{"Image":"nginx"}}}`
+
+	t.Run("directory", func(t *testing.T) {
+		fs := afero.NewMemMapFs()
+		if err := fs.Mkdir("/specs", 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		writeSpecFile(t, fs, "/specs/web.json", missingJSON)
+		_, err := LoadSpecsDir(fs, "/specs")
+		if err == nil || !strings.Contains(err.Error(), "apiVersion is required") {
+			t.Errorf("expected missing apiVersion error, got %v", err)
+		}
+	})
+
+	streams := map[string]string{
+		"single": missingJSON,
+		"ndjson": containerJSON + "\n" + missingJSON + "\n",
+		"array":  "[" + containerJSON + "," + missingJSON + "]",
+	}
+	for name, input := range streams {
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadSpecsReader(strings.NewReader(input))
+			if err == nil || !strings.Contains(err.Error(), "apiVersion is required") {
+				t.Errorf("expected missing apiVersion error, got %v", err)
+			}
+		})
+	}
+}
+
+// TestAPIVersion_Unsupported verifies that an unknown apiVersion is rejected in
+// every input shape, so a spec written for a newer syslet is never half-understood.
+func TestAPIVersion_Unsupported(t *testing.T) {
+	futureJSON := `{"apiVersion":"v2","type":"container","name":"web","unit":{}}`
+	garbageJSON := `{"apiVersion":"foo","type":"container","name":"web","unit":{}}`
+
+	t.Run("directory", func(t *testing.T) {
+		fs := afero.NewMemMapFs()
+		if err := fs.Mkdir("/specs", 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		writeSpecFile(t, fs, "/specs/web.json", futureJSON)
+		_, err := LoadSpecsDir(fs, "/specs")
+		if err == nil || !strings.Contains(err.Error(), `apiVersion "v2" is not supported`) {
+			t.Errorf("expected unsupported apiVersion error, got %v", err)
+		}
+	})
+
+	streams := map[string]string{
+		"ndjson":  containerJSON + "\n" + futureJSON + "\n",
+		"array":   "[" + containerJSON + "," + futureJSON + "]",
+		"garbage": garbageJSON,
+	}
+	for name, input := range streams {
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadSpecsReader(strings.NewReader(input))
+			if err == nil || !strings.Contains(err.Error(), "is not supported") {
+				t.Errorf("expected unsupported apiVersion error, got %v", err)
 			}
 		})
 	}

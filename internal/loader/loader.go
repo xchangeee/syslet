@@ -1,159 +1,33 @@
-// Package loader reads spec files from disk or zip archives and converts them
-// into domain objects. It bridges the api (raw JSON) and model (domain) packages.
+// Package loader converts the specs decoded by the api package into domain
+// objects. It bridges the api (raw JSON, one sub-package per apiVersion) and
+// model (domain) packages: each apiVersion has its own converter (v1.go, ...)
+// that maps that version's structs straight into model, and Parse/ParseSecrets
+// merge the results of all versions. Helpers in this file are version-agnostic
+// and may be shared by the converters.
 package loader
 
 import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"codeberg.org/xchangeee/syslet/internal/api"
 	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/sops"
-	"codeberg.org/xchangeee/syslet/internal/util"
 )
 
-// ParseSecrets converts raw secret specs into domain PodmanSecret values.
-// It reads key names from the SOPS YAML metadata without decrypting, and
-// computes the content hash used for change detection during the plan phase.
-func ParseSecrets(raw api.LoadResult) ([]model.PodmanSecret, error) {
-	secrets := make([]model.PodmanSecret, 0, len(raw.Secrets))
-	for _, r := range raw.Secrets {
-		ct := model.Ciphertext(r.Ciphertext)
-		keys, err := sops.ExtractKeys(ct)
-		if err != nil {
-			return nil, fmt.Errorf("secret %q: extracting keys: %w", r.Name, err)
-		}
-		secrets = append(secrets, model.PodmanSecret{
-			Name:        r.Name,
-			Ciphertext:  ct,
-			Keys:        keys,
-			ContentHash: util.SHA256Hex([]byte(r.Ciphertext)),
-		})
-	}
-	return secrets, nil
-}
-
-// convert transforms a LoadResult of raw specs into a flat slice of domain Spec values.
+// Parse converts all non-secret specs of every apiVersion into domain units.
 func Parse(raw api.LoadResult) ([]model.Unit, error) {
-	var specs []model.Unit
-	for _, r := range raw.Containers {
-		s, err := convertContainer(r)
-		if err != nil {
-			return nil, fmt.Errorf("container %q: %w", r.Name, err)
-		}
-		specs = append(specs, s)
-	}
-	for _, r := range raw.Volumes {
-		s, err := convertVolume(r)
-		if err != nil {
-			return nil, fmt.Errorf("volume %q: %w", r.Name, err)
-		}
-		specs = append(specs, s)
-	}
-	for _, r := range raw.Networks {
-		s, err := convertNetwork(r)
-		if err != nil {
-			return nil, fmt.Errorf("network %q: %w", r.Name, err)
-		}
-		specs = append(specs, s)
-	}
-	for _, r := range raw.Builds {
-		s, err := convertBuild(r)
-		if err != nil {
-			return nil, fmt.Errorf("build %q: %w", r.Name, err)
-		}
-		specs = append(specs, s)
-	}
-	return specs, nil
+	return parseV1(raw.V1)
 }
 
-func convertContainer(r api.RawContainerSpec) (*model.ContainerUnit, error) {
-	opts, err := convertUnitOptions(r.Unit)
-	if err != nil {
-		return nil, err
-	}
-	desiredState, err := parseDesiredState(r.DesiredState)
-	if err != nil {
-		return nil, err
-	}
-	configFiles, err := convertConfigFiles(r.ConfigFiles)
-	if err != nil {
-		return nil, err
-	}
-	configDirs, err := convertConfigDirs(r.ConfigDirs)
-	if err != nil {
-		return nil, err
-	}
-	return model.NewContainerUnitWithDirs(
-		model.ContainerUnitRef(r.Name),
-		opts,
-		desiredState,
-		configFiles,
-		configDirs,
-		r.RemovalAllowed,
-	), nil
+// ParseSecrets converts the secret specs of every apiVersion into domain
+// PodmanSecret values. It reads key names from the SOPS YAML metadata without
+// decrypting, and computes the content hash used for change detection during
+// the plan phase.
+func ParseSecrets(raw api.LoadResult) ([]model.PodmanSecret, error) {
+	return parseSecretsV1(raw.V1.Secrets)
 }
 
-func convertVolume(r api.RawVolumeSpec) (*model.VolumeUnit, error) {
-	opts, err := convertUnitOptions(r.Unit)
-	if err != nil {
-		return nil, err
-	}
-	reclaimPolicy, err := parseReclaimPolicy(r.ReclaimPolicy)
-	if err != nil {
-		return nil, err
-	}
-	return model.NewVolumeUnit(
-		model.VolumeUnitRef(r.Name),
-		opts,
-		r.RemovalAllowed,
-		reclaimPolicy,
-	), nil
-}
-
-func convertNetwork(r api.RawNetworkSpec) (*model.NetworkUnit, error) {
-	opts, err := convertUnitOptions(r.Unit)
-	if err != nil {
-		return nil, err
-	}
-	reclaimPolicy, err := parseReclaimPolicy(r.ReclaimPolicy)
-	if err != nil {
-		return nil, err
-	}
-	return model.NewNetworkUnit(
-		model.NetworkUnitRef(r.Name),
-		opts,
-		r.RemovalAllowed,
-		reclaimPolicy,
-	), nil
-}
-
-func convertBuild(r api.RawBuildSpec) (*model.BuildUnit, error) {
-	opts, err := convertUnitOptions(r.Unit)
-	if err != nil {
-		return nil, err
-	}
-	reclaimPolicy, err := parseReclaimPolicy(r.ReclaimPolicy)
-	if err != nil {
-		return nil, err
-	}
-	contextFiles, err := convertBuildFiles(r.ContextFiles)
-	if err != nil {
-		return nil, err
-	}
-	return model.NewBuildUnit(
-		model.BuildUnitRef(r.Name),
-		opts,
-		r.Containerfile,
-		contextFiles,
-		reclaimPolicy,
-	), nil
-}
-
-// convertUnitOptions converts the raw map[string]map[string]any from JSON
-// into model.UnitOptions, validating that all values are strings or string arrays.
 func convertUnitOptions(raw map[string]map[string]any) (model.UnitOptions, error) {
 	if raw == nil {
 		return nil, nil
@@ -191,69 +65,4 @@ func perm(mode os.FileMode) os.FileMode {
 		return 0644
 	}
 	return mode
-}
-
-func convertConfigFiles(raw []api.RawConfigFileEntry) ([]model.ContainerFileMount, error) {
-	mounts := make([]model.ContainerFileMount, len(raw))
-	for i, c := range raw {
-		mode, err := parseMode(c.Mode)
-		if err != nil {
-			return nil, fmt.Errorf("config[%d].mode: %w", i, err)
-		}
-		mounts[i] = model.NewContainerFileMount(c.MountPath, c.Content, perm(mode))
-	}
-	return mounts, nil
-}
-
-func convertBuildFiles(raw []api.RawBuildFileEntry) ([]model.BuildContextFile, error) {
-	contextFiles := make([]model.BuildContextFile, len(raw))
-	for i, c := range raw {
-		mode, err := parseMode(c.Mode)
-		if err != nil {
-			return nil, fmt.Errorf("config[%d].mode: %w", i, err)
-		}
-		contextFiles[i] = model.NewBuildContextFile(c.Filename, c.Content, perm(mode))
-	}
-	return contextFiles, nil
-}
-
-func convertConfigDirs(raw []api.RawConfigDirEntry) ([]model.ContainerDirMount, error) {
-	dirs := make([]model.ContainerDirMount, len(raw))
-	for i, cd := range raw {
-		dir := model.NewContainerDirMount(cd.MountPath)
-		for j, f := range cd.Files {
-			mode, err := parseMode(f.Mode)
-			if err != nil {
-				return nil, fmt.Errorf("configDir[%d].files[%d].mode: %w", i, j, err)
-			}
-			dir = dir.AddFile(f.Name, f.Content, perm(mode))
-		}
-		dirs[i] = dir
-	}
-	return dirs, nil
-}
-
-func parseDesiredState(s string) (model.DesiredState, error) {
-	switch strings.ToLower(s) {
-	case "stopped", "":
-		return model.DesiredStateStopped, nil
-	case "running":
-		return model.DesiredStateRunning, nil
-	case "oneshot":
-		return model.DesiredStateOneshot, nil
-	default:
-		return "", fmt.Errorf("invalid desiredState %q", s)
-	}
-}
-
-// parseReclaimPolicy converts a raw string to model.ReclaimPolicy, defaulting to Retain.
-func parseReclaimPolicy(s string) (model.ReclaimPolicy, error) {
-	switch s {
-	case "Delete":
-		return model.ReclaimPolicyDelete, nil
-	case "Retain", "":
-		return model.ReclaimPolicyRetain, nil
-	default:
-		return "", fmt.Errorf("invalid reclaimPolicy %q (must be \"Delete\" or \"Retain\")", s)
-	}
 }

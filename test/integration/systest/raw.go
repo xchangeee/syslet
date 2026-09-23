@@ -64,6 +64,7 @@ func (e *Env) SpecsJSON(lines ...string) {
 // SecretJSON renders a secret spec as one loader JSON line.
 func SecretJSON(name string, ciphertext model.Ciphertext) string {
 	data, err := json.Marshal(map[string]any{
+		"apiVersion": "v1",
 		"type":       "secret",
 		"name":       name,
 		"ciphertext": string(ciphertext),
@@ -109,9 +110,10 @@ func unitOptionsToRaw(opts model.UnitOptions) map[string]map[string]any {
 // marshalSpec serializes a model.Unit to the raw JSON format read by the loader.
 func marshalSpec(spec model.Unit) ([]byte, error) {
 	raw := map[string]any{
-		"type": string(spec.Ref().UnitType()),
-		"name": spec.Ref().Name(),
-		"unit": unitOptionsToRaw(spec.Options()),
+		"apiVersion": "v1",
+		"type":       string(spec.Ref().UnitType()),
+		"name":       spec.Ref().Name(),
+		"unit":       unitOptionsToRaw(spec.Options()),
 	}
 	switch s := spec.(type) {
 	case *model.ContainerUnit:

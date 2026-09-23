@@ -6,10 +6,10 @@ This page is for contributors and maintainers working on syslet itself, not for 
 cmd/syslet            single CLI entrypoint, wires everything else together
   │
   ▼
-internal/api          deserializes JSON specs (dir, file, or stream) into Raw*Spec structs
+internal/api          reads JSON specs (dir, file, or stream) and routes each by apiVersion to internal/api/v1, ...
   │
   ▼
-internal/loader       converts Raw*Spec → internal/model domain objects; decrypts secrets via internal/sops
+internal/loader       converts each apiVersion's structs → internal/model domain objects; decrypts secrets via internal/sops
   │
   ▼
 internal/model        domain types: ContainerUnit, VolumeUnit, NetworkUnit, BuildUnit, and shared primitives

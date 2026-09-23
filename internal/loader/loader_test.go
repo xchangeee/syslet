@@ -5,13 +5,39 @@ import (
 	"testing"
 
 	"codeberg.org/xchangeee/syslet/internal/api"
+	v1 "codeberg.org/xchangeee/syslet/internal/api/v1"
 	"codeberg.org/xchangeee/syslet/internal/model"
 )
+
+// --- version dispatch ---
+
+// TestParse_ConvertsV1 verifies that the public entry points pick up the specs
+// of the v1 field of api.LoadResult.
+func TestParse_ConvertsV1(t *testing.T) {
+	raw := api.LoadResult{V1: v1.Specs{
+		Containers: []v1.Container{{Name: "c"}},
+		Volumes:    []v1.Volume{{Name: "v"}},
+	}}
+	units, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 2 {
+		t.Errorf("expected 2 units, got %d", len(units))
+	}
+	secrets, err := ParseSecrets(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(secrets) != 0 {
+		t.Errorf("expected 0 secrets, got %d", len(secrets))
+	}
+}
 
 // --- desiredState parsing ---
 
 func TestDesiredState_DefaultsToStopped(t *testing.T) {
-	units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{Name: "c"}}})
+	units, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +59,7 @@ func TestDesiredState_AllValues(t *testing.T) {
 		{"STOPPED", model.DesiredStateStopped},
 	}
 	for _, tc := range cases {
-		units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{Name: "c", DesiredState: tc.input}}})
+		units, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c", DesiredState: tc.input}}})
 		if err != nil {
 			t.Errorf("input %q: unexpected error: %v", tc.input, err)
 			continue
@@ -46,7 +72,7 @@ func TestDesiredState_AllValues(t *testing.T) {
 }
 
 func TestDesiredState_InvalidReturnsError(t *testing.T) {
-	_, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{Name: "c", DesiredState: "restart"}}})
+	_, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c", DesiredState: "restart"}}})
 	if err == nil {
 		t.Fatal("expected error for invalid desiredState")
 	}
@@ -60,21 +86,21 @@ func TestReclaimPolicy_DefaultsToRetain(t *testing.T) {
 		fn   func() (model.ReclaimPolicy, error)
 	}{
 		{"volume", func() (model.ReclaimPolicy, error) {
-			units, err := Parse(api.LoadResult{Volumes: []api.RawVolumeSpec{{Name: "v"}}})
+			units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v"}}})
 			if err != nil {
 				return "", err
 			}
 			return units[0].(*model.VolumeUnit).ReclaimPolicy, nil
 		}},
 		{"network", func() (model.ReclaimPolicy, error) {
-			units, err := Parse(api.LoadResult{Networks: []api.RawNetworkSpec{{Name: "n"}}})
+			units, err := parseV1(v1.Specs{Networks: []v1.Network{{Name: "n"}}})
 			if err != nil {
 				return "", err
 			}
 			return units[0].(*model.NetworkUnit).ReclaimPolicy, nil
 		}},
 		{"build", func() (model.ReclaimPolicy, error) {
-			units, err := Parse(api.LoadResult{Builds: []api.RawBuildSpec{{Name: "b"}}})
+			units, err := parseV1(v1.Specs{Builds: []v1.Build{{Name: "b"}}})
 			if err != nil {
 				return "", err
 			}
@@ -94,7 +120,7 @@ func TestReclaimPolicy_DefaultsToRetain(t *testing.T) {
 }
 
 func TestReclaimPolicy_Delete(t *testing.T) {
-	units, err := Parse(api.LoadResult{Volumes: []api.RawVolumeSpec{{Name: "v", ReclaimPolicy: "Delete"}}})
+	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", ReclaimPolicy: "Delete"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +130,7 @@ func TestReclaimPolicy_Delete(t *testing.T) {
 }
 
 func TestReclaimPolicy_InvalidReturnsError(t *testing.T) {
-	_, err := Parse(api.LoadResult{Volumes: []api.RawVolumeSpec{{Name: "v", ReclaimPolicy: "GC"}}})
+	_, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", ReclaimPolicy: "GC"}}})
 	if err == nil {
 		t.Fatal("expected error for invalid reclaimPolicy")
 	}
@@ -113,9 +139,9 @@ func TestReclaimPolicy_InvalidReturnsError(t *testing.T) {
 // --- mode/perm parsing ---
 
 func TestMode_DefaultsTo0644(t *testing.T) {
-	units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
+	units, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name:        "c",
-		ConfigFiles: []api.RawConfigFileEntry{{MountPath: "/etc/f", Content: "x"}},
+		ConfigFiles: []v1.ConfigFileEntry{{MountPath: "/etc/f", Content: "x"}},
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -127,9 +153,9 @@ func TestMode_DefaultsTo0644(t *testing.T) {
 }
 
 func TestMode_ExplicitOctal(t *testing.T) {
-	units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
+	units, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name:        "c",
-		ConfigFiles: []api.RawConfigFileEntry{{MountPath: "/etc/f", Mode: "0600", Content: "x"}},
+		ConfigFiles: []v1.ConfigFileEntry{{MountPath: "/etc/f", Mode: "0600", Content: "x"}},
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -141,9 +167,9 @@ func TestMode_ExplicitOctal(t *testing.T) {
 }
 
 func TestMode_InvalidOctalReturnsError(t *testing.T) {
-	_, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
+	_, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name:        "c",
-		ConfigFiles: []api.RawConfigFileEntry{{MountPath: "/etc/f", Mode: "rwx", Content: "x"}},
+		ConfigFiles: []v1.ConfigFileEntry{{MountPath: "/etc/f", Mode: "rwx", Content: "x"}},
 	}}})
 	if err == nil {
 		t.Fatal("expected error for invalid mode")
@@ -153,16 +179,16 @@ func TestMode_InvalidOctalReturnsError(t *testing.T) {
 // --- field mapping ---
 
 func TestContainerUnit_FieldsAreMapped(t *testing.T) {
-	units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
+	units, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name:           "web",
 		DesiredState:   "running",
 		RemovalAllowed: true,
-		ConfigFiles: []api.RawConfigFileEntry{
+		ConfigFiles: []v1.ConfigFileEntry{
 			{MountPath: "/etc/app.conf", Mode: "0640", Content: "cfg"},
 		},
-		ConfigDirs: []api.RawConfigDirEntry{{
+		ConfigDirs: []v1.ConfigDirEntry{{
 			MountPath: "/etc/app/",
-			Files:     []api.RawConfigDirFile{{Name: "a.conf", Content: "ac", Mode: "0600"}},
+			Files:     []v1.ConfigDirFile{{Name: "a.conf", Content: "ac", Mode: "0600"}},
 		}},
 	}}})
 	if err != nil {
@@ -193,11 +219,11 @@ func TestContainerUnit_FieldsAreMapped(t *testing.T) {
 }
 
 func TestBuildUnit_FieldsAreMapped(t *testing.T) {
-	units, err := Parse(api.LoadResult{Builds: []api.RawBuildSpec{{
+	units, err := parseV1(v1.Specs{Builds: []v1.Build{{
 		Name:          "img",
 		Containerfile: "FROM scratch",
 		ReclaimPolicy: "Delete",
-		ContextFiles: []api.RawBuildFileEntry{
+		ContextFiles: []v1.BuildFileEntry{
 			{Filename: "app.conf", Mode: "0600", Content: "c"},
 		},
 	}}})
@@ -221,7 +247,7 @@ func TestBuildUnit_FieldsAreMapped(t *testing.T) {
 }
 
 func TestVolumeUnit_FieldsAreMapped(t *testing.T) {
-	units, err := Parse(api.LoadResult{Volumes: []api.RawVolumeSpec{{
+	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{
 		Name:           "data",
 		RemovalAllowed: true,
 		ReclaimPolicy:  "Delete",
@@ -242,7 +268,7 @@ func TestVolumeUnit_FieldsAreMapped(t *testing.T) {
 }
 
 func TestNetworkUnit_FieldsAreMapped(t *testing.T) {
-	units, err := Parse(api.LoadResult{Networks: []api.RawNetworkSpec{{
+	units, err := parseV1(v1.Specs{Networks: []v1.Network{{
 		Name:           "net",
 		RemovalAllowed: true,
 		ReclaimPolicy:  "Delete",
@@ -265,7 +291,7 @@ func TestNetworkUnit_FieldsAreMapped(t *testing.T) {
 // --- unitOptions conversion ---
 
 func TestUnitOptions_StringValue(t *testing.T) {
-	units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
+	units, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name: "c",
 		Unit: map[string]map[string]any{"Container": {"Image": "nginx:latest"}},
 	}}})
@@ -283,7 +309,7 @@ func TestUnitOptions_StringValue(t *testing.T) {
 }
 
 func TestUnitOptions_StringArrayValue(t *testing.T) {
-	units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
+	units, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name: "c",
 		Unit: map[string]map[string]any{"Container": {"Volume": []any{"data:/data", "cfg:/cfg"}}},
 	}}})
@@ -297,7 +323,7 @@ func TestUnitOptions_StringArrayValue(t *testing.T) {
 }
 
 func TestUnitOptions_InvalidValueReturnsError(t *testing.T) {
-	_, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
+	_, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name: "c",
 		Unit: map[string]map[string]any{"Container": {"Image": 42}},
 	}}})
@@ -309,11 +335,11 @@ func TestUnitOptions_InvalidValueReturnsError(t *testing.T) {
 // --- mixed unit types ---
 
 func TestParse_AllUnitTypesProduced(t *testing.T) {
-	units, err := Parse(api.LoadResult{
-		Containers: []api.RawContainerSpec{{Name: "c"}},
-		Volumes:    []api.RawVolumeSpec{{Name: "v"}},
-		Networks:   []api.RawNetworkSpec{{Name: "n"}},
-		Builds:     []api.RawBuildSpec{{Name: "b"}},
+	units, err := parseV1(v1.Specs{
+		Containers: []v1.Container{{Name: "c"}},
+		Volumes:    []v1.Volume{{Name: "v"}},
+		Networks:   []v1.Network{{Name: "n"}},
+		Builds:     []v1.Build{{Name: "b"}},
 	})
 	if err != nil {
 		t.Fatal(err)

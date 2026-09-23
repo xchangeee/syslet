@@ -35,3 +35,11 @@ The spec carries the encrypted YAML text inline rather than a path to it, so a s
 Key names are not encrypted by SOPS, so syslet can read them without a key. That is what lets it validate every container `Secret=` reference against the declared keys before any decryption happens, and keep plaintext out of the plan for specs that turn out to be misreferenced.
 
 Change detection uses `sha256` of the ciphertext, stored as the podman label `syslet/hash`, so plaintext is never hashed or persisted — hashing plaintext would invite offline dictionary attacks against anyone who can read the labels. Containers referencing a changed secret are restarted as part of the same apply. That same label doubles as the ownership marker for pruning; see [Removing specs](removing-specs.md#secrets).
+
+## API versioning
+
+The spec format carries a single linear version in each spec's `apiVersion` field (`v1`, `v2`, …). A breaking change introduces a new version and leaves the old one untouched.
+
+An `apiVersion` newer than the running syslet is rejected instead of being partially understood.
+
+An old version prints a warning once it is superseded. It is removed only in a release whose notes say so.

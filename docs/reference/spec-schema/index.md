@@ -2,6 +2,8 @@
 
 Every spec file (or stream element) is a JSON object with a `type` field selecting one of the unit types below, plus a `name` used to derive the quadlet unit name and, unless overridden, the resource name (`ContainerName`, `VolumeName`, `NetworkName`).
 
+An optional `apiVersion` selects the spec format. The only version is `"v1"`, which is also the default when the field is omitted. syslet rejects specs with an `apiVersion` it doesn't know; see [API versioning](../../explanation/spec-types.md#api-versioning).
+
 - [Container](container.md)
 - [Build](build.md)
 - [Network](network.md)
