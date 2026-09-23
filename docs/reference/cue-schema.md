@@ -39,7 +39,7 @@ Unify with `#Sysdef` to default these fields:
 | Type | `enabled` | `removalAllowed` | `desiredState` | `reclaimPolicy` |
 | --- | --- | --- | --- | --- |
 | containers | `true` | `true` | `"running"` | — |
-| networks | `true` | `true` | — | — |
+| networks | `true` | `true` | — | `"Delete"` |
 | volumes | `true` | `true` | — | `"Delete"` |
 | builds | `true` | `true` | — | `"Delete"` |
 | secrets | `true` | — | — | — |
@@ -51,15 +51,11 @@ Unify with `#Sysdef` to default these fields:
 | Field | CUE | JSON |
 | --- | --- | --- |
 | `apiVersion` | Set to `"v1"` | Required |
-| `removalAllowed` | Required on all four unit types, including builds, where syslet ignores it | Optional, defaults to `false`, no build field |
-| `desiredState` | Required, `"running"` or `"stopped"` | Optional, defaults to `"stopped"` |
-| `reclaimPolicy` | Required on volumes and builds; not accepted on networks | Optional, defaults to `"Retain"` |
-| `configFiles[].mode`, `configDirs[].files[].mode` | Required | Optional, defaults to `"0644"` |
-| `contextFiles[].mode` | Not accepted | Optional |
+| `removalAllowed` | Required on containers, volumes and networks | Optional, defaults to `false` |
+| `desiredState` | Required, `"running"`, `"stopped"` or `"oneshot"` | Optional, defaults to `"stopped"` |
+| `reclaimPolicy` | Required on volumes, networks and builds | Optional, defaults to `"Delete"` |
 
 `#SysdefDefaults` provides the required values that have a default.
-
-<!-- TODO: drop the build removalAllowed and contextFiles mode rows once the schema is fixed, see docs/TODO.md -->
 <!-- TODO: note that unit is required once the loader and schema require it, see docs/TODO.md -->
 
 ## tools
@@ -94,6 +90,8 @@ sysdef: (syslettools.#SysdefAssignNetwork & {in: "app-net": ["app", "cache"]}).o
 | --- | --- | --- |
 | `in` | map of file name to file content | The result of `@embed(glob=creds-*.enc.yaml,type=text,allowEmptyGlob)`. |
 | `secrets` | map of `#SysdefSecret` | One entry per file, named after the file without the `creds-` prefix and `.enc.yaml` suffix. |
+
+The files must sit in the same directory as the CUE file; a glob into a subdirectory keeps the directory in the name.
 
 ```cue
 sysdef: secrets: (syslettools.#SysdefSecretsFromEmbeddedFiles & {in: secretFiles}).secrets

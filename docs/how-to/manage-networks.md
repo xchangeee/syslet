@@ -9,11 +9,11 @@ The setup only decides what happens when you drop a network's spec:
 
 | Setup | Spec dropped | Spec changed |
 | --- | --- | --- |
-| CUE | Unit removed, podman network left behind | Recreated |
+| CUE | Unit and podman network removed | Recreated |
 | CUE, in `#SysdefLock` | Unit and network kept | Recreated |
 | JSON | Unit and network kept | Recreated |
 
-<!-- TODO: mention reclaimPolicy once #NetworkSpec accepts it, see docs/TODO.md -->
+When the unit is removed, `reclaimPolicy` decides whether the podman network goes with it: `"Delete"` (the default) removes it, `"Retain"` leaves it behind.
 
 ## Add a network
 

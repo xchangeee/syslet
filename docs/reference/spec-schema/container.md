@@ -31,7 +31,7 @@
 | `apiVersion` | string | yes | `"v1"`. See [API versioning](index.md#api-versioning). |
 | `type` | string | yes | `"container"` |
 | `name` | string | yes | Also used as `ContainerName`. |
-| `desiredState` | string | no | `"running"` or `"stopped"`. When `"running"`: `[Install] WantedBy=multi-user.target default.target` and `[Service] Restart=Always` are added automatically. |
+| `desiredState` | string | no | `"running"`, `"stopped"` or `"oneshot"`. When `"running"`: `[Install] WantedBy=multi-user.target default.target` and `[Service] Restart=Always` are added automatically. When `"oneshot"`: `[Service] Type=oneshot` is set, and syslet never starts or stops the unit. |
 | `unit` | object | no | Quadlet sections (`Container`, `Service`, `Install`, ...), passed through to the generated `.container` file. |
 | `configFiles` | array | no | Single files bind-mounted into the container. Each entry: `mountPath` (absolute path in the container), `content` (file text), `mode` (optional file mode, e.g. `"0644"`). Written to `/etc/containers/config/<name>/`. See [Mount config files and dirs](../../how-to/mount-config-files-and-dirs.md). |
 | `configDirs` | array | no | Directories bind-mounted into the container, swapped atomically via a versioned symlink for in-place reload. Each entry: `mountPath` (must end in a real directory path) and `files` (each with `name`, `content`, optional `mode`). Requires `[Service] ExecReload=` to be set. See [Mount config files and dirs](../../how-to/mount-config-files-and-dirs.md#reload-config-without-a-restart). |

@@ -17,7 +17,6 @@ Use `configDirs` when the service can reload its config on a signal (nginx, most
     	configFiles: [{
     		content:   "server { listen 80; root /usr/share/nginx/html; }"
     		mountPath: "/etc/nginx/nginx.conf"
-    		mode:      "0644"
     	}, {
     		content:   "APP_ENV=production"
     		mountPath: "/run/env"
@@ -54,9 +53,7 @@ Use `configDirs` when the service can reload its config on a signal (nginx, most
     ```
 
 Each entry is written to `/etc/containers/config/webapp/` on the host and injected into the quadlet as a read-only bind mount at `mountPath`.
-The CUE schema requires `mode`; in JSON it's optional and defaults to `0644`.
-
-<!-- TODO: drop the CUE mode lines once the schema makes mode optional, see docs/TODO.md -->
+`mode` is optional and defaults to `0644`.
 
 A changed `content` is a new file on disk, and a static bind mount only picks it up when the container is recreated, so syslet restarts the container as part of the apply.
 
@@ -74,7 +71,6 @@ A changed `content` is a new file on disk, and a static bind mount only picks it
     		mountPath: "/etc/nginx/conf.d/"
     		files: [{
     			name:    "app.conf"
-    			mode:    "0644"
     			content: "server_name example.internal;"
     		}]
     	}]

@@ -106,8 +106,8 @@ A quadlet container service removes its container when it stops, so stopping the
 
 Without something managing both ends, that is how hosts accumulate junk. `reclaimPolicy` is how syslet manages that second end:
 
-- `Retain` (syslet's default) leaves the podman object in place.
-- `Delete` deletes it along with the unit.
+- `Delete` (syslet's default) deletes it along with the unit.
+- `Retain` leaves the podman object in place.
 
 It applies to `volume`, `network`, and `build`, the three types with a podman resource that outlives the unit file. The name and the semantics are borrowed from Kubernetes persistent volumes, where a `persistentVolumeReclaimPolicy` of `Retain` or `Delete` decides the same question about the storage behind a claim.
 
@@ -121,10 +121,10 @@ It applies to `volume`, `network`, and `build`, the three types with a podman re
 
 Builds skip the first column, since they are always removed when stale.
 
-Every syslet-managed volume, network, and build is `Retain` unless you say otherwise, on the fail-safe assumption that the data matters: the declaration goes, the bytes stay, and disposing of the resource becomes a manual podman operation. Setting `Delete` is how you tell syslet this one is not worth keeping.
+Every syslet-managed volume, network, and build is `Delete` unless you say otherwise, so nothing outlives its declaration by accident. For volumes and networks, `removalAllowed` is what protects the data: without it, syslet doesn't remove the unit at all. Setting `Retain` is how you tell syslet to keep the resource even once removal is allowed, which makes disposing of it a manual podman operation.
 
-!!! warning "The CUE schema flips these defaults"
+!!! warning "The CUE schema allows removal by default"
 
-    `#SysdefDefaults` sets `removalAllowed: true` on containers, networks, and volumes, and `reclaimPolicy: "Delete"` on volumes and builds, so experimenting in a CUE repository cleans up after itself. Dropping an unlocked CUE volume therefore deletes its data. List every volume worth keeping in `#SysdefLock`, which sets `removalAllowed: false` and `reclaimPolicy: "Retain"`. See [Manage volumes](../how-to/manage-volumes.md#know-your-defaults).
+    `#SysdefDefaults` sets `removalAllowed: true` on containers, networks, and volumes, so experimenting in a CUE repository cleans up after itself. Dropping an unlocked CUE volume therefore deletes its data. List every volume worth keeping in `#SysdefLock`, which sets `removalAllowed: false` and `reclaimPolicy: "Retain"`. See [Manage volumes](../how-to/manage-volumes.md#know-your-defaults).
 
 Put a deleted spec back and syslet writes the unit file again, but that only restores the declaration. Under `Retain` the volume is still there and the unit reattaches to it; under `Delete` the recreated volume comes back empty and the deleted image has to be rebuilt.

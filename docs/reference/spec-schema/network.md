@@ -22,7 +22,7 @@
 | `type` | string | yes | `"network"` |
 | `name` | string | yes | Also used as `NetworkName`. Referenced from a container as `Network: ["<name>.network"]`. |
 | `unit` | object | no | Quadlet `Network` section options. |
-| `reclaimPolicy` | string | no | `"Retain"` (default) or `"Delete"`. Controls whether the podman network is also deleted when the unit is pruned. |
+| `reclaimPolicy` | string | no | `"Delete"` (default) or `"Retain"`. Controls whether the podman network is also deleted when the unit is pruned. |
 | `removalAllowed` | bool | no | Default `false`. Must be `true` before syslet will prune this unit. |
 
 <!-- TODO: mark unit as required once the loader enforces it, see docs/TODO.md -->

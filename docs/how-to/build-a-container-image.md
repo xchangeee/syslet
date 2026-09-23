@@ -100,6 +100,4 @@ From then on, a change to `containerfile` or `contextFiles` rebuilds the image a
 
 Drop the build spec and every `Image` that references it, then preview and apply.
 Builds can't be locked, so the build unit and its context are always removed.
-The built image is deleted only under `reclaimPolicy: "Delete"`, which `#SysdefDefaults` sets; in JSON, an omitted `reclaimPolicy` keeps it.
-
-<!-- TODO: state one default once CUE and JSON agree, see docs/TODO.md -->
+The built image is deleted too, unless the build sets `reclaimPolicy: "Retain"`.

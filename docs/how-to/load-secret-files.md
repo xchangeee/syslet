@@ -25,7 +25,9 @@ Each key in a file becomes the podman secret `<name>-<key>`, so key names may on
 `@extern(embed)` has to be the first line of every file that uses `@embed`.
 `allowEmptyGlob` keeps the config valid while there are no secret files.
 
-<!-- TODO: document loading from a subdirectory once #SysdefSecretsFromEmbeddedFiles strips the directory, see docs/TODO.md -->
+The secret files must sit next to the CUE file.
+With a glob into a subdirectory, the directory stays part of each file name, so the `creds-` prefix isn't stripped and the spec name contains the path.
+To keep a file elsewhere, [load it on its own](#load-a-single-file).
 
 ## Load a single file
 

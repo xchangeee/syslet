@@ -16,7 +16,7 @@ What happens depends on the type and on whether the entry is locked with `#Sysde
 | --- | --- | --- |
 | container | Stopped; unit and config files deleted. | Skipped, keeps running. |
 | volume | Unit deleted, **podman volume and data deleted**. | Skipped, data intact. |
-| network | Unit deleted, podman network left behind. | Skipped. |
+| network | Unit and podman network deleted. | Skipped. |
 | build | Unit and build context deleted, built image deleted. | Builds can't be locked. |
 | secret | Its podman secrets deleted. | Secrets can't be locked. |
 
