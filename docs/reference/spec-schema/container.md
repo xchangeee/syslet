@@ -35,4 +35,6 @@
 | `configDirs` | array | no | Directories bind-mounted into the container, swapped atomically via a versioned symlink for in-place reload. Each entry: `mountPath` (must end in a real directory path) and `files` (each with `name`, `content`, optional `mode`). Requires `[Service] ExecReload=` to be set. See [Reload config without restart](../../how-to/reload-config-without-restart.md). |
 | `removalAllowed` | bool | no | Default `false`. Must be `true` before syslet will prune this unit when it disappears from the input, and must have been set on the *previous* apply. See [Removing specs](../../explanation/removing-specs.md). |
 
+No `configFiles` or `configDirs` `mountPath` may equal or sit under another one; overlapping mounts are rejected.
+
 `ContainerName` is set automatically to the spec's `name` if not explicitly given in `unit.Container`.

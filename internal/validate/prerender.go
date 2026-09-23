@@ -4,6 +4,7 @@ package validate
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -37,10 +38,10 @@ func PreRender(units []model.Unit, secrets []model.PodmanSecret) error {
 		[]UnitValidator{
 			SpecNameNotEmpty,
 			NoXSysletSection,
-			ContainerNoDuplicateConfigPaths,
 			ContainerConfigMountPaths,
 			ContainerConfigDirsRequireExecReload,
 			ContainerConfigDirMountPaths,
+			ContainerNoOverlappingMountPaths,
 			ContainerConfigDirFilenames,
 			BuildContainerfilePresent,
 			BuildConfigFilenames,
@@ -104,21 +105,46 @@ func NoXSysletSection(unit model.Unit) error {
 	return nil
 }
 
-// ContainerNoDuplicateConfigPaths ensures no two config entries target the same path.
-func ContainerNoDuplicateConfigPaths(unit model.Unit) error {
+// ContainerNoOverlappingMountPaths ensures no configFile or configDir mountPath
+// equals or sits under another one. Each entry becomes its own bind mount, so an
+// overlap lets one mount shadow part of another; for configDirs that would also
+// hide files from the atomic symlink swap that in-place reload relies on. It runs
+// after the per-entry path validators, so paths are known to be absolute.
+func ContainerNoOverlappingMountPaths(unit model.Unit) error {
 	container, ok := unit.(*model.ContainerUnit)
 	if !ok {
 		return nil
 	}
-	seen := make(map[model.ContainerMountPath]bool)
-	for _, cfg := range container.FileMounts {
-		fp := cfg.FullPath()
-		if seen[fp] {
-			return fmt.Errorf("container %q: duplicate config mountPath %q", container.Ref(), fp)
+	type mount struct {
+		label string
+		path  string
+	}
+	var mounts []mount
+	for i, fm := range container.FileMounts {
+		mounts = append(mounts, mount{fmt.Sprintf("configFiles[%d]", i), path.Clean(string(fm.FullPath()))})
+	}
+	for i, dm := range container.DirMounts {
+		mounts = append(mounts, mount{fmt.Sprintf("configDirs[%d]", i), path.Clean(string(dm.Directory))})
+	}
+	for i, a := range mounts {
+		for _, b := range mounts[i+1:] {
+			if pathContains(a.path, b.path) || pathContains(b.path, a.path) {
+				return fmt.Errorf("container %q: %s.mountPath %q overlaps %s.mountPath %q",
+					container.Ref(), a.label, a.path, b.label, b.path)
+			}
 		}
-		seen[fp] = true
 	}
 	return nil
+}
+
+// pathContains reports whether the cleaned absolute path child equals parent
+// or lies beneath it. A plain prefix check is not enough: /etc/app2 is not
+// under /etc/app.
+func pathContains(parent, child string) bool {
+	if parent == child || parent == "/" {
+		return true
+	}
+	return strings.HasPrefix(child, parent+"/")
 }
 
 // ContainerConfigMountPaths ensures each config entry has a valid mount path.
@@ -176,8 +202,14 @@ func ContainerConfigDirMountPaths(unit model.Unit) error {
 		return nil
 	}
 	for i, cd := range container.DirMounts {
+		if cd.Directory == "" {
+			return fmt.Errorf("container %q: configDir[%d].mountPath cannot be empty", container.Ref(), i)
+		}
 		if !filepath.IsAbs(string(cd.Directory)) {
 			return fmt.Errorf("container %q: configDir[%d].mountPath must be absolute, got %q", container.Ref(), i, cd.Directory)
+		}
+		if strings.Contains(string(cd.Directory), "..") {
+			return fmt.Errorf("container %q: configDir[%d].mountPath cannot contain '..': %s", container.Ref(), i, cd.Directory)
 		}
 	}
 	return nil

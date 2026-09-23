@@ -210,6 +210,100 @@ func TestContainerConfigDirMountPaths_RelativePath_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestContainerConfigDirMountPaths_EmptyPath_ReturnsError(t *testing.T) {
+	spec := model.NewContainerUnitWithDirs(
+		model.ContainerUnitRef("webapp"), nil, "", nil,
+		[]model.ContainerDirMount{model.NewContainerDirMount("")},
+		false,
+	)
+	err := ContainerConfigDirMountPaths(spec)
+	if err == nil {
+		t.Fatal("ContainerConfigDirMountPaths() should error for empty mountPath")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error should mention 'empty', got: %v", err)
+	}
+}
+
+func TestContainerConfigDirMountPaths_PathTraversal_ReturnsError(t *testing.T) {
+	spec := model.NewContainerUnitWithDirs(
+		model.ContainerUnitRef("webapp"), nil, "", nil,
+		[]model.ContainerDirMount{model.NewContainerDirMount("/etc/../app/")},
+		false,
+	)
+	err := ContainerConfigDirMountPaths(spec)
+	if err == nil {
+		t.Fatal("ContainerConfigDirMountPaths() should error for mountPath containing '..'")
+	}
+	if !strings.Contains(err.Error(), "..") {
+		t.Errorf("error should mention '..', got: %v", err)
+	}
+}
+
+func TestContainerNoOverlappingMountPaths_NonContainerSpec_ReturnsNil(t *testing.T) {
+	spec := model.NewBuildUnit(model.BuildUnitRef("myimage"), nil, "FROM scratch", nil, "")
+	if err := ContainerNoOverlappingMountPaths(spec); err != nil {
+		t.Errorf("ContainerNoOverlappingMountPaths() should not error for non-container spec, got: %v", err)
+	}
+}
+
+func TestContainerNoOverlappingMountPaths_DisjointPaths_ReturnsNil(t *testing.T) {
+	// /etc/app2 and /etc/app.conf share a string prefix with /etc/app but are
+	// siblings, not children, so they must not be reported as overlapping.
+	spec := model.NewContainerUnitWithDirs(
+		model.ContainerUnitRef("webapp"), nil, "",
+		[]model.ContainerFileMount{
+			model.NewContainerFileMount("/etc/app.conf", "", 0),
+			model.NewContainerFileMount("/run/env", "", 0),
+		},
+		[]model.ContainerDirMount{
+			model.NewContainerDirMount("/etc/app/"),
+			model.NewContainerDirMount("/etc/app2/"),
+		},
+		false,
+	)
+	if err := ContainerNoOverlappingMountPaths(spec); err != nil {
+		t.Errorf("ContainerNoOverlappingMountPaths() unexpected error: %v", err)
+	}
+}
+
+func TestContainerNoOverlappingMountPaths_OverlapKinds(t *testing.T) {
+	cases := []struct {
+		name  string
+		files []string
+		dirs  []string
+	}{
+		{"DuplicateConfigFiles", []string{"/etc/app.conf", "/etc/app.conf"}, nil},
+		{"DuplicateConfigDirs", nil, []string{"/etc/app/", "/etc/app"}},
+		{"NestedConfigDirs", nil, []string{"/etc/app/", "/etc/app/conf.d/"}},
+		{"NestedConfigDirsReversed", nil, []string{"/etc/app/conf.d/", "/etc/app/"}},
+		{"ConfigFileUnderConfigDir", []string{"/etc/app/app.conf"}, []string{"/etc/app/"}},
+		{"ConfigFileEqualsConfigDir", []string{"/etc/app"}, []string{"/etc/app/"}},
+		{"ConfigDirUnderConfigFile", []string{"/etc/app"}, []string{"/etc/app/conf.d/"}},
+		{"RootConfigDir", []string{"/etc/app.conf"}, []string{"/"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var files []model.ContainerFileMount
+			for _, f := range tc.files {
+				files = append(files, model.NewContainerFileMount(f, "", 0))
+			}
+			var dirs []model.ContainerDirMount
+			for _, d := range tc.dirs {
+				dirs = append(dirs, model.NewContainerDirMount(d))
+			}
+			spec := model.NewContainerUnitWithDirs(model.ContainerUnitRef("webapp"), nil, "", files, dirs, false)
+			err := ContainerNoOverlappingMountPaths(spec)
+			if err == nil {
+				t.Fatalf("ContainerNoOverlappingMountPaths() should error for files=%v dirs=%v", tc.files, tc.dirs)
+			}
+			if !strings.Contains(err.Error(), "overlap") {
+				t.Errorf("error should mention 'overlap', got: %v", err)
+			}
+		})
+	}
+}
+
 func TestContainerConfigDirFilenames_PlainName_ReturnsNil(t *testing.T) {
 	spec := model.NewContainerUnitWithDirs(
 		model.ContainerUnitRef("webapp"), nil, "", nil,
