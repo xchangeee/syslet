@@ -1,51 +1,105 @@
-# Customize an upstream container image without a registry
+# Build a container image
 
-The `build` unit type's main use case is layering local changes onto an upstream image (baking in a config file, patching a package) **without** pushing/pulling through an image registry. syslet writes the `Containerfile` (and any context files) to the host, generates a `.build` quadlet unit, and podman builds the image locally as part of `daemon-reload`/service startup; the resulting image never leaves the host.
+To run an upstream image with local changes, such as a baked-in config file or a patched package, build it on the host instead of pushing it through a registry.
+The examples build `myapp` from nginx and run it as the container `webapp`.
 
 ## 1. Write a build spec
 
-```json
-{
-  "name": "myapp",
-  "type": "build",
-  "unit": {
-    "Build": {
-      "ImageTag": "localhost/myapp:latest"
-    }
-  },
-  "containerfile": "FROM docker.io/library/nginx:latest\nCOPY app.conf /etc/nginx/conf.d/app.conf\n",
-  "contextFiles": [
-    {
-      "filename": "app.conf",
-      "content": "server_name example.internal;"
-    }
-  ]
-}
-```
+=== "CUE"
 
-- `unit.Build.ImageTag` **must** use the `localhost/` prefix. syslet enforces this so built images are unambiguously local and never mistaken for a registry-hosted tag.
-- `containerfile` is the Containerfile content itself (not a path); syslet writes it to the build's context directory on the host.
-- `contextFiles` here are build **context** files (copied into the image via `COPY`/`ADD`), written alongside the Containerfile. They are a different mechanism from a container's `configFiles`/`configDirs`, which bind-mount files into a running container at runtime.
+    ```cue
+    sysdef: builds: myapp: spec: {
+    	unit: Build: ImageTag: "localhost/myapp:latest"
+    	containerfile: """
+    		FROM docker.io/library/nginx:latest
+    		COPY app.conf /etc/nginx/conf.d/app.conf
+    		"""
+    	contextFiles: [{
+    		filename: "app.conf"
+    		content:  "server_name example.internal;"
+    	}]
+    }
+    ```
+
+=== "JSON"
+
+    ```json
+    {
+      "apiVersion": "v1",
+      "type": "build",
+      "name": "myapp",
+      "unit": {
+        "Build": {
+          "ImageTag": "localhost/myapp:latest"
+        }
+      },
+      "containerfile": "FROM docker.io/library/nginx:latest\nCOPY app.conf /etc/nginx/conf.d/app.conf\n",
+      "contextFiles": [
+        {
+          "filename": "app.conf",
+          "content": "server_name example.internal;"
+        }
+      ]
+    }
+    ```
+
+- `ImageTag` must start with `localhost/<build name>:`, here `localhost/myapp:`.
+- `containerfile` holds the Containerfile's content, not a path.
+- `contextFiles` are the files the Containerfile can `COPY` or `ADD`. To mount files into the running container instead, use `configFiles` (see [Mount config files and dirs](mount-config-files-and-dirs.md)).
 
 ## 2. Reference the build from a container
 
-Set the container's `Image` to `<build-name>.build`:
+Set the container's `Image` to `<build name>.build`:
 
-```json
-{
-  "name": "webapp",
-  "type": "container",
-  "desiredState": "running",
-  "unit": {
-    "Container": {
-      "Image": "myapp.build"
+=== "CUE"
+
+    ```cue
+    sysdef: containers: webapp: spec: {
+    	unit: Container: Image: "myapp.build"
     }
-  }
-}
-```
+    ```
 
-Deploy both specs together. syslet validates that every `<name>.build` a container references exists as a build spec, builds the image before starting the container, and rebuilds/restarts the container whenever the Containerfile or its context files change.
+=== "JSON"
 
-## 3. Reclaiming stale builds
+    ```json
+    {
+      "apiVersion": "v1",
+      "type": "container",
+      "name": "webapp",
+      "desiredState": "running",
+      "unit": {
+        "Container": {
+          "Image": "myapp.build"
+        }
+      }
+    }
+    ```
 
-A build unit removed from the spec set is pruned unconditionally — build units have no `removalAllowed` marker, since the unit and its context are fully regenerable from the spec (see [Removing specs](../explanation/removing-specs.md)). Set `"reclaimPolicy": "Delete"` on the build spec to also delete the built podman image when the unit is reclaimed; the default, `"Retain"`, leaves the image on disk.
+## 3. Preview and apply
+
+Deploy both specs in the same input; a container that references a missing build fails validation.
+
+=== "CUE"
+
+    ```sh
+    cue cmd plan
+    cue cmd apply
+    ```
+
+=== "JSON"
+
+    ```sh
+    cat hosts/web01/*.json | ssh web01 sudo syslet --diff --stdin
+    cat hosts/web01/*.json | ssh web01 sudo syslet --stdin
+    ```
+
+podman builds the image before it starts the container.
+From then on, a change to `containerfile` or `contextFiles` rebuilds the image and restarts the container.
+
+## Remove a build
+
+Drop the build spec and every `Image` that references it, then preview and apply.
+Builds can't be locked, so the build unit and its context are always removed.
+The built image is deleted only under `reclaimPolicy: "Delete"`, which `#SysdefDefaults` sets; in JSON, an omitted `reclaimPolicy` keeps it.
+
+<!-- TODO: state one default once CUE and JSON agree, see docs/TODO.md -->

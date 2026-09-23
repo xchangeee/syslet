@@ -12,7 +12,7 @@ That sweep covers the whole directory, including unit files syslet never wrote. 
 
 When absence is the trigger, an input that omits units by mistake reads as a request to tear them down, and the blast radius is a stopped service or a deleted volume rather than a failed apply. syslet is built to run unattended in GitOps pipelines, so it is the one operation that requires you to declare intent in advance, in the spec rather than at the moment of deletion.
 
-That declaration is `removalAllowed`, a boolean on `container`, `volume`, and `network` specs. It defaults to `false`, and setting it to `true` is what permits syslet to delete that unit once it goes missing from the input. Build units have no such field and are always removed.
+That declaration is `removalAllowed`, a boolean on `container`, `volume`, and `network` specs. syslet defaults it to `false`, and setting it to `true` is what permits syslet to delete that unit once it goes missing from the input. Build units have no such field and are always removed.
 
 The flag exists because "absent from the input" is a state your tooling can reach by mistake. A bug in whatever generates your specs, a templating run that renders an empty list, a truncated file, a filter that matched nothing: any of these produces an input that is syntactically fine and simply omits half your units. Without a guard, the next apply would faithfully delete a working deployment, and the failure would look exactly like a successful reconciliation. This mechanism is borrowed from Argo CD's finalizers, where deleting an application only cascades to the resources it created if the opt-in was placed on the application ahead of time.
 
@@ -38,16 +38,7 @@ A second guard catches the common way a removal goes wrong: dropping a volume, n
 container "webapp": references undefined volume "webapp-data"
 ```
 
-## Previewing a removal
-
-Look at the plan before you apply. `syslet --diff` builds the same plan and prints it without executing anything, so every `removed` and `skipped` line is what an apply would do. See [Preview changes with --diff](../how-to/preview-changes-with-diff.md).
-
-Two lines repay a careful read:
-
-- `removed` tells you the unit is going, and depending on `reclaimPolicy`, its backing resource with it. Check the policy is what you meant before applying.
-- `skipped: not marked for removal (removalAllowed not set)` means syslet found something it has no permission to touch. Either it is genuinely not yours to manage, or the marker never made it onto the host in a prior apply.
-
-A diff full of unexpected `removed` lines is the case the markers above exist for. Fix the input before applying, rather than after.
+Because a diff builds the same plan as an apply, every `removed` and `skipped` line in it is a removal decision made in advance; see [Preview changes with --diff](../how-to/preview-changes-with-diff.md#3-check-removals).
 
 ## Behavior per unit type
 
@@ -115,7 +106,7 @@ A quadlet container service removes its container when it stops, so stopping the
 
 Without something managing both ends, that is how hosts accumulate junk. `reclaimPolicy` is how syslet manages that second end:
 
-- `Retain` (the default) leaves the podman object in place.
+- `Retain` (syslet's default) leaves the podman object in place.
 - `Delete` deletes it along with the unit.
 
 It applies to `volume`, `network`, and `build`, the three types with a podman resource that outlives the unit file. The name and the semantics are borrowed from Kubernetes persistent volumes, where a `persistentVolumeReclaimPolicy` of `Retain` or `Delete` decides the same question about the storage behind a claim.
@@ -131,5 +122,9 @@ It applies to `volume`, `network`, and `build`, the three types with a podman re
 Builds skip the first column, since they are always removed when stale.
 
 Every syslet-managed volume, network, and build is `Retain` unless you say otherwise, on the fail-safe assumption that the data matters: the declaration goes, the bytes stay, and disposing of the resource becomes a manual podman operation. Setting `Delete` is how you tell syslet this one is not worth keeping.
+
+!!! warning "The CUE schema flips these defaults"
+
+    `#SysdefDefaults` sets `removalAllowed: true` on containers, networks, and volumes, and `reclaimPolicy: "Delete"` on volumes and builds, so experimenting in a CUE repository cleans up after itself. Dropping an unlocked CUE volume therefore deletes its data. List every volume worth keeping in `#SysdefLock`, which sets `removalAllowed: false` and `reclaimPolicy: "Retain"`. See [Manage volumes](../how-to/manage-volumes.md#know-your-defaults).
 
 Put a deleted spec back and syslet writes the unit file again, but that only restores the declaration. Under `Retain` the volume is still there and the unit reattaches to it; under `Delete` the recreated volume comes back empty and the deleted image has to be rebuilt.

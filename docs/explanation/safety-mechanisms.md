@@ -1,6 +1,6 @@
 # Safety mechanisms
 
-syslet applies changes on a live system without a human confirming each one, so it leans on a few deliberate guardrails rather than asking for confirmation.
+syslet applies changes on a live system without a human confirming each one, so it leans on a few guardrails rather than asking for confirmation.
 
 ## Removal guardrails
 

@@ -1,4 +1,4 @@
-# Workflow
+# How an apply works
 
 Every syslet invocation runs the same five-step pipeline, whether it's a local dry-run, an SSH push, or a webhookd-triggered git pull:
 
@@ -9,6 +9,9 @@ Every syslet invocation runs the same five-step pipeline, whether it's a local d
 5. **Exit** with a status summary — non-zero if anything failed.
 
 `--diff` runs steps 1–3 and prints the plan; the normal (apply) mode runs all five.
+
+Planning and executing are separate steps on purpose: a diff and an apply build the plan with the same code, and the apply executes exactly that plan.
+There is no separate dry-run code path that could drift from what an apply does, so a diff is a faithful preview.
 
 ## Apply phase ordering
 
@@ -23,15 +26,15 @@ Step 4 always executes in this order, regardless of how many units are affected:
 7. Reload containers that only need an in-place config reload (see below).
 8. Start containers with `desiredState: "running"`.
 
-This ordering is deliberate and invariant: stopping before rewriting avoids a running container referencing a unit file mid-change, files exist before the unit files that reference them, pruning happens before the reload so systemd never sees stale units, and starting happens last so a container only comes up once everything it depends on is in its final state.
+The order never changes: stopping before rewriting avoids a running container referencing a unit file mid-change, files exist before the unit files that reference them, pruning happens before the reload so systemd never sees stale units, and starting happens last so a container only comes up once everything it depends on is in its final state.
 
 ## Restart, reload, or no-op
 
 Not every change to a container causes a restart. syslet distinguishes:
 
 - **No-op** — nothing about the unit or its files changed; no daemon-reload, no service transition.
-- **Metadata-only rewrite** (`NoRecreation`) — the unit file is rewritten and daemon-reloaded, but the backing podman resource and running container are left alone (no stop/start).
-- **Reload** (`ReloadsService`) — only a `configDir`'s content changed; the version symlink is swapped and the unit is reloaded (`ExecReload=`) in place, without stopping the container. See [Reload config without restart](../how-to/reload-config-without-restart.md).
-- **Restart** (`RestartsService`) — the container's own unit options changed (image, ports, a plain `configFiles` file, etc.); the container is stopped, its unit/config files rewritten, and it's started again.
+- **Metadata-only rewrite** — the unit file is rewritten and daemon-reloaded, but the backing podman resource and running container are left alone (no stop/start).
+- **Reload** — only a `configDir`'s content changed; the version symlink is swapped and the unit is reloaded (`ExecReload=`) in place, without stopping the container. See [Mount config files and dirs](../how-to/mount-config-files-and-dirs.md#reload-config-without-a-restart).
+- **Restart** — the container's own unit options changed (image, ports, a plain `configFiles` file, etc.); the container is stopped, its unit/config files rewritten, and it's started again.
 
 This matters when reasoning about a deploy's blast radius: changing a `configDir`'s file content is safe to do frequently (no downtime, if the service supports reload), while changing image tags, volumes, or `configFiles` files always costs a restart.

@@ -2,7 +2,7 @@
 
 A spec is syslet's high-level object, similar in spirit to a Kubernetes resource: a declarative description of one thing you want to exist on the host. Every spec maps to a podman object — a container, volume, network, image, or secret.
 
-The resemblance stops short of the Kubernetes object model, deliberately. syslet aims for a small set of types, so there is no separate ConfigMap-style object and no standalone mount type; config files belong to the container spec that uses them.
+The resemblance stops short of the Kubernetes object model. syslet aims for a small set of types, so there is no separate ConfigMap-style object and no standalone mount type; config files belong to the container spec that uses them.
 
 Four of the five types (`container`, `volume`, `network`, `build`) get there by way of a [quadlet](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html) unit file, which systemd's quadlet generator turns into a systemd service unit, which in turn creates the podman object. So the chain is spec → quadlet unit → systemd unit → podman object. `secret` is the exception: it has no unit file and is written straight to podman's secret store.
 
@@ -10,7 +10,7 @@ Four of the five types (`container`, `volume`, `network`, `build`) get there by 
 
 A running (or stopped) podman container, generating a `.container` quadlet unit. It is the only type with a `desiredState` (`running`/`stopped`), since it's the only unit that's started or stopped as a service — volumes, networks, and builds exist to be referenced by containers, not run themselves.
 
-A container spec manages more than the unit file: some containers needs configuration alongside, so syslet writes both from the same spec in one pass. `configFiles` are single bind-mounted files, the simple case; changing one restarts the container. `configDirs` bind-mount a directory, written as a versioned directory behind a symlink that is swapped atomically — the same trick Kubernetes uses for ConfigMap volume mounts — so the container sees a complete new set of files without a restart — use them when the workload can reload its config in place. See [Mount config files and dirs](../how-to/mount-config-files-and-dirs.md) and [Reload config without restart](../how-to/reload-config-without-restart.md).
+A container spec manages more than the unit file: some containers needs configuration alongside, so syslet writes both from the same spec in one pass. `configFiles` are single bind-mounted files, the simple case; changing one restarts the container. `configDirs` bind-mount a directory, written as a versioned directory behind a symlink that is swapped atomically — the same trick Kubernetes uses for ConfigMap volume mounts — so the container sees a complete new set of files without a restart — use them when the workload can reload its config in place. See [Mount config files and dirs](../how-to/mount-config-files-and-dirs.md).
 
 ## volume
 
@@ -24,7 +24,7 @@ A podman network, generating a `.network` quadlet unit, referenced from a contai
 
 A local image build, generating a `.build` quadlet unit; a container references it by setting `Image` to `<build-name>.build`. Unlike the other types, it always uses a `localhost/`-prefixed image tag, because a build exists to produce a local-only image without a registry round-trip.
 
-Like `container`, a build spec owns files as well as a unit: `containerfile` and `contextFiles` are written into a build context directory on the host. A build unit is meaningless without its context, so the two are versioned and applied together. See [Customize an upstream container image](../how-to/build-a-container-image.md).
+Like `container`, a build spec owns files as well as a unit: `containerfile` and `contextFiles` are written into a build context directory on the host. A build unit is meaningless without its context, so the two are versioned and applied together. See [Build a container image](../how-to/build-a-container-image.md).
 
 ## secret
 
@@ -35,11 +35,3 @@ The spec carries the encrypted YAML text inline rather than a path to it, so a s
 Key names are not encrypted by SOPS, so syslet can read them without a key. That is what lets it validate every container `Secret=` reference against the declared keys before any decryption happens, and keep plaintext out of the plan for specs that turn out to be misreferenced.
 
 Change detection uses `sha256` of the ciphertext, stored as the podman label `syslet/hash`, so plaintext is never hashed or persisted — hashing plaintext would invite offline dictionary attacks against anyone who can read the labels. Containers referencing a changed secret are restarted as part of the same apply. That same label doubles as the ownership marker for pruning; see [Removing specs](removing-specs.md#secrets).
-
-## API versioning
-
-The spec format carries a single linear version in each spec's `apiVersion` field (`v1`, `v2`, …). A breaking change introduces a new version and leaves the old one untouched.
-
-An `apiVersion` newer than the running syslet is rejected instead of being partially understood.
-
-An old version prints a warning once it is superseded. It is removed only in a release whose notes say so.

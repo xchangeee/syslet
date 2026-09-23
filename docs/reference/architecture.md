@@ -2,7 +2,7 @@
 
 This page is for contributors and maintainers working on syslet itself, not for end users writing specs. It maps the packages a spec's data flows through, from raw JSON to a running container.
 
-```
+```text
 cmd/syslet            single CLI entrypoint, wires everything else together
   │
   ▼
@@ -31,8 +31,9 @@ Supporting packages:
 - `internal/util` — shared low-level helpers (hashing, filename generation).
 - Test-only packages (fakes and test harnesses, not part of the runtime): `internal/podman/podmantest`, `internal/systemd/systemdtest`, `test/integration/systest`, `test/log`, `test/oplog`.
 
-## The plan/apply split
+## Plan and apply
 
-`internal/syslet.BuildPlan` computes a full `ApplyPlan` (every operation that would run: writes, deletes, stops, starts) without touching the live system; this is what `--diff` displays. `internal/syslet.Apply` executes a plan produced this way. The two are separate functions specifically so a diff and an apply share the same planning logic. There is no separate "dry-run" code path that could drift from what happens on apply.
+- `internal/syslet.BuildPlan` computes an `ApplyPlan`, every operation an apply would run, without changing the host. `--diff` prints it.
+- `internal/syslet.Apply` executes an `ApplyPlan`.
 
-See [Workflow](../explanation/workflow.md) for the apply phase ordering, and [Safety mechanisms](../explanation/safety-mechanisms.md) for what the three validation stages check.
+See [How an apply works](../explanation/how-an-apply-works.md) for the phase ordering and why planning and applying are split, and [Safety mechanisms](../explanation/safety-mechanisms.md) for the validation stages.

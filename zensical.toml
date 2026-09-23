@@ -8,27 +8,66 @@ nav = [
   { "Home" = "index.md" },
   { "Tutorials" = [
     { "Overview" = "tutorials/index.md" },
-    { "First deployment" = "tutorials/01-first-deployment.md" },
-    { "Updating and diffing" = "tutorials/02-updating-and-diffing.md" },
+    { "Installation" = "tutorials/01-installation.md" },
+    { "Deploy a container" = "tutorials/02-deploy-a-container.md" },
+    { "Set up CUE repository" = "tutorials/03-setup-cue-repository.md" },
+    { "Deploy with CUE" = "tutorials/04-deploy-with-cue.md" },
+    { "Protect a container" = "tutorials/05-protect-a-container.md" },
+    { "Set up SOPS encryption" = "tutorials/06-setup-sops-encryption.md" },
+    { "Add nginx basic auth" = "tutorials/07-add-nginx-basic-auth.md" },
+    { "Set up GitOps with webhookd" = "tutorials/08-setup-gitops-with-webhookd.md" },
   ] },
   { "How-to guides" = [
     { "Overview" = "how-to/index.md" },
-    { "Deploy over SSH" = "how-to/deploy-over-ssh.md" },
-    { "Deploy from a directory" = "how-to/deploy-from-a-directory.md" },
-    { "Set up GitOps with webhookd" = "how-to/set-up-gitops-with-webhookd.md" },
-    { "Preview changes with --diff" = "how-to/preview-changes-with-diff.md" },
-    { "Build a container image" = "how-to/build-a-container-image.md" },
-    { "Mount config files and dirs" = "how-to/mount-config-files-and-dirs.md" },
-    { "Reload config without restart" = "how-to/reload-config-without-restart.md" },
-    { "Build and preview the docs locally" = "how-to/build-and-preview-docs-locally.md" },
+    { "Deploy" = [
+      { "Deploy over SSH" = "how-to/deploy-over-ssh.md" },
+      { "Preview changes with --diff" = "how-to/preview-changes-with-diff.md" },
+      { "Check changes in CI" = "how-to/check-changes-in-ci.md" },
+      { "Roll back a deployment" = "how-to/roll-back-a-deployment.md" },
+      { "Troubleshoot a failed apply" = "how-to/troubleshoot-a-failed-apply.md" },
+      { "Migrate hand-written quadlets" = "how-to/migrate-hand-written-quadlets.md" },
+    ] },
+    { "Containers" = [
+      { "Manage containers" = "how-to/manage-containers.md" },
+      { "Upgrade a container image" = "how-to/upgrade-a-container-image.md" },
+      { "Set environment variables" = "how-to/set-environment-variables.md" },
+      { "Mount config files and dirs" = "how-to/mount-config-files-and-dirs.md" },
+      { "Set systemd service options" = "how-to/set-systemd-service-options.md" },
+      { "Add dependencies between containers" = "how-to/add-dependencies-between-containers.md" },
+      { "Build a container image" = "how-to/build-a-container-image.md" },
+    ] },
+    { "Volumes" = [
+      { "Manage volumes" = "how-to/manage-volumes.md" },
+      { "Rename a volume" = "how-to/rename-a-volume.md" },
+      { "Adopt an existing volume" = "how-to/adopt-an-existing-volume.md" },
+    ] },
+    { "Networks" = [
+      { "Manage networks" = "how-to/manage-networks.md" },
+      { "Connect containers on a network" = "how-to/connect-containers-on-a-network.md" },
+    ] },
+    { "Secrets" = [
+      { "Pass a secret to a container" = "how-to/pass-a-secret-to-a-container.md" },
+      { "Rotate a secret" = "how-to/rotate-a-secret.md" },
+      { "Add a SOPS recipient" = "how-to/add-a-sops-recipient.md" },
+      { "Rotate the SSH host key" = "how-to/rotate-the-ssh-host-key.md" },
+      { "Use a dedicated decryption key" = "how-to/use-a-dedicated-decryption-key.md" },
+    ] },
+    { "CUE" = [
+      { "Lock resources" = "how-to/lock-resources.md" },
+      { "Disable a unit" = "how-to/disable-a-unit.md" },
+      { "Manage several hosts" = "how-to/manage-several-hosts.md" },
+      { "Load secret files" = "how-to/load-secret-files.md" },
+    ] },
   ] },
   { "Explanation" = [
     { "Overview" = "explanation/index.md" },
-    { "Workflow" = "explanation/workflow.md" },
+    { "Why syslet" = "explanation/why-syslet.md" },
+    { "Reconciliation model" = "explanation/reconciliation-model.md" },
     { "Spec types" = "explanation/spec-types.md" },
-    { "Quadlet options" = "explanation/quadlet-options.md" },
-    { "Removing specs" = "explanation/removing-specs.md" },
+    { "How an apply works" = "explanation/how-an-apply-works.md" },
     { "Safety mechanisms" = "explanation/safety-mechanisms.md" },
+    { "Removing specs" = "explanation/removing-specs.md" },
+    { "Secret encryption" = "explanation/secret-encryption.md" },
   ] },
   { "Reference" = [
     { "Overview" = "reference/index.md" },
@@ -39,18 +78,20 @@ nav = [
       { "Network" = "reference/spec-schema/network.md" },
       { "Volume" = "reference/spec-schema/volume.md" },
       { "Secret" = "reference/spec-schema/secret.md" },
+      { "Unit options" = "reference/spec-schema/unit-options.md" },
     ] },
+    { "CUE schema" = "reference/cue-schema.md" },
     { "CLI" = "reference/cli.md" },
+    { "Plan output" = "reference/plan-output.md" },
     { "Daemon config" = "reference/daemon-config.md" },
     { "File layout" = "reference/file-layout.md" },
     { "Architecture" = "reference/architecture.md" },
-    { "Reconciliation model" = "reference/reconciliation-model.md" },
-    { "Comparisons" = "reference/alternatives-and-comparisons.md" },
   ] },
 ]
 
 [project.theme]
 language = "en"
+features = ["navigation.tabs", "content.tabs.link"]
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"
@@ -74,6 +115,17 @@ admonition = {}
 attr_list = {}
 def_list = {}
 toc.permalink = true
+pymdownx.keys = {}
+pymdownx.snippets.base_path = ["docs/tutorials/snippets"]
+pymdownx.snippets.check_paths = true
+pymdownx.inlinehilite = {}
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.highlight.auto_title = true
+pymdownx.highlight.linenums = true
+pymdownx.highlight.linenums_style = "pymdownx-table"
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.tabbed.alternate_style = true
 pymdownx.superfences.custom_fences = [
   { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]

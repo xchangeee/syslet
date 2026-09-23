@@ -1,0 +1,12 @@
+{
+  "apiVersion": "v1",
+  "type": "container",
+  "name": "webapp",
+  "desiredState": "running",
+  "unit": {
+    "Container": {
+      "Image": "docker.io/library/nginx:latest",
+      "PublishPort": ["8080:80", "8443:443"]
+    }
+  }
+}

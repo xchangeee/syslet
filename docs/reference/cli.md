@@ -16,7 +16,7 @@ cat dir/*.json | syslet [--diff] --stdin
 
 An optional path to a spec source:
 
-- A directory of `.json` spec files (see [Deploy from a directory](../how-to/deploy-from-a-directory.md)).
+- A directory of `.json` spec files (see [Deploy over SSH](../how-to/deploy-over-ssh.md#deploy-from-a-directory-on-the-host)).
 - A single file containing a JSON stream of specs (an array, newline-delimited JSON, or concatenated objects).
 
 If omitted and `--stdin` is not set, defaults to `/etc/syslet/config.json`.

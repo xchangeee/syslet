@@ -1,6 +1,11 @@
 # Deploy over SSH
 
-Pipe spec files straight into `syslet --stdin` over SSH. No extra tooling, one round-trip:
+syslet has no SSH logic of its own: you send it specs through `ssh`, either as a stream on stdin or as files already on the host.
+Both need SSH public-key auth to the host.
+
+## Pipe specs to the host
+
+Pipe spec files straight into `syslet --stdin`, with no extra tooling and one round-trip:
 
 ```sh
 # Deploy a directory of specs
@@ -19,4 +24,16 @@ ssh web01 sudo syslet            # re-apply /etc/syslet/config.json
 ssh web01 sudo syslet --diff     # dry-run against the persisted config
 ```
 
-The deployment host must authenticate to the remote host via SSH public-key auth. Password auth is not supported (`syslet` itself has no SSH logic; this is a property of piping through `ssh`).
+## Deploy from a directory on the host
+
+syslet also reads a directory of `.json` spec files directly, which suits specs copied or checked out onto the host:
+
+```sh
+scp -r hosts/web01/ web01:/etc/syslet/hosts/web01/
+ssh web01 sudo syslet /etc/syslet/hosts/web01/
+```
+
+Each `.json` file in the directory is loaded as one spec; other files and subdirectories are ignored.
+
+Applying from a directory or file path doesn't write `/etc/syslet/config.json`.
+The directory you pass is itself the on-disk record.

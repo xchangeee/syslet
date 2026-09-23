@@ -2,7 +2,7 @@
 
 syslet is an **edge-triggered desired-state reconciler**: it runs once per invocation, computes a plan from the difference between the desired specs and the state already on disk, applies that plan, and exits. There is no long-running syslet process or control loop watching for drift.
 
-This is a deliberate contrast to **level-triggered** systems like Kubernetes, which run a continuous reconciliation loop that repeatedly compares desired vs. actual state, even when nothing has changed, so that the system self-heals from drift caused by anything other than the tool itself (a node dying, a pod being killed out of band, etc.). That loop is valuable at fleet scale, but on a single, mostly-static host it mostly adds resource overhead and complexity for very little benefit. See [Why syslet](../index.md#why-syslet) on the homepage.
+This contrasts with **level-triggered** systems like Kubernetes, which run a continuous reconciliation loop that repeatedly compares desired vs. actual state, even when nothing has changed, so that the system self-heals from drift caused by anything other than the tool itself (a node dying, a pod being killed out of band, etc.). That loop is valuable at fleet scale, but on a single, mostly-static host it mostly adds resource overhead and complexity for very little benefit. See [Why syslet](why-syslet.md).
 
 syslet gets the properties people want from that model (declarative desired state, validation before changes land, "converges to what I asked for") without the loop, by delegating the parts that benefit from continuous supervision to systemd:
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=webhookd
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/webhookd/webhookd.env
+Environment=HOME=/root
+ExecStart=/usr/local/bin/webhookd
+StateDirectory=webhookd
+CacheDirectory=webhookd
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

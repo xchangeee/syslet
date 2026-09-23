@@ -1,0 +1,11 @@
+htpasswd: ENC[AES256_GCM,data:Qj4Ka7Spe9tZ0cVAM6b7fkR+cIa2qiaewwY=,iv:...,tag:...,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            ...
+          recipient: age14msfdsrwxl32yr7xj6g9f7q2l7m89ynfq5tt4nv3lrftm0wu3d6sfufjnv
+        - enc: |
+            ...
+          recipient: age1jv7kev8rtaxsay2x89wrmahdx9csqprpx2sqer3qud9vkt0jashszyxed5
+    ...

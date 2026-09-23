@@ -2,8 +2,9 @@
 
 ```json
 {
-  "name": "myapp",
+  "apiVersion": "v1",
   "type": "build",
+  "name": "myapp",
   "unit": {
     "Build": {
       "ImageTag": "localhost/myapp:latest"
@@ -19,9 +20,10 @@
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
+| `apiVersion` | string | yes | `"v1"`. See [API versioning](index.md#api-versioning). |
 | `type` | string | yes | `"build"` |
 | `name` | string | yes | Referenced from a container as `Image: "<name>.build"`. |
-| `unit` | object | yes | Quadlet sections, most importantly `Build.ImageTag`, which **must** be prefixed `localhost/`. syslet rejects a build whose tag isn't local-only. |
+| `unit` | object | yes | Quadlet sections, most importantly `Build.ImageTag`, which **must** start with `localhost/<name>:`. syslet rejects a build whose tag isn't local-only. |
 | `containerfile` | string | yes | The Containerfile content itself (not a path), written to the build's context directory. |
 | `contextFiles` | array | no | Build **context** files copied alongside the Containerfile (for `COPY`/`ADD`). Each entry: `filename` (relative, no path separators), `content`, optional `mode`. Not to be confused with a container's `configFiles`/`configDirs`, which bind-mount into a running container. |
 | `reclaimPolicy` | string | no | `"Retain"` (default) or `"Delete"`. Controls whether the built podman image is deleted along with the unit when the build is pruned. |

@@ -1,0 +1,9 @@
+keys:
+  - &admin age1...   # your admin key
+  - &web01 age1...   # web01's host key
+creation_rules:
+  - path_regex: .*\.enc\.yaml$
+    key_groups:
+      - age:
+          - *admin
+          - *web01
