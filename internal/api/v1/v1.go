@@ -23,7 +23,7 @@ type Container struct {
 	Name           string                    `json:"name"`
 	Unit           map[string]map[string]any `json:"unit"`
 	DesiredState   string                    `json:"desiredState,omitempty"`
-	RemovalAllowed bool                      `json:"removalAllowed,omitempty"`
+	RemovalAllowed *bool                     `json:"removalAllowed,omitempty"`
 	ConfigFiles    []ConfigFileEntry         `json:"configFiles,omitempty"`
 	ConfigDirs     []ConfigDirEntry          `json:"configDirs,omitempty"`
 }
@@ -34,7 +34,7 @@ type Volume struct {
 	Type           string                    `json:"type"`
 	Name           string                    `json:"name"`
 	Unit           map[string]map[string]any `json:"unit"`
-	RemovalAllowed bool                      `json:"removalAllowed,omitempty"`
+	RemovalAllowed *bool                     `json:"removalAllowed,omitempty"`
 	ReclaimPolicy  string                    `json:"reclaimPolicy,omitempty"`
 }
 
@@ -44,7 +44,7 @@ type Network struct {
 	Type           string                    `json:"type"`
 	Name           string                    `json:"name"`
 	Unit           map[string]map[string]any `json:"unit"`
-	RemovalAllowed bool                      `json:"removalAllowed,omitempty"`
+	RemovalAllowed *bool                     `json:"removalAllowed,omitempty"`
 	ReclaimPolicy  string                    `json:"reclaimPolicy,omitempty"`
 }
 

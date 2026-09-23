@@ -15,8 +15,8 @@ import (
 // of the v1 field of api.LoadResult.
 func TestParse_ConvertsV1(t *testing.T) {
 	raw := api.LoadResult{V1: v1.Specs{
-		Containers: []v1.Container{{Name: "c"}},
-		Volumes:    []v1.Volume{{Name: "v"}},
+		Containers: []v1.Container{{Name: "c", Unit: noOpts}},
+		Volumes:    []v1.Volume{{Name: "v", Unit: noOpts}},
 	}}
 	units, err := Parse(raw)
 	if err != nil {
@@ -34,16 +34,21 @@ func TestParse_ConvertsV1(t *testing.T) {
 	}
 }
 
+// noOpts is an empty but present unit map; a spec without one is rejected.
+var noOpts = map[string]map[string]any{}
+
 // --- desiredState parsing ---
 
-func TestDesiredState_DefaultsToStopped(t *testing.T) {
-	units, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c"}}})
+// TestDesiredState_Omitted_ReturnsRunning verifies that an omitted desiredState
+// matches the CUE default in #SysdefDefaults.
+func TestDesiredState_Omitted_ReturnsRunning(t *testing.T) {
+	units, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c", Unit: noOpts}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := units[0].(*model.ContainerUnit)
-	if c.DesiredState != model.DesiredStateStopped {
-		t.Errorf("expected DesiredStateStopped, got %q", c.DesiredState)
+	if c.DesiredState != model.DesiredStateRunning {
+		t.Errorf("expected DesiredStateRunning, got %q", c.DesiredState)
 	}
 }
 
@@ -59,7 +64,7 @@ func TestDesiredState_AllValues(t *testing.T) {
 		{"STOPPED", model.DesiredStateStopped},
 	}
 	for _, tc := range cases {
-		units, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c", DesiredState: tc.input}}})
+		units, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c", Unit: noOpts, DesiredState: tc.input}}})
 		if err != nil {
 			t.Errorf("input %q: unexpected error: %v", tc.input, err)
 			continue
@@ -72,9 +77,43 @@ func TestDesiredState_AllValues(t *testing.T) {
 }
 
 func TestDesiredState_InvalidReturnsError(t *testing.T) {
-	_, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c", DesiredState: "restart"}}})
+	_, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c", Unit: noOpts, DesiredState: "restart"}}})
 	if err == nil {
 		t.Fatal("expected error for invalid desiredState")
+	}
+}
+
+// --- removalAllowed parsing ---
+
+// TestRemovalAllowed_Omitted_ReturnsTrue verifies that an omitted
+// removalAllowed matches the CUE default in #SysdefDefaults.
+func TestRemovalAllowed_Omitted_ReturnsTrue(t *testing.T) {
+	units, err := parseV1(v1.Specs{
+		Containers: []v1.Container{{Name: "c", Unit: noOpts}},
+		Volumes:    []v1.Volume{{Name: "v", Unit: noOpts}},
+		Networks:   []v1.Network{{Name: "n", Unit: noOpts}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !units[0].(*model.ContainerUnit).RemovalAllowed {
+		t.Error("Container: expected RemovalAllowed true")
+	}
+	if !units[1].(*model.VolumeUnit).RemovalAllowed {
+		t.Error("Volume: expected RemovalAllowed true")
+	}
+	if !units[2].(*model.NetworkUnit).RemovalAllowed {
+		t.Error("Network: expected RemovalAllowed true")
+	}
+}
+
+func TestRemovalAllowed_ExplicitFalse_ReturnsFalse(t *testing.T) {
+	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", Unit: noOpts, RemovalAllowed: new(false)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if units[0].(*model.VolumeUnit).RemovalAllowed {
+		t.Error("expected RemovalAllowed false")
 	}
 }
 
@@ -86,11 +125,11 @@ func TestReclaimPolicy_Omitted_ReturnsDelete(t *testing.T) {
 		specs v1.Specs
 		get   func(model.Unit) model.ReclaimPolicy
 	}{
-		{"Volume", v1.Specs{Volumes: []v1.Volume{{Name: "v"}}},
+		{"Volume", v1.Specs{Volumes: []v1.Volume{{Name: "v", Unit: noOpts}}},
 			func(u model.Unit) model.ReclaimPolicy { return u.(*model.VolumeUnit).ReclaimPolicy }},
-		{"Network", v1.Specs{Networks: []v1.Network{{Name: "n"}}},
+		{"Network", v1.Specs{Networks: []v1.Network{{Name: "n", Unit: noOpts}}},
 			func(u model.Unit) model.ReclaimPolicy { return u.(*model.NetworkUnit).ReclaimPolicy }},
-		{"Build", v1.Specs{Builds: []v1.Build{{Name: "b"}}},
+		{"Build", v1.Specs{Builds: []v1.Build{{Name: "b", Unit: noOpts}}},
 			func(u model.Unit) model.ReclaimPolicy { return u.(*model.BuildUnit).ReclaimPolicy }},
 	}
 	for _, tc := range cases {
@@ -107,7 +146,7 @@ func TestReclaimPolicy_Omitted_ReturnsDelete(t *testing.T) {
 }
 
 func TestReclaimPolicy_Retain_ReturnsRetain(t *testing.T) {
-	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", ReclaimPolicy: "Retain"}}})
+	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", Unit: noOpts, ReclaimPolicy: "Retain"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +156,7 @@ func TestReclaimPolicy_Retain_ReturnsRetain(t *testing.T) {
 }
 
 func TestReclaimPolicy_Delete(t *testing.T) {
-	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", ReclaimPolicy: "Delete"}}})
+	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", Unit: noOpts, ReclaimPolicy: "Delete"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +166,7 @@ func TestReclaimPolicy_Delete(t *testing.T) {
 }
 
 func TestReclaimPolicy_InvalidReturnsError(t *testing.T) {
-	_, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", ReclaimPolicy: "GC"}}})
+	_, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", Unit: noOpts, ReclaimPolicy: "GC"}}})
 	if err == nil {
 		t.Fatal("expected error for invalid reclaimPolicy")
 	}
@@ -138,6 +177,7 @@ func TestReclaimPolicy_InvalidReturnsError(t *testing.T) {
 func TestMode_DefaultsTo0644(t *testing.T) {
 	units, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name:        "c",
+		Unit:        noOpts,
 		ConfigFiles: []v1.ConfigFileEntry{{MountPath: "/etc/f", Content: "x"}},
 	}}})
 	if err != nil {
@@ -152,6 +192,7 @@ func TestMode_DefaultsTo0644(t *testing.T) {
 func TestMode_ExplicitOctal(t *testing.T) {
 	units, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name:        "c",
+		Unit:        noOpts,
 		ConfigFiles: []v1.ConfigFileEntry{{MountPath: "/etc/f", Mode: "0600", Content: "x"}},
 	}}})
 	if err != nil {
@@ -166,6 +207,7 @@ func TestMode_ExplicitOctal(t *testing.T) {
 func TestMode_InvalidOctalReturnsError(t *testing.T) {
 	_, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name:        "c",
+		Unit:        noOpts,
 		ConfigFiles: []v1.ConfigFileEntry{{MountPath: "/etc/f", Mode: "rwx", Content: "x"}},
 	}}})
 	if err == nil {
@@ -178,8 +220,9 @@ func TestMode_InvalidOctalReturnsError(t *testing.T) {
 func TestContainerUnit_FieldsAreMapped(t *testing.T) {
 	units, err := parseV1(v1.Specs{Containers: []v1.Container{{
 		Name:           "web",
+		Unit:           noOpts,
 		DesiredState:   "running",
-		RemovalAllowed: true,
+		RemovalAllowed: new(true),
 		ConfigFiles: []v1.ConfigFileEntry{
 			{MountPath: "/etc/app.conf", Mode: "0640", Content: "cfg"},
 		},
@@ -218,6 +261,7 @@ func TestContainerUnit_FieldsAreMapped(t *testing.T) {
 func TestBuildUnit_FieldsAreMapped(t *testing.T) {
 	units, err := parseV1(v1.Specs{Builds: []v1.Build{{
 		Name:          "img",
+		Unit:          noOpts,
 		Containerfile: "FROM scratch",
 		ReclaimPolicy: "Delete",
 		ContextFiles: []v1.BuildFileEntry{
@@ -246,7 +290,8 @@ func TestBuildUnit_FieldsAreMapped(t *testing.T) {
 func TestVolumeUnit_FieldsAreMapped(t *testing.T) {
 	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{
 		Name:           "data",
-		RemovalAllowed: true,
+		Unit:           noOpts,
+		RemovalAllowed: new(true),
 		ReclaimPolicy:  "Delete",
 	}}})
 	if err != nil {
@@ -267,7 +312,8 @@ func TestVolumeUnit_FieldsAreMapped(t *testing.T) {
 func TestNetworkUnit_FieldsAreMapped(t *testing.T) {
 	units, err := parseV1(v1.Specs{Networks: []v1.Network{{
 		Name:           "net",
-		RemovalAllowed: true,
+		Unit:           noOpts,
+		RemovalAllowed: new(true),
 		ReclaimPolicy:  "Delete",
 	}}})
 	if err != nil {
@@ -329,14 +375,42 @@ func TestUnitOptions_InvalidValueReturnsError(t *testing.T) {
 	}
 }
 
+// TestUnitOptions_MissingUnit_ReturnsError verifies that every spec type
+// rendering to a quadlet unit requires a unit map, matching unit! in #UnitSpec.
+func TestUnitOptions_MissingUnit_ReturnsError(t *testing.T) {
+	cases := map[string]v1.Specs{
+		"Container": {Containers: []v1.Container{{Name: "c"}}},
+		"Volume":    {Volumes: []v1.Volume{{Name: "v"}}},
+		"Network":   {Networks: []v1.Network{{Name: "n"}}},
+		"Build":     {Builds: []v1.Build{{Name: "b"}}},
+	}
+	for name, specs := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseV1(specs); err == nil {
+				t.Fatal("expected error for missing unit")
+			}
+		})
+	}
+}
+
+func TestUnitOptions_EmptyUnit_ReturnsNoOptions(t *testing.T) {
+	units, err := parseV1(v1.Specs{Containers: []v1.Container{{Name: "c", Unit: noOpts}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units[0].Options()) != 0 {
+		t.Errorf("expected no options, got %v", units[0].Options())
+	}
+}
+
 // --- mixed unit types ---
 
 func TestParse_AllUnitTypesProduced(t *testing.T) {
 	units, err := parseV1(v1.Specs{
-		Containers: []v1.Container{{Name: "c"}},
-		Volumes:    []v1.Volume{{Name: "v"}},
-		Networks:   []v1.Network{{Name: "n"}},
-		Builds:     []v1.Build{{Name: "b"}},
+		Containers: []v1.Container{{Name: "c", Unit: noOpts}},
+		Volumes:    []v1.Volume{{Name: "v", Unit: noOpts}},
+		Networks:   []v1.Network{{Name: "n", Unit: noOpts}},
+		Builds:     []v1.Build{{Name: "b", Unit: noOpts}},
 	})
 	if err != nil {
 		t.Fatal(err)

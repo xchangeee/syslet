@@ -90,7 +90,7 @@ func convertContainer(r v1.Container) (*model.ContainerUnit, error) {
 		desiredState,
 		configFiles,
 		configDirs,
-		r.RemovalAllowed,
+		parseRemovalAllowed(r.RemovalAllowed),
 	), nil
 }
 
@@ -106,7 +106,7 @@ func convertVolume(r v1.Volume) (*model.VolumeUnit, error) {
 	return model.NewVolumeUnit(
 		model.VolumeUnitRef(r.Name),
 		opts,
-		r.RemovalAllowed,
+		parseRemovalAllowed(r.RemovalAllowed),
 		reclaimPolicy,
 	), nil
 }
@@ -123,7 +123,7 @@ func convertNetwork(r v1.Network) (*model.NetworkUnit, error) {
 	return model.NewNetworkUnit(
 		model.NetworkUnitRef(r.Name),
 		opts,
-		r.RemovalAllowed,
+		parseRemovalAllowed(r.RemovalAllowed),
 		reclaimPolicy,
 	), nil
 }
@@ -190,17 +190,31 @@ func convertConfigDirs(raw []v1.ConfigDirEntry) ([]model.ContainerDirMount, erro
 	return dirs, nil
 }
 
+// parseDesiredState converts a raw string to model.DesiredState, defaulting to
+// Running to match #SysdefDefaults in schema/core, so a JSON spec and a CUE
+// sysdef without desiredState reconcile to the same state.
 func parseDesiredState(s string) (model.DesiredState, error) {
 	switch strings.ToLower(s) {
-	case "stopped", "":
+	case "stopped":
 		return model.DesiredStateStopped, nil
-	case "running":
+	case "running", "":
 		return model.DesiredStateRunning, nil
 	case "oneshot":
 		return model.DesiredStateOneshot, nil
 	default:
 		return "", fmt.Errorf("invalid desiredState %q", s)
 	}
+}
+
+// parseRemovalAllowed resolves removalAllowed, defaulting to true to match
+// #SysdefDefaults in schema/core. The planner prunes a unit dropped from the
+// input only when it allows removal, so an omitted value lets syslet remove it;
+// a spec opts out of pruning with an explicit false.
+func parseRemovalAllowed(b *bool) bool {
+	if b == nil {
+		return true
+	}
+	return *b
 }
 
 // parseReclaimPolicy converts a raw string to model.ReclaimPolicy, defaulting to

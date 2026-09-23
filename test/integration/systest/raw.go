@@ -120,9 +120,8 @@ func marshalSpec(spec model.Unit) ([]byte, error) {
 		if s.DesiredState != "" {
 			raw["desiredState"] = string(s.DesiredState)
 		}
-		if s.RemovalAllowed {
-			raw["removalAllowed"] = true
-		}
+		// Always explicit: an omitted removalAllowed loads as true.
+		raw["removalAllowed"] = s.RemovalAllowed
 		if len(s.FileMounts) > 0 {
 			fileMounts := make([]map[string]any, len(s.FileMounts))
 			for i, c := range s.FileMounts {
@@ -156,16 +155,14 @@ func marshalSpec(spec model.Unit) ([]byte, error) {
 			raw["configDirs"] = configDirs
 		}
 	case *model.VolumeUnit:
-		if s.RemovalAllowed {
-			raw["removalAllowed"] = true
-		}
+		// Always explicit: an omitted removalAllowed loads as true.
+		raw["removalAllowed"] = s.RemovalAllowed
 		if s.ReclaimPolicy != "" {
 			raw["reclaimPolicy"] = string(s.ReclaimPolicy)
 		}
 	case *model.NetworkUnit:
-		if s.RemovalAllowed {
-			raw["removalAllowed"] = true
-		}
+		// Always explicit: an omitted removalAllowed loads as true.
+		raw["removalAllowed"] = s.RemovalAllowed
 		if s.ReclaimPolicy != "" {
 			raw["reclaimPolicy"] = string(s.ReclaimPolicy)
 		}

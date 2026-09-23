@@ -51,8 +51,8 @@ package core
 #UnitSpec: {
 	#Spec
 
-	// Quadlet unit options, keyed by section name and then option name
-	unit?: [#UnitOptionSectionName]: [#UnitOptionSectionKey]: #UnitOptionValue
+	// Quadlet unit options, keyed by section name and then option name; use {} for none
+	unit!: [#UnitOptionSectionName]: [#UnitOptionSectionKey]: #UnitOptionValue
 }
 
 // Fields shared by specs whose unit syslet only prunes when allowed (container, volume, network).

@@ -28,9 +28,13 @@ func ParseSecrets(raw api.LoadResult) ([]model.PodmanSecret, error) {
 	return parseSecretsV1(raw.V1.Secrets)
 }
 
+// convertUnitOptions converts a spec's raw unit map into domain unit options.
+// The unit map is required on every spec that renders to a quadlet unit,
+// matching unit! in #UnitSpec: a missing (or null) map is rejected, while an
+// empty object is valid and yields no options.
 func convertUnitOptions(raw map[string]map[string]any) (model.UnitOptions, error) {
 	if raw == nil {
-		return nil, nil
+		return nil, fmt.Errorf("unit is required (use an empty object for no options)")
 	}
 	opts := make(model.UnitOptions, len(raw))
 	for section, keys := range raw {
