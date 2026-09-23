@@ -90,3 +90,41 @@ func TestSecretUpsertFails_ReturnsNoError(t *testing.T) {
 	// remaining work when one operation fails.
 	env.AssertSecretsUpserted("myapp-db-password")
 }
+
+// TestNetworkRecreateDeleteFails_Errors covers a delete that is part of
+// converging a unit rather than reclaiming a leftover. A changed network is
+// recreated by deleting the podman network so its service can create it anew;
+// if the delete fails, the service's create-if-missing keeps the old network
+// with its old settings, so the apply must fail instead of reporting success.
+func TestNetworkRecreateDeleteFails_Errors(t *testing.T) {
+	env := systest.New(t)
+	env.Podman.FailOn = map[string]error{
+		"delete-network:frontend": fmt.Errorf("network is in use"),
+	}
+	env.SeedUnit(systest.NewNetwork("frontend", "bridge"))
+	env.SetUnitState("frontend-network.service", "active")
+	env.Specs(systest.NewNetwork("frontend", "macvlan"))
+
+	if err := env.ApplyErr(); err == nil {
+		t.Error("expected apply to fail when a changed network could not be deleted")
+	}
+	if !env.Logs.Contains("network is in use") {
+		t.Errorf("expected the delete failure to be logged, got:\n%s", env.Logs.String())
+	}
+}
+
+// TestStaleNetworkReclaimFails_ReturnsNoError pins that reclaiming a network
+// whose spec is gone stays best-effort, like volumes.
+func TestStaleNetworkReclaimFails_ReturnsNoError(t *testing.T) {
+	env := systest.New(t)
+	env.Podman.FailOn = map[string]error{
+		"delete-network:oldnet": fmt.Errorf("network is in use"),
+	}
+	env.SeedUnit(systest.NewNetwork("oldnet", "bridge",
+		systest.Removable, systest.Reclaim(model.ReclaimPolicyDelete)))
+	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
+
+	if err := env.ApplyErr(); err != nil {
+		t.Errorf("expected a failed network reclaim not to fail the apply, got: %v", err)
+	}
+}

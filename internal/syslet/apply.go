@@ -16,7 +16,8 @@ import (
 //  2. Write config files
 //  3. Write unit files
 //  4. Remove pruned unit files and config dirs
-//  5. Delete podman volumes and networks (if ReclaimPolicy is "Delete")
+//  5. Delete podman volumes and networks (if ReclaimPolicy is "Delete", or to
+//     recreate a changed network)
 //  6. Single daemon-reload
 //  7. Start containers that should be running
 func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr systemd.JournalReader, pc podman.Interface, mgrs filestore.FileManagers, plan *ApplyPlan) error {
@@ -129,10 +130,15 @@ func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr syst
 			func() error { return pc.DeleteVolume(ctx, string(op.volume)) },
 			"name", op.volume)
 	}
+	// A failed recreate delete fails the network unit: its service would
+	// otherwise find the old network and keep it with the old settings.
 	for _, op := range plan.DeletePodmanNetworks {
-		r.exec("deleting podman network",
-			func() error { return pc.DeleteNetwork(ctx, string(op.network)) },
-			"name", op.network)
+		deleteFn := func() error { return pc.DeleteNetwork(ctx, string(op.network)) }
+		if op.recreate {
+			r.execUnit("deleting podman network", op.network.FullName(), deleteFn, "name", op.network)
+		} else {
+			r.exec("deleting podman network", deleteFn, "name", op.network)
+		}
 	}
 	for _, op := range plan.DeletePodmanImages {
 		r.exec("deleting podman image",

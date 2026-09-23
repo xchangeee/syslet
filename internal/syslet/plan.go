@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 
 	gounit "github.com/coreos/go-systemd/v22/unit"
 	"github.com/spf13/afero"
@@ -112,8 +114,13 @@ type DeletePodmanVolumeOp struct {
 	volume model.VolumeUnitRef
 }
 
+// DeletePodmanNetworkOp removes a podman network. recreate marks a delete that
+// is part of converging a changed network unit (its service recreates the
+// network afterwards) rather than reclaiming a removed one: Apply fails the unit
+// when a recreate delete fails, but keeps reclamation best-effort.
 type DeletePodmanNetworkOp struct {
-	network model.NetworkUnitRef
+	network  model.NetworkUnitRef
+	recreate bool
 }
 
 type DeletePodmanImageOp struct {
@@ -248,8 +255,15 @@ func (p *ApplyPlan) DeletePodmanVolume(ref model.VolumeUnitRef) {
 	p.DeletePodmanVolumes = append(p.DeletePodmanVolumes, DeletePodmanVolumeOp{volume: ref})
 }
 
+// DeletePodmanNetwork schedules reclaiming the podman network of a removed network unit.
 func (p *ApplyPlan) DeletePodmanNetwork(ref model.NetworkUnitRef) {
 	p.DeletePodmanNetworks = append(p.DeletePodmanNetworks, DeletePodmanNetworkOp{network: ref})
+}
+
+// RecreatePodmanNetwork schedules deleting the podman network of a changed
+// network unit, so its service creates it again with the new settings.
+func (p *ApplyPlan) RecreatePodmanNetwork(ref model.NetworkUnitRef) {
+	p.DeletePodmanNetworks = append(p.DeletePodmanNetworks, DeletePodmanNetworkOp{network: ref, recreate: true})
 }
 
 func (p *ApplyPlan) DeletePodmanImage(tag model.ImageTag) {
@@ -359,7 +373,12 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 	if err != nil {
 		return nil, fmt.Errorf("finding stale units: %w", err)
 	}
+	heldBy := skippedContainerReferences(stale)
 	for _, u := range stale {
+		if holders := heldBy[u.ref.FullName()]; len(holders) > 0 {
+			plan.RecordResult(u.ref.FullName(), StatusSkipped, "still referenced by "+strings.Join(holders, ", "))
+			continue
+		}
 		switch u.ref.UnitType() {
 		case model.UnitTypeContainer:
 			buildPlanUnitStaleContainer(ctx, sd, plan, u.ref.(model.ContainerUnitRef), u.options)
@@ -434,6 +453,30 @@ func loadStaleUnits(sd *systemd.Client, desiredNames map[model.FullUnitName]bool
 		}
 	}
 	return stale, nil
+}
+
+// skippedContainerReferences maps each volume, network, and build unit to the
+// stale containers that reference it but are kept because their removal is not
+// allowed. It is the host-side counterpart of validate.PostRender, which only
+// checks references within the desired set: a skipped container keeps running
+// on the host, so BuildPlan must skip the units it depends on as a whole rather
+// than delete their unit file (which breaks the container's quadlet generation)
+// or reclaim their podman resource. Stale containers that are removed are
+// stopped before reclamation runs, so they hold nothing back.
+func skippedContainerReferences(stale []staleUnit) map[model.FullUnitName][]string {
+	heldBy := make(map[model.FullUnitName][]string)
+	for _, u := range stale {
+		if u.ref.UnitType() != model.UnitTypeContainer || render.IsUnitRemovalAllowed(u.options) {
+			continue
+		}
+		for _, ref := range containerUnitReferences(u.options) {
+			heldBy[ref] = append(heldBy[ref], string(u.ref.FullName()))
+		}
+	}
+	for _, holders := range heldBy {
+		slices.Sort(holders)
+	}
+	return heldBy
 }
 
 type unitChanges struct {
@@ -523,6 +566,6 @@ func buildPlanUnitStaleResource(plan *ApplyPlan, fullName model.FullUnitName, op
 			deleteFn()
 		}
 	} else {
-		plan.RecordResult(fullName, StatusSkipped, "not marked for removal (removalAllowed not set)")
+		plan.RecordResult(fullName, StatusSkipped, render.RemovalSkipReason(options))
 	}
 }

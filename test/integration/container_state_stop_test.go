@@ -19,6 +19,20 @@ func TestNewStoppedContainer_WritesUnitOnly(t *testing.T) {
 	env.AssertReloaded()
 }
 
+// TestNewStoppedContainer_ServiceAlreadyActive_StopsService is the stopped
+// counterpart of TestNewContainer_ServiceAlreadyActive_RestartsService.
+func TestNewStoppedContainer_ServiceAlreadyActive_StopsService(t *testing.T) {
+	env := systest.New(t)
+	env.SetUnitState("webapp.service", "active")
+	env.Specs(systest.NewContainer("webapp", "nginx:latest", systest.Stopped))
+
+	env.Apply()
+
+	env.AssertUnitExists("webapp.container")
+	env.AssertStopped("webapp.service")
+	env.AssertNoneStarted()
+}
+
 func TestContainerDesiredStateStopped_StopsService(t *testing.T) {
 	env := systest.New(t)
 	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))

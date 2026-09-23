@@ -15,7 +15,7 @@ import (
 )
 
 // TestPlanWithSecretChanges_GroupsBySpec verifies that syslet.DisplayPlan groups secret upserts and
-// deletes by spec name, showing plaintext new values and "(secret)" for old values.
+// deletes by spec name, hiding every value behind "(secret)" so a plan is safe for shared CI logs.
 func TestPlanWithSecretChanges_GroupsBySpec(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -36,8 +36,8 @@ func TestPlanWithSecretChanges_GroupsBySpec(t *testing.T) {
 Secret changes:
   myapp:
     - old-token=(secret)
-    + db-password=s3cr3t
-    + api-key=newkey
+    + db-password=(secret)
+    + api-key=(secret)
 
 Summary:
 UNIT                                     STATUS     CHANGES
@@ -51,7 +51,7 @@ UNIT                                     STATUS     CHANGES
 			wantOutput: `
 Secret changes:
   infra:
-    + cert=pem-data
+    + cert=(secret)
 
 Summary:
 UNIT                                     STATUS     CHANGES
@@ -80,9 +80,9 @@ UNIT                                     STATUS     CHANGES
 			wantOutput: `
 Secret changes:
   app1:
-    + token=tok1
+    + token=(secret)
   app2:
-    + key=key2
+    + key=(secret)
 
 Summary:
 UNIT                                     STATUS     CHANGES
@@ -99,6 +99,29 @@ UNIT                                     STATUS     CHANGES
 			systest.AssertPlanOutput(t, plan, tt.wantOutput)
 		})
 	}
+}
+
+// TestPlanWithSecretChanges_WithShowSecrets_PrintsValues covers the local
+// opt-in: new values are printed in plain text, while deleted ones stay
+// "(secret)" because the plan never holds their old value.
+func TestPlanWithSecretChanges_WithShowSecrets_PrintsValues(t *testing.T) {
+	plan := &syslet.ApplyPlan{
+		UpsertPodmanSecrets: []syslet.UpsertPodmanSecretOp{
+			{SpecName: "myapp", Name: "myapp-db-password", Value: model.Plaintext("s3cr3t")},
+		},
+		DeletePodmanSecrets: []syslet.DeletePodmanSecretOp{
+			{SpecName: "myapp", Name: "myapp-old-token"},
+		},
+	}
+	systest.AssertPlanOutputWithOptions(t, plan, syslet.DisplayOptions{ShowSecrets: true}, `
+Secret changes:
+  myapp:
+    - old-token=(secret)
+    + db-password=s3cr3t
+
+Summary:
+UNIT                                     STATUS     CHANGES
+`)
 }
 
 // TestPlanWithValidationErrors_PrintsErrorsOnly verifies that ValidateUnits failures are recorded

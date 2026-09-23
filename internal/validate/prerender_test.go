@@ -545,3 +545,47 @@ func TestPreRender_WithValidSecrets_ReturnsNil(t *testing.T) {
 		t.Errorf("PreRender() unexpected error: %v", err)
 	}
 }
+
+func TestContainerOneshotRequiresOneshotState(t *testing.T) {
+	oneshot := model.UnitOptions{
+		"Container": {model.SectionKey("Image"): model.UV("busybox")},
+		"Service":   {model.SectionKey("Type"): model.UV("Oneshot")},
+	}
+	tests := []struct {
+		name    string
+		opts    model.UnitOptions
+		state   model.DesiredState
+		wantErr bool
+	}{
+		{"running with Type=oneshot", oneshot, model.DesiredStateRunning, true},
+		{"oneshot state with Type=oneshot", oneshot, model.DesiredStateOneshot, false},
+		{"stopped with Type=oneshot", oneshot, model.DesiredStateStopped, false},
+		{"running without Type", nil, model.DesiredStateRunning, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := model.NewContainerUnit(model.ContainerUnitRef("job"), tt.opts, tt.state, nil, false)
+			err := ContainerOneshotRequiresOneshotState(spec)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected an error")
+				}
+				if !strings.Contains(err.Error(), `desiredState: "oneshot"`) {
+					t.Errorf("error should point to desiredState oneshot, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestPreRender_RunningOneshotContainer_ReturnsError(t *testing.T) {
+	opts := model.UnitOptions{"Service": {model.SectionKey("Type"): model.UV("oneshot")}}
+	spec := model.NewContainerUnit(model.ContainerUnitRef("job"), opts, model.DesiredStateRunning, nil, false)
+	if err := PreRender([]model.Unit{spec}, nil); err == nil {
+		t.Fatal("PreRender() should reject desiredState running with Type=oneshot")
+	}
+}

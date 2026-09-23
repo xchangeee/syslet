@@ -21,6 +21,21 @@ func TestContainerImageChanged_RestartsService(t *testing.T) {
 	env.AssertReloaded()
 }
 
+// TestNewContainer_ServiceAlreadyActive_RestartsService covers a service that
+// runs without a unit file syslet knows, e.g. a hand-written quadlet moved away
+// without stopping it. A plain start would be a no-op and leave the old
+// container running, so syslet must restart it onto the new unit.
+func TestNewContainer_ServiceAlreadyActive_RestartsService(t *testing.T) {
+	env := systest.New(t)
+	env.SetUnitState("webapp.service", "active")
+	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
+
+	env.Apply()
+
+	env.AssertUnitExists("webapp.container")
+	env.AssertRestarted("webapp.service")
+}
+
 // TestContainerConfigChanges varies how a running container's single-file config
 // mounts differ from what is installed. Unlike a config *directory*, whose
 // contents can be re-synced under a live container (see

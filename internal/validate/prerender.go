@@ -40,6 +40,7 @@ func PreRender(units []model.Unit, secrets []model.PodmanSecret) error {
 			NoXSysletSection,
 			ContainerConfigMountPaths,
 			ContainerConfigDirsRequireExecReload,
+			ContainerOneshotRequiresOneshotState,
 			ContainerConfigDirMountPaths,
 			ContainerNoOverlappingMountPaths,
 			ContainerConfigDirFilenames,
@@ -250,6 +251,27 @@ func ContainerConfigDirsRequireExecReload(unit model.Unit) error {
 		}
 	}
 	return fmt.Errorf("unit %s: configDirs require [Service] ExecReload= to be set", container.Ref())
+}
+
+// ContainerOneshotRequiresOneshotState rejects a user-set [Service] Type=oneshot
+// on a container with desiredState "running". The renderer adds Restart=always
+// for running containers, which systemd refuses for oneshot services; jobs are
+// expressed with desiredState "oneshot" instead, which sets Type=oneshot itself.
+func ContainerOneshotRequiresOneshotState(unit model.Unit) error {
+	container, ok := unit.(*model.ContainerUnit)
+	if !ok || container.DesiredState != model.DesiredStateRunning {
+		return nil
+	}
+	typeVal, ok := container.Options()[render.SectionService][render.KeyServiceType]
+	if !ok {
+		return nil
+	}
+	for _, v := range typeVal.Values() {
+		if strings.EqualFold(v, render.ServiceTypeOneshot) {
+			return fmt.Errorf(`container %q: [Service] Type=oneshot conflicts with desiredState: "running"; use desiredState: "oneshot" for jobs`, container.Ref())
+		}
+	}
+	return nil
 }
 
 // BuildConfigFilenames ensures each config entry has a valid relative filename.

@@ -135,10 +135,10 @@ func TestStaging_AnalyzerFails_ReturnsErrorPerFile(t *testing.T) {
 	}
 }
 
-// TestStaging_AnalyzerWarns_ReturnsWarning verifies that systemd-analyze output on
-// stderr with exit code 0 (e.g. "ignoring: Invalid argument" warnings) is surfaced
-// as a warning message rather than silently dropped.
-func TestStaging_AnalyzerWarns_ReturnsWarning(t *testing.T) {
+// TestStaging_AnalyzerWarns_ReturnsError verifies that systemd-analyze output on
+// stderr with exit code 0 (e.g. "ignoring: Invalid argument" warnings) is returned
+// as an error message, so warnings refuse the apply like verification failures.
+func TestStaging_AnalyzerWarns_ReturnsError(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	az := &systemdtest.MockAnalyzeRunner{
 		Result: systemd.AnalyzeResult{
@@ -156,10 +156,10 @@ func TestStaging_AnalyzerWarns_ReturnsWarning(t *testing.T) {
 
 	msgs := s.Validate(context.Background(), testlog.New(), &systemdtest.MockJournalReader{})
 	if len(msgs) == 0 {
-		t.Fatal("expected warning message from analyzer stderr, got none")
+		t.Fatal("expected error message from analyzer stderr, got none")
 	}
 	if !containsAll(msgs[0], "mosquitto.service", "Invalid memory limit") {
-		t.Errorf("expected warning message with unit name and diagnostic, got: %v", msgs[0])
+		t.Errorf("expected error message with unit name and diagnostic, got: %v", msgs[0])
 	}
 }
 

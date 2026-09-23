@@ -31,7 +31,9 @@ func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.
 		return nil
 	}
 	if len(secrets) > 0 && decryptor == nil {
-		plan.RecordGenericError("secrets present in spec but no decryptor configured (SSH key path not set?)")
+		// main only passes a nil decryptor when the default SSH key is missing
+		// and no keys are cached; it has already logged a warning naming the path.
+		plan.RecordGenericError("secrets present in spec but no age key available (no SSH key at the default sshKeyPath and no cached keys)")
 		return nil
 	}
 

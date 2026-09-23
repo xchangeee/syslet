@@ -52,16 +52,16 @@ func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *file
 
 	action := actionNone
 	if !render.IsOneshotUnit(r.UnitOptions) {
-		var isRunning bool
-		if !changes.isNew {
-			state, err := sd.ContainerState(ctx, unitRef)
-			if err != nil {
-				plan.RecordError(unitRef.FullName(), fmt.Sprintf("querying state of %s: %v", unitRef.FullName(), err))
-				return
-			}
-			isRunning = state.ActiveState.IsRunning()
+		// New units are queried too: a service of the same name may already run
+		// from a unit file syslet didn't write (e.g. a hand-written quadlet moved
+		// away without stopping it). systemd reports an unknown service as
+		// inactive rather than failing, so a genuinely new unit plans a start.
+		state, err := sd.ContainerState(ctx, unitRef)
+		if err != nil {
+			plan.RecordError(unitRef.FullName(), fmt.Sprintf("querying state of %s: %v", unitRef.FullName(), err))
+			return
 		}
-		action = changes.planLifecycle(isRunning)
+		action = changes.planLifecycle(state.ActiveState.IsRunning())
 		switch action {
 		case actionRestart:
 			plan.StopSystemdService(unitRef)
@@ -211,8 +211,10 @@ func (c *containerChanges) markSecretChanged()     { c.secretChanged = true }
 
 // planLifecycle converts detected changes and current runtime state into a single action.
 // Exactly one action is returned; reload and stop/start are mutually exclusive by construction.
+// A new unit whose service is already running counts as a restart trigger: the running
+// container came from another unit file, and only a stop/start moves it onto this one.
 func (c containerChanges) planLifecycle(isRunning bool) containerAction {
-	needsRestart := (c.meaningfullyChanged || c.configFileChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged) && isRunning
+	needsRestart := (c.isNew || c.meaningfullyChanged || c.configFileChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged) && isRunning
 	switch {
 	case needsRestart && c.desiredState == model.DesiredStateRunning:
 		return actionRestart
@@ -333,6 +335,29 @@ func containerReferencesChangedSecret(opts []gounit.UnitOption, changedSecrets m
 	return false
 }
 
+// containerUnitReferences lists the volume, network, and build units a
+// container's installed options point at, using the same key parsing as the
+// containerReferencesChanged* helpers above. skippedContainerReferences uses it
+// to keep those units in place while a skipped container still depends on them.
+func containerUnitReferences(opts []gounit.UnitOption) []model.FullUnitName {
+	var refs []model.FullUnitName
+	for _, val := range render.FindOptValues(opts, render.SectionContainer, render.KeyContainerVolume) {
+		source, _, _ := strings.Cut(val, ":")
+		if strings.HasSuffix(source, ".volume") {
+			refs = append(refs, model.FullUnitName(source))
+		}
+	}
+	for _, val := range render.FindOptValues(opts, render.SectionContainer, render.KeyContainerNetwork) {
+		if strings.HasSuffix(val, ".network") {
+			refs = append(refs, model.FullUnitName(val))
+		}
+	}
+	if img := render.FindOptValue(opts, render.SectionContainer, render.KeyContainerImage); strings.HasSuffix(img, ".build") {
+		refs = append(refs, model.FullUnitName(img))
+	}
+	return refs
+}
+
 func buildPlanUnitStaleContainer(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, containerName model.ContainerUnitRef, options []gounit.UnitOption) {
 	fullName := containerName.FullName()
 	if render.IsUnitRemovalAllowed(options) {
@@ -346,6 +371,6 @@ func buildPlanUnitStaleContainer(ctx context.Context, sd *systemd.Client, plan *
 			}
 		}
 	} else {
-		plan.RecordResult(fullName, StatusSkipped, "not marked for removal (removalAllowed not set)")
+		plan.RecordResult(fullName, StatusSkipped, render.RemovalSkipReason(options))
 	}
 }

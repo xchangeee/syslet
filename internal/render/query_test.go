@@ -69,6 +69,27 @@ func TestIsUnitRemovalAllowed_Nil(t *testing.T) {
 	}
 }
 
+// --- RemovalSkipReason pure function tests ---
+
+func TestRemovalSkipReason_MarkerStates(t *testing.T) {
+	cases := []struct {
+		name string
+		opts []gounit.UnitOption
+		want string
+	}{
+		{"False", []gounit.UnitOption{NewUnitOption(SectionXSyslet, KeyXSysletRemovalAllowed, "false")}, SkipReasonProtected},
+		{"Absent", []gounit.UnitOption{NewUnitOption(SectionContainer, KeyContainerName, "webapp")}, SkipReasonNotManaged},
+		{"Nil", nil, SkipReasonNotManaged},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RemovalSkipReason(tc.opts); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsUnitRemovalAllowed_CaseInsensitive(t *testing.T) {
 	opts := []gounit.UnitOption{
 		NewUnitOption(SectionXSyslet, KeyXSysletRemovalAllowed, "TRUE"),

@@ -653,10 +653,16 @@ func (e *Env) AssertBuildContextAbsent(unit string) {
 // into a buffer and comparing is harness plumbing, not part of any test's
 // intent, so it lives here.
 
-// renderPlan returns what syslet.DisplayPlan writes for a plan.
+// renderPlan returns what syslet.DisplayPlan writes for a plan with the
+// default (redacting) options.
 func renderPlan(plan *syslet.ApplyPlan) string {
+	return renderPlanWithOptions(plan, syslet.DisplayOptions{})
+}
+
+// renderPlanWithOptions returns what syslet.DisplayPlan writes for a plan.
+func renderPlanWithOptions(plan *syslet.ApplyPlan, opts syslet.DisplayOptions) string {
 	var buf bytes.Buffer
-	syslet.DisplayPlan(&buf, plan)
+	syslet.DisplayPlan(&buf, plan, opts)
 	return buf.String()
 }
 
@@ -673,6 +679,15 @@ func AssertPlanHasErrors(t *testing.T, plan *syslet.ApplyPlan) {
 func AssertPlanOutput(t *testing.T, plan *syslet.ApplyPlan, want string) {
 	t.Helper()
 	if got := renderPlan(plan); got != want {
+		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", want, got)
+	}
+}
+
+// AssertPlanOutputWithOptions is AssertPlanOutput for non-default display
+// options, such as ShowSecrets.
+func AssertPlanOutputWithOptions(t *testing.T, plan *syslet.ApplyPlan, opts syslet.DisplayOptions, want string) {
+	t.Helper()
+	if got := renderPlanWithOptions(plan, opts); got != want {
 		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", want, got)
 	}
 }

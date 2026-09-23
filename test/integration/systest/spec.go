@@ -79,9 +79,14 @@ func Stale(b *specBuild) {
 // Removable marks a unit as removable without touching its desired state.
 func Removable(b *specBuild) { b.removalAllowed = true }
 
-// Oneshot sets [Service] Type=oneshot, making the unit a run-to-completion job
-// rather than a long-running service.
-func Oneshot(b *specBuild) { b.set("Service", "Type", model.UV("oneshot")) }
+// Oneshot makes the unit a run-to-completion job rather than a long-running
+// service: desiredState "oneshot" plus [Service] Type=oneshot. Both are set,
+// since the validator rejects Type=oneshot on the default desired-running
+// container.
+func Oneshot(b *specBuild) {
+	b.desiredState = model.DesiredStateOneshot
+	b.set("Service", "Type", model.UV("oneshot"))
+}
 
 // Reclaim sets the reclaim policy, which decides whether the backing podman
 // resource is deleted when the unit goes away.

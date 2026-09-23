@@ -122,7 +122,8 @@ func (s *Staging) Validate(ctx context.Context, logger *slog.Logger, jr systemd.
 				msgs = append(msgs, fmt.Sprintf("unit verification failed: %s", output))
 			} else if output != "" {
 				// systemd-analyze exits 0 for non-fatal warnings (e.g. "ignoring: Invalid argument").
-				// Surface them so operators see diagnostics even when the unit technically loads.
+				// They are errors like any other message here and refuse the apply: an ignored
+				// setting means the unit wouldn't run as specified, and the operator fixes the spec.
 				msgs = append(msgs, fmt.Sprintf("unit verification warnings: %s", output))
 			}
 		}

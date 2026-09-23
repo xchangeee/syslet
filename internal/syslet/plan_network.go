@@ -21,7 +21,7 @@ func buildPlanUnitNetwork(sd *systemd.Client, plan *ApplyPlan, r render.Rendered
 	networkRef := r.Unit.(*model.NetworkUnit).TypedUnitRef()
 	if !uc.isNew && uc.meaningfullyChanged {
 		plan.StopSystemdService(networkRef)
-		plan.DeletePodmanNetwork(networkRef)
+		plan.RecreatePodmanNetwork(networkRef)
 		changedNetworks[networkRef] = true
 	}
 	uc.applyToPlan(plan)

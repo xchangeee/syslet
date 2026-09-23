@@ -18,11 +18,20 @@ func secretKey(specName, fullName string) string {
 	return strings.TrimPrefix(fullName, specName+"-")
 }
 
+// DisplayOptions controls what DisplayPlan reveals. The zero value is the safe
+// default for output that may land in shared logs, such as a CI job running
+// `syslet --diff`; the CLI fills it from the environment.
+type DisplayOptions struct {
+	// ShowSecrets prints decrypted secret values instead of "(secret)". Meant
+	// for local use only.
+	ShowSecrets bool
+}
+
 // DisplayPlan prints a human-readable diff showing what would change.
 // It shows operations that would be performed and the final status of each unit.
 // If the plan has any errors (validation or per-unit), only those errors are
 // printed — the diff is suppressed because the plan cannot safely be applied.
-func DisplayPlan(w io.Writer, plan *ApplyPlan) {
+func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	if plan.HasErrors() {
 		_, _ = fmt.Fprintln(w, "Validation errors:")
 		for _, msg := range plan.Errors {
@@ -172,7 +181,11 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan) {
 			}
 			for _, op := range plan.UpsertPodmanSecrets {
 				if op.SpecName == specName {
-					_, _ = fmt.Fprintf(w, "    + %s=%s\n", secretKey(specName, op.Name), op.Value)
+					value := "(secret)"
+					if opts.ShowSecrets {
+						value = string(op.Value)
+					}
+					_, _ = fmt.Fprintf(w, "    + %s=%s\n", secretKey(specName, op.Name), value)
 				}
 			}
 		}
