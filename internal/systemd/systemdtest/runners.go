@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/systemd"
 )
 
 // MockAnalyzeRunner is a stub systemd.AnalyzeRunner that returns a fixed

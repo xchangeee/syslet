@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 // An in-place reload is its own outcome, never interchangeable with a restart:

@@ -5,7 +5,7 @@ package integration
 import (
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 func TestNewStoppedContainer_WritesUnitOnly(t *testing.T) {

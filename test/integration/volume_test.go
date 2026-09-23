@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/systemd/systemdtest"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 // deletable marks a volume as removable with the Delete reclaim policy — the

@@ -5,8 +5,8 @@ package integration
 import (
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 // What a configDir change does to the *container* — reload, restart or nothing —

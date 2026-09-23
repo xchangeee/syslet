@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // applyRunner groups the logger and plan so Apply loops can call exec/execUnit

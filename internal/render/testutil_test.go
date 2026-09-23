@@ -5,8 +5,8 @@ import (
 
 	gounit "github.com/coreos/go-systemd/v22/unit"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/util"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/util"
 )
 
 // testContainerResolve returns a ContainerResolverFactory that mirrors the production

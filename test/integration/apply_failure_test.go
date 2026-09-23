@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 // syslet.Apply treats its operations as two classes, and the difference is a

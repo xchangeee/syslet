@@ -16,8 +16,8 @@ package systemdtest
 import (
 	"context"
 
-	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/test/oplog"
+	"github.com/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/test/oplog"
 )
 
 // systemdChannel labels this fake's entries on a shared oplog timeline.

@@ -4,9 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/api"
-	v1 "codeberg.org/xchangeee/syslet/internal/api/v1"
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/api"
+	v1 "github.com/xchangeee/syslet/internal/api/v1"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // --- version dispatch ---

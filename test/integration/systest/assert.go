@@ -15,11 +15,11 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/podman/podmantest"
-	"codeberg.org/xchangeee/syslet/internal/syslet"
-	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
-	"codeberg.org/xchangeee/syslet/internal/util"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/podman/podmantest"
+	"github.com/xchangeee/syslet/internal/syslet"
+	"github.com/xchangeee/syslet/internal/systemd/systemdtest"
+	"github.com/xchangeee/syslet/internal/util"
 )
 
 // The systemd assertions are Env methods because Env already holds both the

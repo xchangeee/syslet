@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"codeberg.org/xchangeee/syslet/test/oplog"
+	"github.com/xchangeee/syslet/test/oplog"
 )
 
 // syslet.Apply is a strictly phased executor, and the phases are not an

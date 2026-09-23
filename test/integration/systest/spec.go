@@ -3,7 +3,7 @@
 package systest
 
 import (
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // Spec builders produce the model.Unit values a test declares or seeds.

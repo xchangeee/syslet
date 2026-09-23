@@ -15,7 +15,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	v1 "codeberg.org/xchangeee/syslet/internal/api/v1"
+	v1 "github.com/xchangeee/syslet/internal/api/v1"
 )
 
 // LoadResult groups the decoded specs by apiVersion. Each supported version

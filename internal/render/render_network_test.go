@@ -3,7 +3,7 @@ package render
 import (
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 func TestNetworkSpec_Render_BasicNetwork(t *testing.T) {

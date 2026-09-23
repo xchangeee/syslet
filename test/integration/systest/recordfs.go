@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/test/oplog"
+	"github.com/xchangeee/syslet/test/oplog"
 )
 
 // The filesystem is the third channel of side effects syslet.Apply produces,

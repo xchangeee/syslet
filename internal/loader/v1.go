@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	v1 "codeberg.org/xchangeee/syslet/internal/api/v1"
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/sops"
-	"codeberg.org/xchangeee/syslet/internal/util"
+	v1 "github.com/xchangeee/syslet/internal/api/v1"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/sops"
+	"github.com/xchangeee/syslet/internal/util"
 )
 
 // This file converts apiVersion v1 specs into domain objects. Like the v1

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/render"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/render"
 )
 
 // PostRender performs post-render validation on rendered unit options.

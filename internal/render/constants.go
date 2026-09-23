@@ -1,6 +1,6 @@
 package render
 
-import "codeberg.org/xchangeee/syslet/internal/model"
+import "github.com/xchangeee/syslet/internal/model"
 
 // Unit file sections.
 const (

@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/systemd/systemdtest"
 )
 
 func TestClient_DaemonReload(t *testing.T) {

@@ -1,4 +1,4 @@
-module codeberg.org/xchangeee/syslet
+module github.com/xchangeee/syslet
 
 go 1.27.0
 

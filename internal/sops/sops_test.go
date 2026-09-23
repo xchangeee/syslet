@@ -6,8 +6,8 @@ import (
 	"sort"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/sops"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/sops"
 )
 
 func readFixture(t *testing.T, name string) model.Ciphertext {

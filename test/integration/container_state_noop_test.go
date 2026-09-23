@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 func TestContainerUnchanged_NoAction(t *testing.T) {

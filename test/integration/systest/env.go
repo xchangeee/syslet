@@ -25,15 +25,15 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/api"
-	"codeberg.org/xchangeee/syslet/internal/filestore"
-	"codeberg.org/xchangeee/syslet/internal/podman/podmantest"
-	"codeberg.org/xchangeee/syslet/internal/sops"
-	"codeberg.org/xchangeee/syslet/internal/syslet"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
-	"codeberg.org/xchangeee/syslet/test/log"
-	"codeberg.org/xchangeee/syslet/test/oplog"
+	"github.com/xchangeee/syslet/internal/api"
+	"github.com/xchangeee/syslet/internal/filestore"
+	"github.com/xchangeee/syslet/internal/podman/podmantest"
+	"github.com/xchangeee/syslet/internal/sops"
+	"github.com/xchangeee/syslet/internal/syslet"
+	"github.com/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/systemd/systemdtest"
+	testlog "github.com/xchangeee/syslet/test/log"
+	"github.com/xchangeee/syslet/test/oplog"
 )
 
 // quadletDir is where the harness installs unit files, matching the path the

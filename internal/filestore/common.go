@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/util"
+	"github.com/xchangeee/syslet/internal/util"
 )
 
 // FileManagers groups the file stores used throughout plan building and apply.

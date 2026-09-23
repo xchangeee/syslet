@@ -3,7 +3,7 @@ package render
 import (
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 func TestVolumeSpec_Render_BasicVolume(t *testing.T) {

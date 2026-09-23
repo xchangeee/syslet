@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 func newContainerStore(t *testing.T) *ContainerConfigFileStore {

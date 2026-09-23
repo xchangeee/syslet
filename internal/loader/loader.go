@@ -11,8 +11,8 @@ import (
 	"os"
 	"strconv"
 
-	"codeberg.org/xchangeee/syslet/internal/api"
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/api"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // Parse converts all non-secret specs of every apiVersion into domain units.

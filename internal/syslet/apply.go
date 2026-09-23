@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"codeberg.org/xchangeee/syslet/internal/filestore"
-	"codeberg.org/xchangeee/syslet/internal/podman"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/filestore"
+	"github.com/xchangeee/syslet/internal/podman"
+	"github.com/xchangeee/syslet/internal/systemd"
 )
 
 // Apply executes a pre-built plan in coordinated order:

@@ -3,9 +3,9 @@ package syslet
 import (
 	gounit "github.com/coreos/go-systemd/v22/unit"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/render"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/render"
+	"github.com/xchangeee/syslet/internal/systemd"
 )
 
 // buildPlanUnitNetwork diffs an existing network unit against the desired spec.

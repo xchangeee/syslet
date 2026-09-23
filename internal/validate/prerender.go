@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/render"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/render"
 )
 
 var secretKeyRe = regexp.MustCompile(`^[a-z0-9-]+$`)

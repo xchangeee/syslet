@@ -14,16 +14,16 @@ import (
 	gounit "github.com/coreos/go-systemd/v22/unit"
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/api"
-	"codeberg.org/xchangeee/syslet/internal/filestore"
-	"codeberg.org/xchangeee/syslet/internal/loader"
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/podman"
-	"codeberg.org/xchangeee/syslet/internal/render"
-	"codeberg.org/xchangeee/syslet/internal/sops"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/internal/util"
-	"codeberg.org/xchangeee/syslet/internal/validate"
+	"github.com/xchangeee/syslet/internal/api"
+	"github.com/xchangeee/syslet/internal/filestore"
+	"github.com/xchangeee/syslet/internal/loader"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/podman"
+	"github.com/xchangeee/syslet/internal/render"
+	"github.com/xchangeee/syslet/internal/sops"
+	"github.com/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/util"
+	"github.com/xchangeee/syslet/internal/validate"
 )
 
 // OperationStatus is the outcome of a single unit operation.

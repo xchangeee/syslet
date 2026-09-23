@@ -5,9 +5,9 @@ package systest
 import (
 	"os"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/render"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/render"
+	"github.com/xchangeee/syslet/internal/systemd"
 )
 
 // Seeding puts the host into the state a previous apply would have left it in:

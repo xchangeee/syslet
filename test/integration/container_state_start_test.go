@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/systemd/systemdtest"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 func TestNewRunningContainer_StartsService(t *testing.T) {

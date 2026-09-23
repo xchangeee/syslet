@@ -33,13 +33,13 @@ import (
 
 	"github.com/spf13/afero"
 
-	sysletage "codeberg.org/xchangeee/syslet/internal/age"
-	"codeberg.org/xchangeee/syslet/internal/api"
-	"codeberg.org/xchangeee/syslet/internal/filestore"
-	"codeberg.org/xchangeee/syslet/internal/podman"
-	"codeberg.org/xchangeee/syslet/internal/sops"
-	"codeberg.org/xchangeee/syslet/internal/syslet"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
+	sysletage "github.com/xchangeee/syslet/internal/age"
+	"github.com/xchangeee/syslet/internal/api"
+	"github.com/xchangeee/syslet/internal/filestore"
+	"github.com/xchangeee/syslet/internal/podman"
+	"github.com/xchangeee/syslet/internal/sops"
+	"github.com/xchangeee/syslet/internal/syslet"
+	"github.com/xchangeee/syslet/internal/systemd"
 )
 
 const defaultConfigPath = "/etc/syslet/config.json"

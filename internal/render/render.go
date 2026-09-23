@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // volumeMount returns a read-only Volume= value for a quadlet container unit.

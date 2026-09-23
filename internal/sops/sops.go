@@ -10,7 +10,7 @@ import (
 	"github.com/getsops/sops/v3/decrypt"
 	"gopkg.in/yaml.v3"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // ExtractKeys reads the top-level key names from a SOPS-encrypted YAML file

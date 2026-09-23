@@ -5,7 +5,7 @@ import (
 
 	gounit "github.com/coreos/go-systemd/v22/unit"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // IsUnitRemovalAllowed returns true when RemovalAllowed=true is present in the [X-Syslet] section.

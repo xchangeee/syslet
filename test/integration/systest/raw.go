@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"codeberg.org/xchangeee/syslet/internal/api"
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/api"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // This file turns model values back into the newline-delimited JSON the loader

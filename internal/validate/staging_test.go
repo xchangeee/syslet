@@ -8,11 +8,11 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/render"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
-	"codeberg.org/xchangeee/syslet/test/log"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/render"
+	"github.com/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/systemd/systemdtest"
+	testlog "github.com/xchangeee/syslet/test/log"
 )
 
 func newTestStaging(t *testing.T, fs afero.Fs, gen systemd.QuadletGeneratorRunner, az systemd.AnalyzeRunner) *Staging {

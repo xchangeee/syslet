@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/podman"
-	"codeberg.org/xchangeee/syslet/internal/sops"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/podman"
+	"github.com/xchangeee/syslet/internal/sops"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 // Every apply in this suite is checked for phase order automatically, by the

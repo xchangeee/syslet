@@ -16,9 +16,9 @@ import (
 	"fmt"
 	"strings"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/podman"
-	"codeberg.org/xchangeee/syslet/internal/sops"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/podman"
+	"github.com/xchangeee/syslet/internal/sops"
 )
 
 // buildPlanSecrets decrypts secrets, computes the diff against the podman

@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/model"
 )
 
 // SecretMeta holds the name and labels of a single entry in podman's secret store.

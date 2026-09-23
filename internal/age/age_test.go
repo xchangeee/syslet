@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/age"
+	"github.com/xchangeee/syslet/internal/age"
 )
 
 // sshKeyFixture reads testdata/id_ed25519 from the real filesystem.

@@ -22,11 +22,11 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/podman"
-	"codeberg.org/xchangeee/syslet/internal/sops"
-	"codeberg.org/xchangeee/syslet/internal/util"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/podman"
+	"github.com/xchangeee/syslet/internal/sops"
+	"github.com/xchangeee/syslet/internal/util"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 // secretTestDecryptor returns a Decryptor backed by the syslet test key file.

@@ -7,11 +7,11 @@ import (
 
 	"github.com/spf13/afero"
 
-	"codeberg.org/xchangeee/syslet/internal/model"
-	"codeberg.org/xchangeee/syslet/internal/syslet"
-	"codeberg.org/xchangeee/syslet/internal/systemd"
-	"codeberg.org/xchangeee/syslet/internal/systemd/systemdtest"
-	"codeberg.org/xchangeee/syslet/test/integration/systest"
+	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/syslet"
+	"github.com/xchangeee/syslet/internal/systemd"
+	"github.com/xchangeee/syslet/internal/systemd/systemdtest"
+	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
 // TestPlanWithSecretChanges_GroupsBySpec verifies that syslet.DisplayPlan groups secret upserts and
