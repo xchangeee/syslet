@@ -80,42 +80,39 @@ func TestDesiredState_InvalidReturnsError(t *testing.T) {
 
 // --- reclaimPolicy parsing ---
 
-func TestReclaimPolicy_DefaultsToRetain(t *testing.T) {
+func TestReclaimPolicy_Omitted_ReturnsDelete(t *testing.T) {
 	cases := []struct {
-		name string
-		fn   func() (model.ReclaimPolicy, error)
+		name  string
+		specs v1.Specs
+		get   func(model.Unit) model.ReclaimPolicy
 	}{
-		{"volume", func() (model.ReclaimPolicy, error) {
-			units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v"}}})
-			if err != nil {
-				return "", err
-			}
-			return units[0].(*model.VolumeUnit).ReclaimPolicy, nil
-		}},
-		{"network", func() (model.ReclaimPolicy, error) {
-			units, err := parseV1(v1.Specs{Networks: []v1.Network{{Name: "n"}}})
-			if err != nil {
-				return "", err
-			}
-			return units[0].(*model.NetworkUnit).ReclaimPolicy, nil
-		}},
-		{"build", func() (model.ReclaimPolicy, error) {
-			units, err := parseV1(v1.Specs{Builds: []v1.Build{{Name: "b"}}})
-			if err != nil {
-				return "", err
-			}
-			return units[0].(*model.BuildUnit).ReclaimPolicy, nil
-		}},
+		{"Volume", v1.Specs{Volumes: []v1.Volume{{Name: "v"}}},
+			func(u model.Unit) model.ReclaimPolicy { return u.(*model.VolumeUnit).ReclaimPolicy }},
+		{"Network", v1.Specs{Networks: []v1.Network{{Name: "n"}}},
+			func(u model.Unit) model.ReclaimPolicy { return u.(*model.NetworkUnit).ReclaimPolicy }},
+		{"Build", v1.Specs{Builds: []v1.Build{{Name: "b"}}},
+			func(u model.Unit) model.ReclaimPolicy { return u.(*model.BuildUnit).ReclaimPolicy }},
 	}
 	for _, tc := range cases {
-		policy, err := tc.fn()
-		if err != nil {
-			t.Errorf("%s: unexpected error: %v", tc.name, err)
-			continue
-		}
-		if policy != model.ReclaimPolicyRetain {
-			t.Errorf("%s: expected ReclaimPolicyRetain, got %q", tc.name, policy)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			units, err := parseV1(tc.specs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := tc.get(units[0]); got != model.ReclaimPolicyDelete {
+				t.Errorf("expected ReclaimPolicyDelete, got %q", got)
+			}
+		})
+	}
+}
+
+func TestReclaimPolicy_Retain_ReturnsRetain(t *testing.T) {
+	units, err := parseV1(v1.Specs{Volumes: []v1.Volume{{Name: "v", ReclaimPolicy: "Retain"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := units[0].(*model.VolumeUnit).ReclaimPolicy; got != model.ReclaimPolicyRetain {
+		t.Errorf("expected ReclaimPolicyRetain, got %q", got)
 	}
 }
 

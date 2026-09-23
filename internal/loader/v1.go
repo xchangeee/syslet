@@ -203,12 +203,16 @@ func parseDesiredState(s string) (model.DesiredState, error) {
 	}
 }
 
-// parseReclaimPolicy converts a raw string to model.ReclaimPolicy, defaulting to Retain.
+// parseReclaimPolicy converts a raw string to model.ReclaimPolicy, defaulting to
+// Delete for volumes, networks and builds alike, matching #SysdefDefaults in
+// schema/core. The planner only acts on it together with removalAllowed: a volume
+// or network is deleted on prune, and a volume recreated on change, only when both
+// allow it.
 func parseReclaimPolicy(s string) (model.ReclaimPolicy, error) {
 	switch s {
-	case "Delete":
+	case "Delete", "":
 		return model.ReclaimPolicyDelete, nil
-	case "Retain", "":
+	case "Retain":
 		return model.ReclaimPolicyRetain, nil
 	default:
 		return "", fmt.Errorf("invalid reclaimPolicy %q (must be \"Delete\" or \"Retain\")", s)
