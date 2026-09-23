@@ -12,7 +12,7 @@ package core
 // Retain keeps the podman resource when its unit is removed
 #ReclaimPolicyRetain: "Retain"
 
-// Retain removes the podman resource when its unit is removed
+// Delete removes the podman resource when its unit is removed
 #ReclaimPolicyDelete: "Delete"
 
 // All valid reclaim policy values
@@ -51,25 +51,34 @@ package core
 #UnitSpec: {
 	#Spec
 
-	// If this is true, and the container is not in the spec, syslet will remove the container
-	removalAllowed!: bool
-
 	// Quadlet unit options, keyed by section name and then option name
 	unit?: [#UnitOptionSectionName]: [#UnitOptionSectionKey]: #UnitOptionValue
 }
 
-// Whether a container should be running or stopped after reconciliation
+// Fields shared by specs whose unit syslet only prunes when allowed (container, volume, network).
+// Builds are pruned unconditionally, so #BuildSpec doesn't include it.
+#RemovableSpec: {
+	// If this is true, and the unit is no longer in the input, syslet will remove the unit
+	removalAllowed!: bool
+}
+
+// Container should be running after reconciliation
 #ContainerDesiredStateRunning: "running"
 
-// Whether a container should be stopped after reconciliation
+// Container should be stopped after reconciliation
 #ContainerDesiredStateStopped: "stopped"
 
+// Container runs as a oneshot service (Type=oneshot). syslet never starts or
+// stops it, other units trigger it through their [Unit] dependencies.
+#ContainerDesiredStateOneshot: "oneshot"
+
 // All valid container desired states
-#ContainerDesiredState: #ContainerDesiredStateRunning | #ContainerDesiredStateStopped
+#ContainerDesiredState: #ContainerDesiredStateRunning | #ContainerDesiredStateStopped | #ContainerDesiredStateOneshot
 
 // Container rendered to a .container quadlet unit
 #ContainerSpec: {
 	#UnitSpec
+	#RemovableSpec
 
 	// Spec type
 	type: #SpecTypeContainer
@@ -89,8 +98,8 @@ package core
 	// Mount path within the container
 	mountPath!: string
 
-	// File mode, e.g. 0600
-	mode!: string
+	// File mode, e.g. 0600, defaults to 0644
+	mode?: string
 
 	// File content
 	content!: string
@@ -110,8 +119,8 @@ package core
 	// Filename within the directory
 	name!: string
 
-	// File mode, e.g. 0600
-	mode!: string
+	// File mode, e.g. 0600, defaults to 0644
+	mode?: string
 
 	// File content
 	content!: string
@@ -120,14 +129,19 @@ package core
 // Network rendered to a .network quadlet unit
 #NetworkSpec: {
 	#UnitSpec
+	#RemovableSpec
 
 	// Spec type
 	type: #SpecTypeNetwork
+
+	// Reclaim policy controls if the podman network will be removed when the unit is removed
+	reclaimPolicy!: #ReclaimPolicy
 }
 
 // Volume rendered to a .volume quadlet unit
 #VolumeSpec: {
 	#UnitSpec
+	#RemovableSpec
 
 	// Spec type
 	type: #SpecTypeVolume
@@ -157,6 +171,9 @@ package core
 #BuildContextFile: {
 	// Filename within the build context
 	filename!: string
+
+	// File mode, e.g. 0600, defaults to 0644
+	mode?: string
 
 	// File content
 	content!: string

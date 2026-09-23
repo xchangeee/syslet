@@ -68,6 +68,10 @@ import (
 // Accepts a struct from @embed(glob=creds-*.enc.yaml,type=text,allowEmptyGlob)
 // and returns a struct with matching secret specs. The name is taken from the file
 // name, stripping the creds- prefix and the enc.yaml suffix.
+//
+// The files must be in the same directory as the CUE file: for a glob into a
+// subdirectory, @embed keeps the directory in the key, so the prefix isn't
+// stripped and the spec name contains the path.
 #SysdefSecretsFromEmbeddedFiles: {
 	X1="in"!: [string]: string
 	secrets: {

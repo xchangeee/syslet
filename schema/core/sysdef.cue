@@ -77,6 +77,7 @@ package core
 	networks: {
 		[string]: enabled: bool | *true
 		[string]: spec: removalAllowed: bool | *true
+		[string]: spec: reclaimPolicy:  string | *#ReclaimPolicyDelete
 	}
 
 	volumes: {
@@ -87,8 +88,7 @@ package core
 
 	builds: {
 		[string]: enabled: bool | *true
-		[string]: spec: removalAllowed: bool | *true
-		[string]: spec: reclaimPolicy:  string | *#ReclaimPolicyDelete
+		[string]: spec: reclaimPolicy: string | *#ReclaimPolicyDelete
 	}
 
 	secrets: {
