@@ -5,6 +5,10 @@ name: Docs
 on:
   push:
     branches: [main]
+    paths:
+      - "docs/**"
+      - "zensical.toml"
+      - ".github/workflows/docs.yaml"
   workflow_dispatch:
 
 permissions:
