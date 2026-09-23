@@ -100,7 +100,7 @@ This time syslet skips the container and leaves it running:
 ```text
 Summary:
 UNIT                                     STATUS     CHANGES
-site.container                           skipped    not marked for removal (removalAllowed not set)
+site.container                           skipped    protected (removalAllowed: false)
 
 No changes detected. All units are up to date.
 ```

@@ -40,7 +40,7 @@ A plan with unexpected `removed` lines usually means the input is incomplete, su
 
 ## 4. Keep secrets out of logs
 
-`Secret changes:` prints new values in plain text.
-Don't run the plan where its output ends up in shared logs, such as CI.
+`Secret changes:` hides values as `(secret)`, so the plan is safe for shared logs such as CI.
+To check a value locally, set `SYSLET_SHOW_SECRETS=1`.
 
 For every section and status, see [Plan output](../reference/plan-output.md).

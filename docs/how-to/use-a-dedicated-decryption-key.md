@@ -26,10 +26,10 @@ Create `/etc/syslet/syslet.json` on the host:
 Run a plan once (`cue cmd plan` or `syslet --diff`).
 syslet derives the new age key and appends it to `/var/lib/syslet/key.txt`, which still holds the key derived from the host key, so existing secrets keep decrypting.
 
-If the file at `sshKeyPath` doesn't exist, a plan with secrets fails:
+If the file at `sshKeyPath` doesn't exist, syslet exits before planning:
 
 ```text
-secrets present in spec but no decryptor configured (SSH key path not set?)
+error: SSH key /etc/syslet/age_ed25519 (sshKeyPath in /etc/syslet/syslet.json) does not exist
 ```
 
 ## 3. Re-encrypt for the new key

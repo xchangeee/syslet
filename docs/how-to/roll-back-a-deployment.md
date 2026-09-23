@@ -23,8 +23,6 @@ With the specs in a git repository, revert the commit that broke the host:
 
 Check the plan, then apply it, or push it with GitOps.
 
-<!-- TODO: say whether /etc/syslet/config.json can serve as a fallback once --stdin persists only after validation, see docs/TODO.md -->
-
 ## What a rollback can't restore
 
 Applying old specs restores unit files, config files and secrets, but not what the bad apply deleted:

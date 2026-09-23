@@ -65,5 +65,4 @@ When a change restarts `db`, syslet stops it and starts it again, but it doesn't
 `app` stays down until the next apply.
 
 `Wants=` doesn't pass the stop on, so `app` keeps running while `db` restarts.
-
-<!-- TODO: document Requires= once syslet starts containers stopped by a dependency, see docs/TODO.md -->
+A oneshot job is the exception, see [Run a oneshot job](run-a-oneshot-job.md).

@@ -26,4 +26,4 @@ See [Spec types](spec-types.md#secret) for how syslet detects changes without st
 Podman's secret store is root-owned but unencrypted on disk.
 That's a [limitation of podman](https://github.com/podman-container-tools/podman/discussions/26762) that syslet can't work around.
 
-The plan also prints new secret values in plain text, so its output doesn't belong in shared logs.
+The plan hides secret values as `(secret)`, so its output can go to shared logs. Set `SYSLET_SHOW_SECRETS=1` to print them when you inspect a plan locally.

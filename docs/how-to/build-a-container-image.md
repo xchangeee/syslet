@@ -95,6 +95,7 @@ Deploy both specs in the same input; a container that references a missing build
 
 podman builds the image before it starts the container.
 From then on, a change to `containerfile` or `contextFiles` rebuilds the image and restarts the container.
+A newer base image behind the same `FROM` tag doesn't trigger a rebuild; syslet leaves image updates to other tools.
 
 ## Remove a build
 

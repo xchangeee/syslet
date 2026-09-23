@@ -35,8 +35,6 @@ Preview every change first, with `cue cmd plan` or `syslet --diff` (see [Preview
     }
     ```
 
-- `#SysdefDefaults` sets `desiredState: "running"`. In plain JSON an omitted `desiredState` means `"stopped"`, so set it explicitly.
-  <!-- TODO: drop the JSON note once the Go default is running, see docs/TODO.md -->
 - Every `<name>.volume`, `<name>.network` and `<name>.build` the container references must be a spec in the same input, and every `Secret=` must name a declared secret key. Otherwise validation fails before anything is touched.
 - Deploy the container together with the volumes, networks, builds and secrets it uses. Their services start as dependencies of the container.
 
@@ -88,20 +86,16 @@ Lock the container and apply, as in [Protect a container](../tutorials/05-protec
     "removalAllowed": false
     ```
 
-    This is the JSON default.
-
-    <!-- TODO: drop once the Go default for removalAllowed is true, see docs/TODO.md -->
-
 The marker is written to the installed unit as `[X-Syslet] RemovalAllowed=false`, a metadata-only change, so the container keeps running.
 From then on, dropping the spec from the input leaves the container running and reports it as skipped:
 
 ```text
-site.container                           skipped    not marked for removal (removalAllowed not set)
+site.container                           skipped    protected (removalAllowed: false)
 ```
 
 ## Remove a container
 
-1. Make sure the installed unit allows removal. If it was protected, drop it from `#SysdefLock` (in JSON, set `"removalAllowed": true`), keep the spec, and apply once.
+1. Make sure the installed unit allows removal. If it was protected, drop it from `#SysdefLock` (in JSON, set `"removalAllowed": true` or omit it), keep the spec, and apply once.
 2. Drop the spec from the input, preview and apply. The summary must read `removed`, not `skipped`.
 
 syslet stops the container, deletes its unit file and deletes `/etc/containers/config/<name>/` with all `configFiles` and `configDirs`.

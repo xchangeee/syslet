@@ -8,7 +8,7 @@ Four of the five types (`container`, `volume`, `network`, `build`) get there by 
 
 ## container
 
-A running (or stopped) podman container, generating a `.container` quadlet unit. It is the only type with a `desiredState` (`running`/`stopped`), since it's the only unit that's started or stopped as a service — volumes, networks, and builds exist to be referenced by containers, not run themselves.
+A running (or stopped) podman container, generating a `.container` quadlet unit. It is the only type with a `desiredState` (`running`/`stopped`/`oneshot`), since it's the only unit that's started or stopped as a service — volumes, networks, and builds exist to be referenced by containers, not run themselves.
 
 A container spec manages more than the unit file: some containers needs configuration alongside, so syslet writes both from the same spec in one pass. `configFiles` are single bind-mounted files, the simple case; changing one restarts the container. `configDirs` bind-mount a directory, written as a versioned directory behind a symlink that is swapped atomically — the same trick Kubernetes uses for ConfigMap volume mounts — so the container sees a complete new set of files without a restart — use them when the workload can reload its config in place. See [Mount config files and dirs](../how-to/mount-config-files-and-dirs.md).
 

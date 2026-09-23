@@ -40,7 +40,7 @@ added:
   [Install] WantedBy=multi-user.target default.target
   [Service] Restart=always
   [Unit] Description=webapp container
-  [X-Syslet] RemovalAllowed=false
+  [X-Syslet] RemovalAllowed=true
 
 Systemd daemon-reload: required
 

@@ -51,12 +51,12 @@ Unify with `#Sysdef` to default these fields:
 | Field | CUE | JSON |
 | --- | --- | --- |
 | `apiVersion` | Set to `"v1"` | Required |
-| `removalAllowed` | Required on containers, volumes and networks | Optional, defaults to `false` |
-| `desiredState` | Required, `"running"`, `"stopped"` or `"oneshot"` | Optional, defaults to `"stopped"` |
+| `removalAllowed` | Required on containers, volumes and networks | Optional, defaults to `true` |
+| `desiredState` | Required, `"running"`, `"stopped"` or `"oneshot"` | Optional, defaults to `"running"` |
 | `reclaimPolicy` | Required on volumes, networks and builds | Optional, defaults to `"Delete"` |
 
 `#SysdefDefaults` provides the required values that have a default.
-<!-- TODO: note that unit is required once the loader and schema require it, see docs/TODO.md -->
+`unit` is required in both, with no default; use `unit: {}` for a spec without options.
 
 ## tools
 

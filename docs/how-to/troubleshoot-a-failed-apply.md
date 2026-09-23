@@ -19,12 +19,11 @@ The prefix names the stage that failed (see [Safety mechanisms](../explanation/s
 - `error [<unit>]`: a check on one unit against the host, such as a volume change that the installed markers don't allow (see [Manage volumes](manage-volumes.md#change-a-volume)).
 - `secret "<name>": decryption failed`: the host can't decrypt the file. Check that it's encrypted to the host's key (see [Add a SOPS recipient](add-a-sops-recipient.md)).
 - `quadlet generator failed` and `unit verification failed`: podman's generator or `systemd-analyze verify` rejected the rendered units, usually because of a misspelled option or a value podman doesn't accept.
-
-<!-- TODO: document `unit verification warnings` once it's decided whether they block the apply, see docs/TODO.md -->
+- `unit verification warnings`: `systemd-analyze verify` accepted the units but would ignore a setting, such as `Invalid memory limit 'asd', ignoring: Invalid argument`. syslet refuses these like failures, since the unit wouldn't run as specified; fix the setting it names.
 
 ## Inspect the staged units
 
-For the last two, syslet writes the rendered units into a staging directory and keeps it.
+For generator and verification errors, syslet writes the rendered units into a staging directory and keeps it.
 Its path is in syslet's log on stderr:
 
 ```text

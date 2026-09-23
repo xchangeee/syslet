@@ -31,13 +31,11 @@
 | `apiVersion` | string | yes | `"v1"`. See [API versioning](index.md#api-versioning). |
 | `type` | string | yes | `"container"` |
 | `name` | string | yes | Also used as `ContainerName`. |
-| `desiredState` | string | no | `"running"`, `"stopped"` or `"oneshot"`. When `"running"`: `[Install] WantedBy=multi-user.target default.target` and `[Service] Restart=Always` are added automatically. When `"oneshot"`: `[Service] Type=oneshot` is set, and syslet never starts or stops the unit. |
-| `unit` | object | no | Quadlet sections (`Container`, `Service`, `Install`, ...), passed through to the generated `.container` file. |
+| `desiredState` | string | no | `"running"` (default), `"stopped"` or `"oneshot"`. When `"running"`: `[Install] WantedBy=multi-user.target default.target` and `[Service] Restart=Always` are added automatically. When `"oneshot"`: `[Service] Type=oneshot` is set, and syslet never starts or stops the unit. A `"running"` container whose unit sets `Type=oneshot` is rejected. |
+| `unit` | object | yes | Quadlet sections (`Container`, `Service`, `Install`, ...), passed through to the generated `.container` file. May be empty (`{}`). |
 | `configFiles` | array | no | Single files bind-mounted into the container. Each entry: `mountPath` (absolute path in the container), `content` (file text), `mode` (optional file mode, e.g. `"0644"`). Written to `/etc/containers/config/<name>/`. See [Mount config files and dirs](../../how-to/mount-config-files-and-dirs.md). |
 | `configDirs` | array | no | Directories bind-mounted into the container, swapped atomically via a versioned symlink for in-place reload. Each entry: `mountPath` (must end in a real directory path) and `files` (each with `name`, `content`, optional `mode`). Requires `[Service] ExecReload=` to be set. See [Mount config files and dirs](../../how-to/mount-config-files-and-dirs.md#reload-config-without-a-restart). |
-| `removalAllowed` | bool | no | Default `false`. Must be `true` before syslet will prune this unit when it disappears from the input, and must have been set on the *previous* apply. See [Removing specs](../../explanation/removing-specs.md). |
-
-<!-- TODO: mark unit as required once the loader enforces it, see docs/TODO.md -->
+| `removalAllowed` | bool | no | Default `true`. Must be `true` before syslet will prune this unit when it disappears from the input, and must have been set on the *previous* apply. Set `false` to protect the container. See [Removing specs](../../explanation/removing-specs.md). |
 
 No `configFiles` or `configDirs` `mountPath` may equal or sit under another one; overlapping mounts are rejected.
 
@@ -64,6 +62,7 @@ Restart triggers:
 - A referenced volume or network recreated in the same apply.
 - A referenced build rebuilt in the same apply.
 - A referenced secret changed in the same apply.
+- The unit file is new, but a service of that name is already running, e.g. from a hand-written quadlet.
 
 "Not running" includes a container that crashed or was stopped by hand.
 

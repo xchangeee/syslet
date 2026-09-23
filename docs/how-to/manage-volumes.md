@@ -9,11 +9,10 @@ What happens to a volume's data depends on how you set it up:
 
 | Setup | Spec dropped | Spec changed |
 | --- | --- | --- |
-| CUE | **Volume and data deleted** | **Recreated empty** |
-| CUE, in `#SysdefLock` | Volume and data kept | Plan refused |
-| JSON | Volume and data kept | Plan refused |
+| Default, CUE or JSON | **Volume and data deleted** | **Recreated empty** |
+| [Locked](#lock-a-volume) | Volume and data kept | Plan refused |
 
-With CUE, lock every volume whose data matters.
+Lock every volume whose data matters.
 
 ## Add a volume
 

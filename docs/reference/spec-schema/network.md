@@ -21,10 +21,8 @@
 | `apiVersion` | string | yes | `"v1"`. See [API versioning](index.md#api-versioning). |
 | `type` | string | yes | `"network"` |
 | `name` | string | yes | Also used as `NetworkName`. Referenced from a container as `Network: ["<name>.network"]`. |
-| `unit` | object | no | Quadlet `Network` section options. |
+| `unit` | object | yes | Quadlet `Network` section options. May be empty (`{}`). |
 | `reclaimPolicy` | string | no | `"Delete"` (default) or `"Retain"`. Controls whether the podman network is also deleted when the unit is pruned. |
-| `removalAllowed` | bool | no | Default `false`. Must be `true` before syslet will prune this unit. |
-
-<!-- TODO: mark unit as required once the loader enforces it, see docs/TODO.md -->
+| `removalAllowed` | bool | no | Default `true`. Must be `true` before syslet will prune this unit. Set `false` to protect it. |
 
 `NetworkName` is always set to the spec's `name`; a `NetworkName` in `unit.Network` is overwritten.

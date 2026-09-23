@@ -68,7 +68,7 @@ Config file changes:
 
 Secret changes:
   site:
-    + htpasswd=admin:{PLAIN}hunter2
+    + htpasswd=(secret)
 
 ...
 
@@ -77,7 +77,7 @@ UNIT                                     STATUS     CHANGES
 site.container                           updated    unit updated, config updated, secret updated, restarted (desired: running)
 ```
 
-The plan prints new secret values in plain text, so keep its output out of shared logs such as CI.
+The plan hides the value. Run the diff with `SYSLET_SHOW_SECRETS=1` in front of `syslet` to check it.
 
 Apply and commit:
 

@@ -34,6 +34,7 @@ nav = [
       { "Mount config files and dirs" = "how-to/mount-config-files-and-dirs.md" },
       { "Set systemd service options" = "how-to/set-systemd-service-options.md" },
       { "Add dependencies between containers" = "how-to/add-dependencies-between-containers.md" },
+      { "Run a oneshot job" = "how-to/run-a-oneshot-job.md" },
       { "Build a container image" = "how-to/build-a-container-image.md" },
     ] },
     { "Volumes" = [

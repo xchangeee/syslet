@@ -18,7 +18,7 @@ Validation errors:
 | `error: pre-render validation: ...` | Checks on the specs. |
 | `error: post-render validation: ...` | Checks on the rendered unit files. |
 | `error: quadlet generator failed ...`, `error: unit verification failed ...` | Staging checks by podman's generator and `systemd-analyze verify`. |
-| `error: secret "<name>": decryption failed: ...`, `error: secrets present in spec but no decryptor configured ...` | The host can't decrypt a secret spec. |
+| `error: secret "<name>": decryption failed: ...`, `error: secrets present in spec but no age key available ...` | The host can't decrypt a secret spec. |
 | `error [<unit>]: ...` | A check of one unit against the host, such as a volume change the installed markers don't allow. |
 
 See [Safety mechanisms](../explanation/safety-mechanisms.md#multi-stage-validation) for the stages.
@@ -39,7 +39,7 @@ A section is printed only when it has entries, in this order:
 | `Build context file changes:` | Unified diff per `containerfile` and `contextFiles` entry. |
 | `Build context files to delete:` | Stale context files, as `<build>/<file>`. |
 | `Build context directories to delete:` | A build's whole context directory, as `<build>/`. |
-| `Secret changes:` | Per secret spec, `+ <key>=<value>` for new or changed keys, in plain text, and `- <key>=(secret)` for deleted ones. |
+| `Secret changes:` | Per secret spec, `+ <key>=(secret)` for new or changed keys and `- <key>=(secret)` for deleted ones. With `SYSLET_SHOW_SECRETS` set, new values print in plain text. |
 | `Services to stop:` | Units stopped before files are written. |
 | `Systemd daemon-reload: required` | Printed when any unit file is written or deleted. |
 | `Containers to start:` | Containers started at the end of the apply. |
@@ -87,4 +87,4 @@ A comma-separated list, followed by `(desired: <state>)`:
 | `up to date` | Nothing changes. |
 
 For other types, CHANGES is `created`, `unit updated`, `up to date` or `removed`; builds also report `build context updated` and `unit and build context updated`.
-A skipped unit reads `not marked for removal (removalAllowed not set)`.
+A skipped unit reads `protected (removalAllowed: false)`, or `not managed by syslet (no [X-Syslet] marker)` for a unit file syslet didn't write.

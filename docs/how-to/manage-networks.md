@@ -9,9 +9,8 @@ The setup only decides what happens when you drop a network's spec:
 
 | Setup | Spec dropped | Spec changed |
 | --- | --- | --- |
-| CUE | Unit and podman network removed | Recreated |
-| CUE, in `#SysdefLock` | Unit and network kept | Recreated |
-| JSON | Unit and network kept | Recreated |
+| Default, CUE or JSON | Unit and podman network removed | Recreated |
+| [Locked](#lock-a-network) | Unit and network kept | Recreated |
 
 When the unit is removed, `reclaimPolicy` decides whether the podman network goes with it: `"Delete"` (the default) removes it, `"Retain"` leaves it behind.
 
@@ -100,7 +99,8 @@ webapp-net.network                       updated    unit updated
 webapp.container                         updated    network recreated, restarted (desired: running)
 ```
 
-<!-- TODO: document a failed network delete once it fails the apply, see docs/TODO.md -->
+If something outside syslet still uses the podman network, the delete fails, and the apply fails with the network marked `error`.
+Disconnect the containers that `podman ps -a --filter network=webapp-net` lists, then apply again.
 
 ## Lock a network
 
@@ -123,7 +123,7 @@ A locked network is skipped when its spec disappears from the input, but changes
 ## Remove a network
 
 1. Drop the network from every container's `Network=`. A network that is still referenced fails validation.
-2. Make sure the installed unit allows removal. If it's locked, drop it from `#SysdefLock` (in JSON, set `"removalAllowed": true`), keep the spec, and apply once.
+2. Make sure the installed unit allows removal. If it's locked, drop it from `#SysdefLock` (in JSON, set `"removalAllowed": true` or omit it), keep the spec, and apply once.
 3. Drop the network spec, preview and apply.
 
 Steps 1 and 3 can go into the same change.

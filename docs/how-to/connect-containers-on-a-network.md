@@ -8,7 +8,9 @@ This guide puts an app and a Redis cache on one network, so the app connects to 
 === "CUE"
 
     ```cue
-    sysdef: networks: "app-net": spec: {}
+    sysdef: networks: "app-net": spec: {
+    	unit: {}
+    }
 
     sysdef: containers: cache: spec: {
     	unit: Container: {
@@ -35,7 +37,7 @@ This guide puts an app and a Redis cache on one network, so the app connects to 
         "apiVersion": "v1",
         "type": "network",
         "name": "app-net",
-        "removalAllowed": false
+        "unit": {}
       },
       {
         "apiVersion": "v1",

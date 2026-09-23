@@ -30,7 +30,7 @@ Preview the change:
     cat hosts/web01/*.json | ssh web01 sudo syslet --diff --stdin
     ```
 
-The plan lists every key of the file with its new value in plain text, so keep its output out of shared logs.
+The plan lists every key of the file, with values hidden; set `SYSLET_SHOW_SECRETS=1` to see them.
 Every container that references one of the keys restarts:
 
 ```text

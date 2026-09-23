@@ -26,6 +26,7 @@ Changing what runs, and how it restarts.
 - [Mount config files and dirs](mount-config-files-and-dirs.md)
 - [Set systemd service options](set-systemd-service-options.md)
 - [Add dependencies between containers](add-dependencies-between-containers.md)
+- [Run a oneshot job](run-a-oneshot-job.md)
 - [Build a container image](build-a-container-image.md)
 
 ## Volumes

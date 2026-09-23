@@ -16,7 +16,9 @@ A volume from a hand-written quadlet is usually called `systemd-<unit name>`; to
 === "CUE"
 
     ```cue
-    sysdef: volumes: "systemd-webapp-data": spec: {}
+    sysdef: volumes: "systemd-webapp-data": spec: {
+    	unit: {}
+    }
 
     sysdef: (syslettools.#SysdefLock & {in: volumes: ["systemd-webapp-data"]}).out
     ```
@@ -28,6 +30,7 @@ A volume from a hand-written quadlet is usually called `systemd-<unit name>`; to
       "apiVersion": "v1",
       "type": "volume",
       "name": "systemd-webapp-data",
+      "unit": {},
       "removalAllowed": false,
       "reclaimPolicy": "Retain"
     }

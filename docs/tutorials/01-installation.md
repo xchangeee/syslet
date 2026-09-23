@@ -26,10 +26,10 @@ Replace `x86_64` with `arm64` or `i386` as needed.
 ## 2. Check the installation
 
 ```sh
-ssh web01 sudo syslet --help
+ssh web01 syslet --version
 ```
 
-This prints syslet's usage.
+This prints the installed release, e.g. `syslet 1.2.3 (commit 8b8dc32…, built 2026-09-23T10:00:00Z)`.
 
 syslet is installed.
 Continue with [Deploy container](02-deploy-a-container.md).

@@ -1,7 +1,7 @@
 # Migrate hand-written quadlets
 
 A host that already runs hand-written quadlet files can be moved to syslet unit by unit: each file becomes a spec with the same options.
-The containers are down from the moment you stop them until the first apply.
+The containers keep running until the first apply restarts them.
 
 ## 1. Translate each file into a spec
 
@@ -65,16 +65,16 @@ Drop `ContainerName=`, `VolumeName=` and `NetworkName=` from the specs; syslet o
 
 ## 3. Hand over the host
 
-Stop the hand-written containers, move their files out of the quadlet directory and reload systemd:
+Move the hand-written files out of the quadlet directory and reload systemd:
 
 ```sh
-sudo systemctl stop webapp.service
 sudo mkdir /root/quadlets-old
 sudo mv /etc/containers/systemd/*.{container,volume,network,build} /root/quadlets-old/
 sudo systemctl daemon-reload
 ```
 
-<!-- TODO: explain why stopping first is needed, or drop the step once syslet checks the state of new units, see docs/TODO.md -->
+The containers keep running.
+syslet sees that their services are still active and restarts them onto the new units on the first apply.
 
 ## 4. Preview and apply
 
@@ -90,7 +90,7 @@ sudo systemctl daemon-reload
     cat hosts/web01/*.json | ssh web01 sudo syslet --diff --stdin
     ```
 
-Every unit should show as `created`.
+Every unit should show as `created`, and each running container under `Services to stop:` and `Containers to start:`.
 Apply, then check that the containers run and the volumes hold their data.
 
 To back out before applying, move the files back and run `systemctl daemon-reload`.

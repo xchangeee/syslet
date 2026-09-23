@@ -10,32 +10,42 @@ That sweep covers the whole directory, including unit files syslet never wrote. 
 
 ## Fail-safe protections
 
-When absence is the trigger, an input that omits units by mistake reads as a request to tear them down, and the blast radius is a stopped service or a deleted volume rather than a failed apply. syslet is built to run unattended in GitOps pipelines, so it is the one operation that requires you to declare intent in advance, in the spec rather than at the moment of deletion.
+When absence is the trigger, an input that omits units by mistake reads as a request to tear them down, and the blast radius is a stopped service or a deleted volume rather than a failed apply. syslet is built to run unattended in GitOps pipelines, so it lets you protect a unit in advance, in the spec rather than at the moment of deletion.
 
-That declaration is `removalAllowed`, a boolean on `container`, `volume`, and `network` specs. syslet defaults it to `false`, and setting it to `true` is what permits syslet to delete that unit once it goes missing from the input. Build units have no such field and are always removed.
+That protection is `removalAllowed`, a boolean on `container`, `volume`, and `network` specs. It defaults to `true`, so a unit dropped from the input is removed, and setting it to `false` keeps syslet from deleting that unit once it goes missing. Build units have no such field and are always removed.
 
-The flag exists because "absent from the input" is a state your tooling can reach by mistake. A bug in whatever generates your specs, a templating run that renders an empty list, a truncated file, a filter that matched nothing: any of these produces an input that is syntactically fine and simply omits half your units. Without a guard, the next apply would faithfully delete a working deployment, and the failure would look exactly like a successful reconciliation. This mechanism is borrowed from Argo CD's finalizers, where deleting an application only cascades to the resources it created if the opt-in was placed on the application ahead of time.
+The flag exists because "absent from the input" is a state your tooling can reach by mistake. A bug in whatever generates your specs, a templating run that renders an empty list, a truncated file, a filter that matched nothing: any of these produces an input that is syntactically fine and simply omits half your units. Without a guard, the next apply would faithfully delete a working deployment, and the failure would look exactly like a successful reconciliation. The default favors a host that cleans up after itself, so the guard is opt-out: set `removalAllowed: false` on every unit whose loss would hurt, above all volumes holding data. This mechanism is borrowed from Argo CD's finalizers, where deleting an application only cascades to the resources it created if the opt-in is on the application ahead of time.
 
 The `[X-Syslet]` section is where that declaration lives. syslet writes this metadata block into every unit file it generates, carrying `RemovalAllowed` and, for the types that have one, `ReclaimPolicy`.
 
-Without the marker, a stale unit is left exactly as it is: the unit file stays, the service keeps running, and the plan records
+Without `RemovalAllowed=true` in that block, a stale unit is left exactly as it is: the unit file stays, the service keeps running, and the plan records
 
 ```text
-skipped: not marked for removal (removalAllowed not set)
+skipped: protected (removalAllowed: false)
 ```
 
-A skip is not an error. The apply succeeds and the unit is reported again on every subsequent run, until you either mark it removable or put its spec back. This is also what protects unit files syslet never wrote: a hand-placed unit has no `[X-Syslet]` block at all, so it can never satisfy the marker.
+A skip is not an error. The apply succeeds and the unit is reported again on every subsequent run, until you either allow its removal or put its spec back. This is also what protects unit files syslet never wrote: a hand-placed unit has no `[X-Syslet]` block at all, so it can never satisfy the marker, and is reported as
+
+```text
+skipped: not managed by syslet (no [X-Syslet] marker)
+```
 
 !!! warning "The markers come from the installed unit, not from your spec"
 
-    Once a unit is stale its spec is gone, so there is nothing left to read the markers from. What counts is the unit file written by the **last successful apply**. Turning on `removalAllowed` therefore takes two applies: first with `removalAllowed: true` and the spec still present, which rewrites the unit file with the new marker, then again with the spec deleted. Setting the flag and deleting the spec in one change achieves nothing, because the flag never reaches the host.
+    Once a unit is stale its spec is gone, so there is nothing left to read the markers from. What counts is the unit file written by the **last successful apply**. Protecting a unit therefore only works if `removalAllowed: false` was applied before the spec goes missing. Lifting the protection takes two applies: first with `removalAllowed: true` (or the field omitted) and the spec still present, which rewrites the unit file with the new marker, then again with the spec deleted. Changing the flag and deleting the spec in one change achieves nothing, because the flag never reaches the host.
 
-    This is the declare-it-in-advance rule showing its teeth: a compromised or buggy input cannot grant itself deletion rights in the same pass in which it deletes.
+    This is the declare-it-in-advance rule showing its teeth: a compromised or buggy input cannot grant itself deletion rights for a protected unit in the same pass in which it deletes.
 
 A second guard catches the common way a removal goes wrong: dropping a volume, network, or build that something still uses. Post-render validation requires every volume, network, and build a container references to be present in the same input, so removing `webapp-data` while the `webapp` container still mounts it fails the whole plan before anything is touched:
 
 ```text
 container "webapp": references undefined volume "webapp-data"
+```
+
+That check only sees the input. When a container and its volume, network, or build drop out together and the container is skipped, the container keeps running on the host, so syslet skips what it uses as well: the unit file stays and nothing is reclaimed.
+
+```text
+skipped: still referenced by webapp.container
 ```
 
 Because a diff builds the same plan as an apply, every `removed` and `skipped` line in it is a removal decision made in advance; see [Preview changes with --diff](../how-to/preview-changes-with-diff.md#3-check-removals).
@@ -121,10 +131,10 @@ It applies to `volume`, `network`, and `build`, the three types with a podman re
 
 Builds skip the first column, since they are always removed when stale.
 
-Every syslet-managed volume, network, and build is `Delete` unless you say otherwise, so nothing outlives its declaration by accident. For volumes and networks, `removalAllowed` is what protects the data: without it, syslet doesn't remove the unit at all. Setting `Retain` is how you tell syslet to keep the resource even once removal is allowed, which makes disposing of it a manual podman operation.
+Every syslet-managed volume, network, and build is `Delete` unless you say otherwise, so nothing outlives its declaration by accident. For volumes and networks, `removalAllowed: false` is what protects the data: with it, syslet doesn't remove the unit at all. Setting `Retain` is how you tell syslet to keep the resource even once removal is allowed, which makes disposing of it a manual podman operation.
 
-!!! warning "The CUE schema allows removal by default"
+!!! warning "Removal is allowed by default"
 
-    `#SysdefDefaults` sets `removalAllowed: true` on containers, networks, and volumes, so experimenting in a CUE repository cleans up after itself. Dropping an unlocked CUE volume therefore deletes its data. List every volume worth keeping in `#SysdefLock`, which sets `removalAllowed: false` and `reclaimPolicy: "Retain"`. See [Manage volumes](../how-to/manage-volumes.md#know-your-defaults).
+    Both defaults are permissive, in JSON as in CUE: `removalAllowed: true` and `reclaimPolicy: "Delete"`. Dropping an unprotected volume therefore deletes its data. Protect every volume worth keeping with `removalAllowed: false` and `reclaimPolicy: "Retain"`, which `#SysdefLock` sets in CUE. See [Manage volumes](../how-to/manage-volumes.md#know-your-defaults).
 
 Put a deleted spec back and syslet writes the unit file again, but that only restores the declaration. Under `Retain` the volume is still there and the unit reattaches to it; under `Delete` the recreated volume comes back empty and the deleted image has to be rebuilt.
