@@ -40,12 +40,12 @@ type BuildUnit struct {
 }
 
 // NewBuildUnit constructs a BuildUnit.
-func NewBuildUnit(ref BuildUnitRef, options UnitOptions, containerfile string, configs []BuildContextFile, reclaimPolicy ReclaimPolicy) *BuildUnit {
+func NewBuildUnit(ref BuildUnitRef, options UnitOptions, containerfile string, contextFiles []BuildContextFile, reclaimPolicy ReclaimPolicy) *BuildUnit {
 	return &BuildUnit{
 		ref:           ref,
 		options:       options,
 		Containerfile: containerfile,
-		ContextFiles:  configs,
+		ContextFiles:  contextFiles,
 		ReclaimPolicy: reclaimPolicy,
 	}
 }

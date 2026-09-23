@@ -10,7 +10,7 @@ Four of the five types (`container`, `volume`, `network`, `build`) get there by 
 
 A running (or stopped) podman container, generating a `.container` quadlet unit. It is the only type with a `desiredState` (`running`/`stopped`), since it's the only unit that's started or stopped as a service — volumes, networks, and builds exist to be referenced by containers, not run themselves.
 
-A container spec manages more than the unit file: some containers needs configuration alongside, so syslet writes both from the same spec in one pass. `configs` are single bind-mounted files, the simple case; changing one restarts the container. `configDirs` bind-mount a directory, written as a versioned directory behind a symlink that is swapped atomically — the same trick Kubernetes uses for ConfigMap volume mounts — so the container sees a complete new set of files without a restart — use them when the workload can reload its config in place. See [Mount config files and dirs](../how-to/mount-config-files-and-dirs.md) and [Reload config without restart](../how-to/reload-config-without-restart.md).
+A container spec manages more than the unit file: some containers needs configuration alongside, so syslet writes both from the same spec in one pass. `configFiles` are single bind-mounted files, the simple case; changing one restarts the container. `configDirs` bind-mount a directory, written as a versioned directory behind a symlink that is swapped atomically — the same trick Kubernetes uses for ConfigMap volume mounts — so the container sees a complete new set of files without a restart — use them when the workload can reload its config in place. See [Mount config files and dirs](../how-to/mount-config-files-and-dirs.md) and [Reload config without restart](../how-to/reload-config-without-restart.md).
 
 ## volume
 
@@ -24,7 +24,7 @@ A podman network, generating a `.network` quadlet unit, referenced from a contai
 
 A local image build, generating a `.build` quadlet unit; a container references it by setting `Image` to `<build-name>.build`. Unlike the other types, it always uses a `localhost/`-prefixed image tag, because a build exists to produce a local-only image without a registry round-trip.
 
-Like `container`, a build spec owns files as well as a unit: `containerfile` and `configs` are written into a build context directory on the host. A build unit is meaningless without its context, so the two are versioned and applied together. See [Customize an upstream container image](../how-to/build-a-container-image.md).
+Like `container`, a build spec owns files as well as a unit: `containerfile` and `contextFiles` are written into a build context directory on the host. A build unit is meaningless without its context, so the two are versioned and applied together. See [Customize an upstream container image](../how-to/build-a-container-image.md).
 
 ## secret
 

@@ -14,16 +14,16 @@
 │   ├── webapp-data.volume
 │   ├── webapp-net.network
 │   └── myapp.build
-├── config/                         # container config files/dirs (configs / configDirs)
+├── config/                         # container config files/dirs (configFiles / configDirs)
 │   └── webapp/
 │       ├── nginx.conf
 │       └── env
-└── builds/                         # build context files (Containerfile + configs)
+└── builds/                         # build context files (Containerfile + contextFiles)
     └── myapp/
         └── Containerfile
 ```
 
 - `/etc/containers/systemd/` is podman's standard [quadlet](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html) directory, scanned by `systemctl daemon-reload`/podman's quadlet generator.
-- `/etc/containers/config/<name>/` holds a container's `configs`/`configDirs` files, bind-mounted read-only into the container at the path given in the spec.
+- `/etc/containers/config/<name>/` holds a container's `configFiles`/`configDirs` files, bind-mounted read-only into the container at the path given in the spec.
 - `/etc/containers/builds/<name>/` holds a build unit's Containerfile and context files.
 - `/etc/syslet/config.json` only exists when specs have been applied via `--stdin` at least once; it is not written when applying from a directory or an explicit file path.

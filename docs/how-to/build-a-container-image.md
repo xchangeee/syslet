@@ -14,7 +14,7 @@ The `build` unit type's main use case is layering local changes onto an upstream
     }
   },
   "containerfile": "FROM docker.io/library/nginx:latest\nCOPY app.conf /etc/nginx/conf.d/app.conf\n",
-  "configs": [
+  "contextFiles": [
     {
       "filename": "app.conf",
       "content": "server_name example.internal;"
@@ -25,7 +25,7 @@ The `build` unit type's main use case is layering local changes onto an upstream
 
 - `unit.Build.ImageTag` **must** use the `localhost/` prefix. syslet enforces this so built images are unambiguously local and never mistaken for a registry-hosted tag.
 - `containerfile` is the Containerfile content itself (not a path); syslet writes it to the build's context directory on the host.
-- `configs` here are build **context** files (copied into the image via `COPY`/`ADD`), written alongside the Containerfile. They are a different mechanism from a container's `configs`/`configDirs`, which bind-mount files into a running container at runtime.
+- `contextFiles` here are build **context** files (copied into the image via `COPY`/`ADD`), written alongside the Containerfile. They are a different mechanism from a container's `configFiles`/`configDirs`, which bind-mount files into a running container at runtime.
 
 ## 2. Reference the build from a container
 

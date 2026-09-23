@@ -21,7 +21,7 @@ type RawContainerSpec struct {
 	Unit           map[string]map[string]any `json:"unit"`
 	DesiredState   string                    `json:"desiredState,omitempty"`
 	RemovalAllowed bool                      `json:"removalAllowed,omitempty"`
-	Configs        []RawConfigEntry          `json:"configs,omitempty"`
+	ConfigFiles    []RawConfigFileEntry      `json:"configFiles,omitempty"`
 	ConfigDirs     []RawConfigDirEntry       `json:"configDirs,omitempty"`
 }
 
@@ -50,11 +50,11 @@ type RawBuildSpec struct {
 	Unit          map[string]map[string]any `json:"unit"`
 	ReclaimPolicy string                    `json:"reclaimPolicy,omitempty"`
 	Containerfile string                    `json:"containerfile"`
-	Configs       []RawBuildFileEntry       `json:"configs,omitempty"`
+	ContextFiles  []RawBuildFileEntry       `json:"contextFiles,omitempty"`
 }
 
-// RawConfigEntry is the JSON deserialization target for a container config entry.
-type RawConfigEntry struct {
+// RawConfigFileEntry is the JSON deserialization target for a container config entry.
+type RawConfigFileEntry struct {
 	MountPath string `json:"mountPath"`
 	Mode      string `json:"mode,omitempty"`
 	Content   string `json:"content"`

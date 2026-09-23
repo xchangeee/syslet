@@ -35,7 +35,7 @@ import (
 // phaseRank maps a recorded operation to its position in Apply's phase
 // sequence. Operations sharing a rank are unordered with respect to each other.
 //
-// The content stores — container configs, configDirs and build contexts — share
+// The content stores — container configFiles, configDirs and build contexts — share
 // one rank deliberately. Their order among themselves protects nothing; what
 // matters is that all of them land after the stops and before the unit files.
 var phaseRank = map[string]int{

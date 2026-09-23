@@ -114,8 +114,8 @@ func TestReclaimPolicy_InvalidReturnsError(t *testing.T) {
 
 func TestMode_DefaultsTo0644(t *testing.T) {
 	units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
-		Name:    "c",
-		Configs: []api.RawConfigEntry{{MountPath: "/etc/f", Content: "x"}},
+		Name:        "c",
+		ConfigFiles: []api.RawConfigFileEntry{{MountPath: "/etc/f", Content: "x"}},
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -128,8 +128,8 @@ func TestMode_DefaultsTo0644(t *testing.T) {
 
 func TestMode_ExplicitOctal(t *testing.T) {
 	units, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
-		Name:    "c",
-		Configs: []api.RawConfigEntry{{MountPath: "/etc/f", Mode: "0600", Content: "x"}},
+		Name:        "c",
+		ConfigFiles: []api.RawConfigFileEntry{{MountPath: "/etc/f", Mode: "0600", Content: "x"}},
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -142,8 +142,8 @@ func TestMode_ExplicitOctal(t *testing.T) {
 
 func TestMode_InvalidOctalReturnsError(t *testing.T) {
 	_, err := Parse(api.LoadResult{Containers: []api.RawContainerSpec{{
-		Name:    "c",
-		Configs: []api.RawConfigEntry{{MountPath: "/etc/f", Mode: "rwx", Content: "x"}},
+		Name:        "c",
+		ConfigFiles: []api.RawConfigFileEntry{{MountPath: "/etc/f", Mode: "rwx", Content: "x"}},
 	}}})
 	if err == nil {
 		t.Fatal("expected error for invalid mode")
@@ -157,7 +157,7 @@ func TestContainerUnit_FieldsAreMapped(t *testing.T) {
 		Name:           "web",
 		DesiredState:   "running",
 		RemovalAllowed: true,
-		Configs: []api.RawConfigEntry{
+		ConfigFiles: []api.RawConfigFileEntry{
 			{MountPath: "/etc/app.conf", Mode: "0640", Content: "cfg"},
 		},
 		ConfigDirs: []api.RawConfigDirEntry{{
@@ -197,7 +197,7 @@ func TestBuildUnit_FieldsAreMapped(t *testing.T) {
 		Name:          "img",
 		Containerfile: "FROM scratch",
 		ReclaimPolicy: "Delete",
-		Configs: []api.RawBuildFileEntry{
+		ContextFiles: []api.RawBuildFileEntry{
 			{Filename: "app.conf", Mode: "0600", Content: "c"},
 		},
 	}}})

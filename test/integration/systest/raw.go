@@ -122,7 +122,7 @@ func marshalSpec(spec model.Unit) ([]byte, error) {
 			raw["removalAllowed"] = true
 		}
 		if len(s.FileMounts) > 0 {
-			configs := make([]map[string]any, len(s.FileMounts))
+			fileMounts := make([]map[string]any, len(s.FileMounts))
 			for i, c := range s.FileMounts {
 				entry := map[string]any{
 					"mountPath": string(c.FullPath()),
@@ -131,9 +131,9 @@ func marshalSpec(spec model.Unit) ([]byte, error) {
 				if c.File.Mode != 0 {
 					entry["mode"] = fmt.Sprintf("%04o", c.File.Mode)
 				}
-				configs[i] = entry
+				fileMounts[i] = entry
 			}
-			raw["configs"] = configs
+			raw["configFiles"] = fileMounts
 		}
 		if len(s.DirMounts) > 0 {
 			configDirs := make([]map[string]any, len(s.DirMounts))
@@ -173,7 +173,7 @@ func marshalSpec(spec model.Unit) ([]byte, error) {
 			raw["reclaimPolicy"] = string(s.ReclaimPolicy)
 		}
 		if len(s.ContextFiles) > 0 {
-			configs := make([]map[string]any, len(s.ContextFiles))
+			contextFiles := make([]map[string]any, len(s.ContextFiles))
 			for i, c := range s.ContextFiles {
 				entry := map[string]any{
 					"filename": string(c.Filename),
@@ -182,9 +182,9 @@ func marshalSpec(spec model.Unit) ([]byte, error) {
 				if c.Mode != 0 {
 					entry["mode"] = fmt.Sprintf("%04o", c.Mode)
 				}
-				configs[i] = entry
+				contextFiles[i] = entry
 			}
-			raw["configs"] = configs
+			raw["contextFiles"] = contextFiles
 		}
 	}
 	return json.Marshal(raw)

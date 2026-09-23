@@ -1,8 +1,8 @@
 # Mount config files and config directories
 
-Containers have two ways to get files bind-mounted into them: `configs` (single files) and `configDirs` (directories, versioned via symlinks; see [Reload config without restart](reload-config-without-restart.md) for why you'd pick that instead).
+Containers have two ways to get files bind-mounted into them: `configFiles` (single files) and `configDirs` (directories, versioned via symlinks; see [Reload config without restart](reload-config-without-restart.md) for why you'd pick that instead).
 
-## configs: single files
+## configFiles: single files
 
 ```json
 {
@@ -14,7 +14,7 @@ Containers have two ways to get files bind-mounted into them: `configs` (single 
       "Image": "docker.io/library/nginx:latest"
     }
   },
-  "configs": [
+  "configFiles": [
     {
       "content": "server { listen 80; root /usr/share/nginx/html; }",
       "mountPath": "/etc/nginx/nginx.conf"
@@ -56,6 +56,6 @@ Each entry is written to `/etc/containers/config/webapp/` on the host and inject
 }
 ```
 
-A `configDir` mount path must end in a real, bind-mountable directory; its files are written and swapped in atomically via a versioned symlink (see [Reload config without restart](reload-config-without-restart.md)). Unlike `configs`, a `configDir`-using container **must** set `[Service] ExecReload=`. syslet's pre-render validation rejects a spec that declares `configDirs` without it, because `configDirs` exist to reload config in place rather than restart the container.
+A `configDir` mount path must end in a real, bind-mountable directory; its files are written and swapped in atomically via a versioned symlink (see [Reload config without restart](reload-config-without-restart.md)). Unlike `configFiles`, a `configDir`-using container **must** set `[Service] ExecReload=`. syslet's pre-render validation rejects a spec that declares `configDirs` without it, because `configDirs` exist to reload config in place rather than restart the container.
 
 Both mechanisms support multiple entries per container, and both are pruned (files/directories removed) when dropped from the spec.

@@ -39,4 +39,4 @@ This is required. syslet's validation rejects a spec with `configDirs` and no `E
 - A `configDir` content-only change → syslet swaps the symlink and runs the unit's `ExecReload=` (e.g. `systemctl reload webapp.service`); the container process itself is not restarted.
 - A change to the container's own unit options (image, ports, etc.) → the usual stop/recreate/start cycle, same as any other container change.
 
-If your service can't reload on a signal, use a plain [`configs`](mount-config-files-and-dirs.md) mount instead and accept the restart on change.
+If your service can't reload on a signal, use a plain [`configFiles`](mount-config-files-and-dirs.md) mount instead and accept the restart on change.

@@ -86,7 +86,7 @@ A container spec:
       "Network": ["webapp-net.network"]
     }
   },
-  "configs": [
+  "configFiles": [
     {
       "content": "server { listen 80; root /usr/share/nginx/html; }",
       "mountPath": "/etc/nginx/nginx.conf"
@@ -135,7 +135,7 @@ Key points:
 - unit properties `ContainerName`, `VolumeName`, and `NetworkName` are automatically set to match the spec `name` if not explicitly specified
 - For containers, when `desiredState: "running"` is set, `[Install]WantedBy=multi-user.target default.target` will be added to enable auto-start on boot
 - For containers, when `desiredState: "running"` is set, `[Service]Restart=Always` will be added so the container is restarted after crashes
-- For containers, `configs` define files to be bind-mounted into the container -- syslet writes them to `/etc/containers/config/<name>/` and injects read-only bind mounts into the quadlet
+- For containers, `configFiles` define files to be bind-mounted into the container -- syslet writes them to `/etc/containers/config/<name>/` and injects read-only bind mounts into the quadlet
 
 ### 4. Deploy
 
@@ -249,7 +249,7 @@ TODO add examples with local push and git ops
       "Network": ["webapp-net.network"]
     }
   },
-  "configs": [
+  "configFiles": [
     {
       "content": "file contents here",
       "mountPath": "/path/in/container"

@@ -99,23 +99,23 @@ type ContainerUnit struct {
 }
 
 // NewContainerUnit constructs a ContainerUnit.
-func NewContainerUnit(ref ContainerUnitRef, options UnitOptions, desiredState DesiredState, configs []ContainerFileMount, removalAllowed bool) *ContainerUnit {
+func NewContainerUnit(ref ContainerUnitRef, options UnitOptions, desiredState DesiredState, fileMounts []ContainerFileMount, removalAllowed bool) *ContainerUnit {
 	return &ContainerUnit{
 		ref:            ref,
 		options:        options,
 		DesiredState:   desiredState,
-		FileMounts:     configs,
+		FileMounts:     fileMounts,
 		RemovalAllowed: removalAllowed,
 	}
 }
 
 // NewContainerUnitWithDirs constructs a ContainerUnit including configDirs.
-func NewContainerUnitWithDirs(ref ContainerUnitRef, options UnitOptions, desiredState DesiredState, configs []ContainerFileMount, configDirs []ContainerDirMount, removalAllowed bool) *ContainerUnit {
+func NewContainerUnitWithDirs(ref ContainerUnitRef, options UnitOptions, desiredState DesiredState, fileMounts []ContainerFileMount, configDirs []ContainerDirMount, removalAllowed bool) *ContainerUnit {
 	return &ContainerUnit{
 		ref:            ref,
 		options:        options,
 		DesiredState:   desiredState,
-		FileMounts:     configs,
+		FileMounts:     fileMounts,
 		DirMounts:      configDirs,
 		RemovalAllowed: removalAllowed,
 	}

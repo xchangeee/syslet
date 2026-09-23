@@ -78,7 +78,7 @@ func convertContainer(r api.RawContainerSpec) (*model.ContainerUnit, error) {
 	if err != nil {
 		return nil, err
 	}
-	configFiles, err := convertConfigFiles(r.Configs)
+	configFiles, err := convertConfigFiles(r.ConfigFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func convertBuild(r api.RawBuildSpec) (*model.BuildUnit, error) {
 	if err != nil {
 		return nil, err
 	}
-	configs, err := convertBuildFiles(r.Configs)
+	contextFiles, err := convertBuildFiles(r.ContextFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func convertBuild(r api.RawBuildSpec) (*model.BuildUnit, error) {
 		model.BuildUnitRef(r.Name),
 		opts,
 		r.Containerfile,
-		configs,
+		contextFiles,
 		reclaimPolicy,
 	), nil
 }
@@ -193,28 +193,28 @@ func perm(mode os.FileMode) os.FileMode {
 	return mode
 }
 
-func convertConfigFiles(raw []api.RawConfigEntry) ([]model.ContainerFileMount, error) {
-	configs := make([]model.ContainerFileMount, len(raw))
+func convertConfigFiles(raw []api.RawConfigFileEntry) ([]model.ContainerFileMount, error) {
+	mounts := make([]model.ContainerFileMount, len(raw))
 	for i, c := range raw {
 		mode, err := parseMode(c.Mode)
 		if err != nil {
 			return nil, fmt.Errorf("config[%d].mode: %w", i, err)
 		}
-		configs[i] = model.NewContainerFileMount(c.MountPath, c.Content, perm(mode))
+		mounts[i] = model.NewContainerFileMount(c.MountPath, c.Content, perm(mode))
 	}
-	return configs, nil
+	return mounts, nil
 }
 
 func convertBuildFiles(raw []api.RawBuildFileEntry) ([]model.BuildContextFile, error) {
-	configs := make([]model.BuildContextFile, len(raw))
+	contextFiles := make([]model.BuildContextFile, len(raw))
 	for i, c := range raw {
 		mode, err := parseMode(c.Mode)
 		if err != nil {
 			return nil, fmt.Errorf("config[%d].mode: %w", i, err)
 		}
-		configs[i] = model.NewBuildContextFile(c.Filename, c.Content, perm(mode))
+		contextFiles[i] = model.NewBuildContextFile(c.Filename, c.Content, perm(mode))
 	}
-	return configs, nil
+	return contextFiles, nil
 }
 
 func convertConfigDirs(raw []api.RawConfigDirEntry) ([]model.ContainerDirMount, error) {

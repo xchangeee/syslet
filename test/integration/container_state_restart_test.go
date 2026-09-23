@@ -34,7 +34,7 @@ func TestContainerConfigChanges(t *testing.T) {
 		image     string
 		oldMounts []model.ContainerFileMount
 		newMounts []model.ContainerFileMount
-		preWrite  []systest.WantFile // configs already on disk, when the case needs them
+		preWrite  []systest.WantFile // configFiles already on disk, when the case needs them
 		want      []systest.WantFile
 		// wantEmptyConfigDir asserts the container's config directory was cleaned
 		// out, not merely unreferenced — removal must reclaim the files too.

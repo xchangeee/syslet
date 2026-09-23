@@ -59,12 +59,12 @@ For a stale container unit that is permitted to go, syslet:
 
 1. Checks the unit's runtime state and stops it if it is running. A oneshot container (`Type=oneshot`) is not stopped, since there is nothing running to stop.
 2. Deletes the `.container` unit file.
-3. Deletes `/etc/containers/config/<name>/`, which holds every `configs` file and every `configDirs` group, including all retained versions and their symlinks.
+3. Deletes `/etc/containers/config/<name>/`, which holds every `configFiles` file and every `configDirs` group, including all retained versions and their symlinks.
 4. Leaves the rest to the single `daemon-reload` at the end of the apply, after which podman's quadlet generator no longer produces the `.service`.
 
 Containers have no `reclaimPolicy` because the container itself is disposable: stopping the unit disposes of it, and anything that needed to survive lives in the volumes it mounted. Those volumes are separate units with their own markers, and a container's removal does not touch them.
 
-Config files also disappear in a smaller case that has nothing to do with unit removal. Delete a `configs` entry or a `configDirs` group from a spec that otherwise stays, and the matching host file or directory group is pruned as stale config. That is ordinary reconciliation of a live unit, and `removalAllowed` does not gate it.
+Config files also disappear in a smaller case that has nothing to do with unit removal. Delete a `configFiles` entry or a `configDirs` group from a spec that otherwise stays, and the matching host file or directory group is pruned as stale config. That is ordinary reconciliation of a live unit, and `removalAllowed` does not gate it.
 
 ### volume
 
