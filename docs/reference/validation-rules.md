@@ -15,7 +15,7 @@ A failure exits syslet with the error before a plan is built.
 - `type` is `container`, `volume`, `network`, `build` or `secret`.
 - The input isn't empty. An empty array `[]` is valid and declares no specs, so every unit whose removal is allowed is removed.
 - Every spec except `secret` has a `unit` object; `{}` is allowed.
-- Unit option values are strings or arrays of strings.
+- Unit option values are strings, arrays of strings, or maps of strings for the options that take a map; see [Unit options](spec-schema/unit-options.md#value-forms).
 - `desiredState` is `running`, `stopped` or `oneshot`.
 - `reclaimPolicy` is `Delete` or `Retain`.
 - File `mode`s are octal strings.
