@@ -13,7 +13,7 @@ A failure exits syslet with the error before a plan is built.
 
 - Every spec sets a supported `apiVersion`.
 - `type` is `container`, `volume`, `network`, `build` or `secret`.
-- The input contains at least one spec.
+- The input isn't empty. An empty array `[]` is valid and declares no specs, so every unit whose removal is allowed is removed.
 - Every spec except `secret` has a `unit` object; `{}` is allowed.
 - Unit option values are strings or arrays of strings.
 - `desiredState` is `running`, `stopped` or `oneshot`.

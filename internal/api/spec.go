@@ -105,10 +105,16 @@ func LoadSpecsDir(fs afero.Fs, dirPath string) (LoadResult, error) {
 // JSON array of spec objects, newline-delimited JSON, or whitespace/`cat`-
 // concatenated objects (e.g. `cat dir/*.json`). Each object is dispatched
 // through unmarshalInto by its "type" field.
+//
+// An empty array is a valid desired state with no specs, which lets the planner
+// prune every unit whose removal is allowed; locking a unit is the explicit
+// opt-out. A stream without any JSON value is rejected instead, since that is
+// what a broken pipe or a failed export produces rather than a declared state.
 func LoadSpecsReader(r io.Reader) (LoadResult, error) {
 	var result LoadResult
 	dec := json.NewDecoder(r)
-	for i := 0; ; i++ {
+	i := 0
+	for ; ; i++ {
 		var msg json.RawMessage
 		if err := dec.Decode(&msg); err != nil {
 			if errors.Is(err, io.EOF) {
@@ -121,7 +127,7 @@ func LoadSpecsReader(r io.Reader) (LoadResult, error) {
 		}
 	}
 
-	if result.empty() {
+	if i == 0 {
 		return LoadResult{}, fmt.Errorf("no specs found in input")
 	}
 	return result, nil

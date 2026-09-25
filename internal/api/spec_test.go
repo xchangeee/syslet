@@ -174,6 +174,21 @@ func TestLoadSpecsReader_InputShapes(t *testing.T) {
 	}
 }
 
+// TestLoadSpecsReader_EmptyArray_ReturnsEmpty asserts that an explicit empty
+// array is a valid desired state: nothing is declared, so everything whose
+// removal is allowed gets pruned. Input with no JSON value at all stays an
+// error (see TestLoadSpecsReader_ErrorCases), since that is what a broken
+// pipe or failed export produces.
+func TestLoadSpecsReader_EmptyArray_ReturnsEmpty(t *testing.T) {
+	result, err := LoadSpecsReader(strings.NewReader("[]\n"))
+	if err != nil {
+		t.Fatalf("LoadSpecsReader failed: %v", err)
+	}
+	if !result.empty() {
+		t.Errorf("expected no specs, got %+v", result.V1)
+	}
+}
+
 func TestLoadSpecsReader_ErrorCases(t *testing.T) {
 	tests := map[string]string{
 		"empty":          "",
