@@ -86,6 +86,7 @@ nav = [
     { "CUE schema" = "reference/cue-schema.md" },
     { "CLI" = "reference/cli.md" },
     { "Plan output" = "reference/plan-output.md" },
+    { "Validation rules" = "reference/validation-rules.md" },
     { "Daemon config" = "reference/daemon-config.md" },
     { "File layout" = "reference/file-layout.md" },
     { "Architecture" = "reference/architecture.md" },

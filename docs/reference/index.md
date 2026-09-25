@@ -11,6 +11,7 @@ What you run and read:
 
 - [CLI](cli.md)
 - [Plan output](plan-output.md)
+- [Validation rules](validation-rules.md)
 
 What's on the host:
 

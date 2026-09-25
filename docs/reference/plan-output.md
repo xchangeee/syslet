@@ -21,7 +21,7 @@ Validation errors:
 | `error: secret "<name>": decryption failed: ...`, `error: secrets present in spec but no age key available ...` | The host can't decrypt a secret spec. |
 | `error [<unit>]: ...` | A check of one unit against the host, such as a volume change the installed markers don't allow. |
 
-See [Safety mechanisms](../explanation/safety-mechanisms.md#multi-stage-validation) for the stages.
+See [Validation rules](validation-rules.md) for every check, and [Safety mechanisms](../explanation/safety-mechanisms.md#multi-stage-validation) for why the stages exist.
 
 ## Sections
 

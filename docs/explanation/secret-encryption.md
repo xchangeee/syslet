@@ -3,6 +3,12 @@
 Containers need passwords and tokens, and a GitOps repository is the wrong place for them in plain text.
 syslet keeps them [SOPS](https://getsops.io/)-encrypted in the repository and decrypts them only on the host that uses them.
 
+## Threat model
+
+The encryption protects the repository, not the host.
+Someone who gets a copy of the repository by accident, without being one of its recipients, sees the secrets' key names but not their values.
+Anyone with root on a host can read what's decrypted there; see [Where the protection ends](#where-the-protection-ends).
+
 ## Who can decrypt
 
 Each secret file is encrypted to several [age](https://age-encryption.org/) recipients.

@@ -1,21 +1,30 @@
 # How an apply works
 
-Every syslet invocation runs the same five-step pipeline, whether it's a local dry-run, an SSH push, or a webhookd-triggered git pull:
+Every syslet invocation runs the same pipeline, whether it's a local dry-run, an SSH push, or a webhookd-triggered git pull:
 
 1. **Read** all JSON specs from the input (stdin stream, directory, or file).
-2. **Validate** consistency — no duplicate unit names, all volumes/networks/builds referenced by containers exist as specs, no duplicate config paths within a container, `configDirs` require `ExecReload=`, and so on.
-3. **Diff** the desired specs against the installed state already on disk.
-4. **Execute** the resulting plan, in strict order (see below).
-5. **Exit** with a status summary — non-zero if anything failed.
+2. **Pre-render validation** checks the specs on their own, before anything is derived from them.
+3. **Render** turns each spec into a quadlet unit file.
+   syslet adds what it manages itself: the resource name, its `X-Syslet` markers for `removalAllowed` and `reclaimPolicy`, `Restart=always` and `WantedBy=` for `desiredState: "running"` or `Type=oneshot` for `"oneshot"`, and a read-only `Volume=` mount for every config file and directory.
+4. **Post-render validation** checks the rendered units, such as references between containers and the volumes, networks and builds they use.
+5. **Diff** the rendered units and config files against the installed state on disk, and find stale units.
+   Two parts come from the live system instead: systemd reports whether each container is running, which decides between start, stop and restart, and podman's secret store is listed and compared by each secret's `syslet/hash` label.
+6. **Stage** the rendered units through podman's quadlet generator and `systemd-analyze verify`, when the plan writes unit files.
+7. **Execute** the resulting plan, in strict order (see below).
+8. **Exit** with a status summary, non-zero if anything failed.
 
-`--diff` runs steps 1–3 and prints the plan; the normal (apply) mode runs all five.
+`--diff` runs steps 1–6 and prints the plan; the normal (apply) mode runs all eight.
+A failed check in steps 2 to 6 stops before step 7, so nothing on the host changes; see [Validation rules](../reference/validation-rules.md) for every check.
 
-Planning and executing are separate steps on purpose: a diff and an apply build the plan with the same code, and the apply executes exactly that plan.
-There is no separate dry-run code path that could drift from what an apply does, so a diff is a faithful preview.
+Rendering sits between the two validation stages because some mistakes only show in the rendered unit.
+A container references a volume through `Volume=<name>.volume` in its unit options, and syslet's own config mounts are added as `Volume=` lines too, so a conflicting mount destination can only be seen once both are in the same unit.
+
+What `--diff` prints is what an apply would do: both build the plan the same way, and an apply only adds step 7.
+An apply builds its own plan when it runs, so if the input or the host changes after a diff, the apply follows those changes.
 
 ## Apply phase ordering
 
-Step 4 always executes in this order, regardless of how many units are affected:
+Step 7 always executes in this order, regardless of how many units are affected:
 
 1. Stop containers that changed or are being removed.
 2. Write config files to `/etc/containers/config/<name>/`.

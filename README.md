@@ -1,9 +1,9 @@
 # syslet
 
-syslet is a GitOps-friendly deployment tool for [Podman](https://podman.io/) containers using [systemd](https://systemd.io/) and [quadlets](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html).
+syslet (systemd + kubelet) is a GitOps-friendly deployment tool for [Podman](https://podman.io/) containers using [systemd](https://systemd.io/) and [quadlets](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html).
 You describe containers, volumes, networks, image builds and secrets as declarative specs, and syslet turns them into quadlet unit files and drives systemd and podman to match.
 
-It keeps what's good about the Kubernetes user experience (a declarative spec, validation before anything changes, pushing the spec instead of starting containers by hand) without a control plane: syslet runs once per invocation and leaves the rest to systemd.
+It keeps some aspects of the Kubernetes user experience (declarative specs, validation and a diff preview before anything changes, cleanup of what's no longer declared) without a control plane: syslet runs once per invocation and leaves the rest to systemd.
 
 ## A first look
 
