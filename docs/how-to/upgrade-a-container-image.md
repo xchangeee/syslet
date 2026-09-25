@@ -3,7 +3,7 @@
 syslet only restarts a container when its spec changes.
 Pin images to a version tag and bump it to upgrade; a moving tag like `latest` is never re-pulled on its own.
 
-## 1. Bump the tag
+## Bump the tag
 
 === "CUE"
 
@@ -47,7 +47,7 @@ changed:
 webapp.container                         updated    unit updated, restarted (desired: running)
 ```
 
-## 2. Pull the image first
+## Pull the image first
 
 Podman pulls a missing image while the container starts, so the download counts as downtime and can hit systemd's start timeout.
 Pull it before applying:
@@ -56,7 +56,7 @@ Pull it before applying:
 ssh web01 sudo podman pull docker.io/library/nginx:1.28
 ```
 
-## 3. Apply
+## Apply
 
 === "CUE"
 
@@ -73,7 +73,9 @@ ssh web01 sudo podman pull docker.io/library/nginx:1.28
 To roll back, set the old tag again and apply; the old image is still on the host.
 Remove images you no longer need with `podman image prune`.
 
-## Moving tags
+## Related tasks
+
+### Upgrade a container on a moving tag
 
 To upgrade a container that uses a moving tag, pull the tag again and restart the service by hand:
 

@@ -3,7 +3,7 @@
 Preview every change before you apply it, so a restart, a removal or a deleted volume never comes as a surprise.
 `--diff` builds the same plan an apply would carry out, and changes nothing on the host.
 
-## 1. Run the plan
+## Run the plan
 
 === "CUE"
 
@@ -21,7 +21,7 @@ Preview every change before you apply it, so a restart, a removal or a deleted v
 
 If the output starts with `Validation errors:`, the plan is refused as a whole; see [Troubleshoot a failed apply](troubleshoot-a-failed-apply.md#the-plan-has-errors).
 
-## 2. Check downtime
+## Check downtime
 
 Read the `CHANGES` column of the summary:
 
@@ -30,7 +30,7 @@ Read the `CHANGES` column of the summary:
 
 `Services to stop:` lists every unit that stops, including containers restarted because a volume, network, build or secret they use changes.
 
-## 3. Check removals
+## Check removals
 
 - Every `removed` unit goes away, and under `reclaimPolicy: "Delete"` its podman resource with it.
 - `Podman volumes to delete:` lists volumes whose data is lost. Stop if a volume there should keep its data, and [lock it](lock-resources.md).
@@ -38,7 +38,7 @@ Read the `CHANGES` column of the summary:
 
 A plan with unexpected `removed` lines usually means the input is incomplete, such as a missing file or a disabled entry. Fix the input instead of applying.
 
-## 4. Keep secrets out of logs
+## Keep secrets out of logs
 
 `Secret changes:` hides values as `(secret)`, so the plan is safe for shared logs such as CI.
 To check a value locally, set `SYSLET_SHOW_SECRETS=1`.

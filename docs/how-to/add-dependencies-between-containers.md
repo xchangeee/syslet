@@ -4,7 +4,7 @@ A container that needs another one, such as an app and its database, declares th
 systemd then starts the other container too, and in the right order.
 The examples below make the container `app` depend on `db`.
 
-## 1. Declare the dependency
+## Declare the dependency
 
 Name the other container's quadlet file in `Wants=` and `After=`:
 
@@ -40,7 +40,16 @@ Quadlet translates `db.container` into the service name `db.service`.
 syslet doesn't check the name.
 With a misspelled one, systemd ignores the dependency and starts `app` on its own.
 
-## 2. Preview and apply
+### Avoid Requires=
+
+`Requires=`, `BindsTo=` and `PartOf=` make systemd stop `app` whenever `db` stops.
+When a change restarts `db`, syslet stops it and starts it again, but it doesn't start `app`, since `app` was running when the plan was made.
+`app` stays down until the next apply.
+
+`Wants=` doesn't pass the stop on, so `app` keeps running while `db` restarts.
+A oneshot job is the exception, see [Run a oneshot job](run-a-oneshot-job.md).
+
+## Preview and apply
 
 === "CUE"
 
@@ -57,12 +66,3 @@ With a misspelled one, systemd ignores the dependency and starts `app` on its ow
     ```
 
 The new `[Unit]` options change `app`'s unit, so syslet restarts it.
-
-## Avoid Requires=
-
-`Requires=`, `BindsTo=` and `PartOf=` make systemd stop `app` whenever `db` stops.
-When a change restarts `db`, syslet stops it and starts it again, but it doesn't start `app`, since `app` was running when the plan was made.
-`app` stays down until the next apply.
-
-`Wants=` doesn't pass the stop on, so `app` keeps running while `db` restarts.
-A oneshot job is the exception, see [Run a oneshot job](run-a-oneshot-job.md).

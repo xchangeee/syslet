@@ -5,7 +5,7 @@ CUE merges a directory's files with the files of the same package in its parent 
 
 This guide starts from a repository with SOPS set up as in [Set up SOPS in a CUE repository](set-up-sops-in-a-cue-repository.md).
 
-## 1. Lay out the repository
+## Lay out the repository
 
 ```text
 infra/
@@ -24,7 +24,7 @@ infra/
 
 Every `.cue` file uses `package syslet`.
 
-## 2. Move the host settings out of `syslet.cue`
+## Move the host settings out of `syslet.cue`
 
 Declare `fqdn` without a value, and move the secret loading into the host directories, since `@embed` reads files relative to the file it's in:
 
@@ -49,7 +49,7 @@ sysdef: #Sysdef
 syslet: specRendered: (syslettools.#SysletJsonFromSysdef & {in: sysdef}).specRendered
 ```
 
-## 3. Share templates
+## Share templates
 
 Put what several hosts deploy into a hidden field at the root.
 Defaults (`*`) let a host override single values:
@@ -66,7 +66,7 @@ _site: spec: {
 }
 ```
 
-## 4. Describe each host
+## Describe each host
 
 ```cue title="hosts/web01/web01.cue"
 @extern(embed)
@@ -95,7 +95,7 @@ sysdef: containers: site: spec: {
 }
 ```
 
-## 5. Plan and apply per host
+## Plan and apply per host
 
 Pass the host directory to every command:
 
@@ -113,7 +113,9 @@ With GitOps, export the host's directory in the deploy script:
 cue export ./hosts/web01 -e syslet.specRendered --out text > "$SPEC_FILE"
 ```
 
-## Encrypt secrets per host
+## Related tasks
+
+### Encrypt secrets per host
 
 Give each host directory its own creation rule, so a host only decrypts its own secrets:
 

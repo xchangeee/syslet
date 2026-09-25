@@ -48,7 +48,7 @@ That check only sees the input. When a container and its volume, network, or bui
 skipped: still referenced by webapp.container
 ```
 
-Because a diff builds the same plan as an apply, every `removed` and `skipped` line in it is a removal decision made in advance; see [Preview changes with --diff](../how-to/preview-changes-with-diff.md#3-check-removals).
+Because a diff builds the same plan as an apply, every `removed` and `skipped` line in it is a removal decision made in advance; see [Preview changes with --diff](../how-to/preview-changes-with-diff.md#check-removals).
 
 ## Behavior per unit type
 

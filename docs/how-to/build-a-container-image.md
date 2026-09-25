@@ -3,7 +3,7 @@
 To run an upstream image with local changes, such as a baked-in config file or a patched package, build it on the host instead of pushing it through a registry.
 The examples build `myapp` from nginx and run it as the container `webapp`.
 
-## 1. Write a build spec
+## Write a build spec
 
 === "CUE"
 
@@ -47,7 +47,7 @@ The examples build `myapp` from nginx and run it as the container `webapp`.
 - `containerfile` holds the Containerfile's content, not a path.
 - `contextFiles` are the files the Containerfile can `COPY` or `ADD`. To mount files into the running container instead, use `configFiles` (see [Mount config files and dirs](mount-config-files-and-dirs.md)).
 
-## 2. Reference the build from a container
+## Reference the build from a container
 
 Set the container's `Image` to `<build name>.build`:
 
@@ -75,7 +75,7 @@ Set the container's `Image` to `<build name>.build`:
     }
     ```
 
-## 3. Preview and apply
+## Preview and apply
 
 Deploy both specs in the same input; a container that references a missing build fails validation.
 
@@ -97,7 +97,9 @@ podman builds the image before it starts the container.
 From then on, a change to `containerfile` or `contextFiles` rebuilds the image and restarts the container.
 A newer base image behind the same `FROM` tag doesn't trigger a rebuild; syslet leaves image updates to other tools.
 
-## Remove a build
+## Related tasks
+
+### Remove a build
 
 Drop the build spec and every `Image` that references it, then preview and apply.
 Builds can't be locked, so the build unit and its context are always removed.

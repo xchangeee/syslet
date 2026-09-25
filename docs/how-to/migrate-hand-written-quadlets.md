@@ -3,7 +3,7 @@
 A host that already runs hand-written quadlet files can be moved to syslet unit by unit: each file becomes a spec with the same options.
 The containers keep running until the first apply restarts them.
 
-## 1. Translate each file into a spec
+## Translate each file into a spec
 
 The file name without its extension becomes the spec name, and each section becomes a struct under `unit`.
 An option that appears several times becomes a list:
@@ -52,7 +52,7 @@ WantedBy=multi-user.target
 Leave out `[Install] WantedBy=` and `[Service] Restart=`; `desiredState: "running"` sets both.
 syslet only manages `.container`, `.volume`, `.network` and `.build` files; leave other types, such as `.pod` or `.kube`, as they are.
 
-## 2. Keep the names that matter
+## Keep the names that matter
 
 Quadlet names a resource `systemd-<file name>` unless the file sets a name; syslet always names it after the spec, without the prefix.
 Check the existing names with `podman ps -a`, `podman volume ls` and `podman network ls`:
@@ -63,7 +63,7 @@ Check the existing names with `podman ps -a`, `podman volume ls` and `podman net
 
 Drop `ContainerName=`, `VolumeName=` and `NetworkName=` from the specs; syslet overwrites them.
 
-## 3. Hand over the host
+## Hand over the host
 
 Move the hand-written files out of the quadlet directory and reload systemd:
 
@@ -76,7 +76,7 @@ sudo systemctl daemon-reload
 The containers keep running.
 syslet sees that their services are still active and restarts them onto the new units on the first apply.
 
-## 4. Preview and apply
+## Preview and apply
 
 === "CUE"
 

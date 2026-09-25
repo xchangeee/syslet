@@ -14,6 +14,13 @@ The site is built with zensical: `make docs` builds it with `--strict`, which fa
 Pages are organized by [Diataxis](https://diataxis.fr/) quadrant (`tutorials/`, `how-to/`, `explanation/`, `reference/`).
 Navigation is defined explicitly in `zensical.toml`'s `nav` table, so a new page must be added there, and to its quadrant's `index.md`.
 
+## How-to headings
+
+How-to headings aren't numbered.
+A procedure's steps are the page's H2 sections, in order.
+Tasks the reader does instead of or after the procedure, such as removing what it added, go under a final `## Related tasks` as H3 sections, so they can't be mistaken for the next step.
+Caveats that belong to a step go into that step, not into a section of their own.
+
 ## Tutorial code files
 
 Files the tutorials ask the reader to create live in `docs/tutorials/snippets/<tutorial>/`, as they look at the end of that tutorial; a version from an earlier step goes into `step-N/`.

@@ -9,7 +9,7 @@ syslet has no control plane to run such a controller, but CUE can do the same wo
 This guide sets up Caddy as that reverse proxy, routing each hostname to its container.
 The examples route `web.example.com` to the container `site`.
 
-## 1. Enable the ingress addon
+## Enable the ingress addon
 
 Add `#SysdefIngress` and its defaults to `#Sysdef`:
 
@@ -36,7 +36,7 @@ sysdef: #Sysdef
 syslet: specRendered: (syslettools.#SysletJsonFromSysdef & {in: sysdef}).specRendered
 ```
 
-## 2. Deploy Caddy
+## Deploy Caddy
 
 ```cue title="caddy.cue"
 package syslet
@@ -129,7 +129,7 @@ sysdef: {
 - The `localhost:80` site answers `/healthz`, which the container's health check requests.
 - The lock keeps the container and both volumes when the Caddy entries are removed, so the hostnames stay reachable and Caddy doesn't request all certificates again; `caddy-data` holds the certificates and their keys.
 
-## 3. Route a hostname to a container
+## Route a hostname to a container
 
 Put the container on the `caddy` network and add an ingress entry with the same name:
 
@@ -171,7 +171,9 @@ cue cmd apply
 
 A new or changed entry only changes the Caddyfile, so Caddy reloads and the containers keep running.
 
-## 4. Get certificates with a DNS challenge
+## Related tasks
+
+### Get certificates with a DNS challenge
 
 By default Caddy proves it owns a hostname over port 80, which fails when the host isn't reachable from the internet.
 With a DNS challenge Caddy creates a DNS record instead.
@@ -182,7 +184,7 @@ Prerequisites:
 - A CUE repository with SOPS encryption and secret files loaded, see [Set up SOPS in a CUE repository](set-up-sops-in-a-cue-repository.md).
 - A deSEC token with permission to manage the domain's records.
 
-### Store the token
+#### Store the token
 
 Create `creds-caddy.enc.yaml` next to your CUE files:
 
@@ -198,7 +200,7 @@ sops -e -i creds-caddy.enc.yaml
 
 The file becomes the secret spec `caddy`, and its key the podman secret `caddy-desectoken` (see [Load every file by name](set-up-sops-in-a-cue-repository.md#load-every-file-by-name)).
 
-### Build Caddy with the deSEC module
+#### Build Caddy with the deSEC module
 
 The official Caddy image contains no DNS providers, so build one with the deSEC module and pass it the token:
 

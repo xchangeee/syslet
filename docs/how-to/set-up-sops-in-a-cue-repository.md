@@ -15,7 +15,7 @@ For how the keys fit together, see [Secret encryption](../explanation/secret-enc
 - [sops](https://getsops.io/docs/#download), [age](https://github.com/FiloSottile/age#installation) and [ssh-to-age](https://github.com/Mic92/ssh-to-age) on your workstation.
 - On each host, an ed25519 SSH host key at `/etc/ssh/ssh_host_ed25519_key`, or a [dedicated decryption key](use-a-dedicated-decryption-key.md).
 
-## 1. Get your admin key
+## Get your admin key
 
 If you already have an age key, print its public key:
 
@@ -35,7 +35,7 @@ On macOS, sops looks in `~/Library/Application Support/sops/age/keys.txt` instea
 Back up the private key and keep it out of the repository: without it, you can't edit the secrets anymore.
 If several people edit the secrets, each uses their own key and sends you the public half.
 
-## 2. Get each host's public key
+## Get each host's public key
 
 Convert the host's public SSH host key to an age recipient:
 
@@ -46,7 +46,7 @@ ssh web01.example.com cat /etc/ssh/ssh_host_ed25519_key.pub | ssh-to-age
 With a dedicated decryption key, convert `/etc/syslet/age_ed25519.pub` instead.
 Repeat this for every host that deploys secrets.
 
-## 3. Configure sops
+## Configure sops
 
 Create `.sops.yaml` in the repository root and list the public keys from above:
 
@@ -59,7 +59,7 @@ Keep the suffix: the CUE config below loads secret files by it.
 
 If the repository describes several hosts, use one rule per host directory instead, so each host only decrypts its own secrets (see [Manage several hosts](manage-several-hosts.md#encrypt-secrets-per-host)).
 
-## 4. Load the secret files in CUE
+## Load the secret files in CUE
 
 Choose how to turn files into secret specs:
 
@@ -83,7 +83,7 @@ Add `@extern(embed)` as the first line of `syslet.cue`, and the `secretFiles` an
 
 The secret files must sit in the same directory as the CUE file that embeds them.
 With a glob into a subdirectory, the directory stays part of each file name, so the `creds-` prefix isn't stripped and the spec name contains the path.
-To keep one secret file per host directory, move these lines into each host's CUE file (see [Manage several hosts](manage-several-hosts.md#4-describe-each-host)).
+To keep one secret file per host directory, move these lines into each host's CUE file (see [Manage several hosts](manage-several-hosts.md#describe-each-host)).
 
 ### Load a single file
 
@@ -98,7 +98,7 @@ sysdef: secrets: db: spec: {
 The path is relative to the CUE file's directory and can't contain `..`.
 The file that contains this line needs `@extern(embed)` as its first line, too.
 
-## 5. Add the first secret
+## Add the first secret
 
 Write the values in plain text first, with a name that matches your `.sops.yaml` rule and CUE glob:
 
@@ -119,7 +119,7 @@ If a host is missing there, it can't decrypt the file: fix the rule, then run `s
 
 From now on, edit the file with `sops edit creds-webapp.enc.yaml`; to remove the secret, delete the file.
 
-## 6. Check the setup
+## Check the setup
 
 Check that CUE picks up the file, without any key:
 

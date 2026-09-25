@@ -22,7 +22,7 @@ The schema doesn't check option names under `unit`; only the host's podman can d
 A plan catches what the schema can't: invalid unit options, secrets the host can't decrypt, and changes to a volume that isn't allowed to be recreated.
 It needs the host, since syslet diffs against the installed units and decrypts with the host's key.
 
-### 1. Give CI a plan-only key
+### Give CI a plan-only key
 
 Create a user for CI on the host, and allow it to run exactly the dry-run as root, in `/etc/sudoers.d/syslet-ci`:
 
@@ -38,7 +38,7 @@ command="sudo /usr/local/bin/syslet --diff --stdin",restrict ssh-ed25519 AAAA...
 
 With both in place, the key can't apply, even if the pipeline is compromised.
 
-### 2. Run the plan
+### Run the plan
 
 Add the plan to your pipeline, once per host:
 

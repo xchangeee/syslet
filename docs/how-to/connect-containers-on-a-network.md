@@ -3,7 +3,7 @@
 Containers on the same network reach each other by container name.
 This guide puts an app and a Redis cache on one network, so the app connects to `cache:6379` and the cache isn't published on the host.
 
-## 1. Declare the network and attach both containers
+## Declare the network and attach both containers
 
 === "CUE"
 
@@ -74,7 +74,7 @@ Podman enables DNS on every network it creates, unless the network sets `Disable
 Only `app` publishes a port.
 `cache` is reachable from containers on `app-net`, but not from outside the host.
 
-## 2. Apply and check
+## Apply and check
 
 === "CUE"
 
@@ -93,7 +93,9 @@ Only `app` publishes a port.
 The second command prints the cache's address on `app-net`.
 It needs `getent` in the app image; any tool that resolves names works.
 
-## Add more names
+## Related tasks
+
+### Add more names
 
 `NetworkAlias=` gives a container extra names on its networks, for example to keep an old hostname working:
 
@@ -113,7 +115,7 @@ It needs `getent` in the app image; any tool that resolves names works.
 
 Several containers with the same alias share it, and a lookup returns all of them.
 
-## Assign networks in CUE
+### Assign networks in CUE
 
 With many containers and networks, `#SysdefAssignNetwork` keeps the membership in one place.
 Each key is a network, each list the containers on it:

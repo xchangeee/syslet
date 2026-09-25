@@ -3,7 +3,7 @@
 A volume created outside syslet, by hand or by another tool, can be brought under a spec without copying its data.
 syslet names the podman volume after the spec, and the volume's service only creates it if it's missing, so a spec with the existing volume's name reuses it.
 
-## 1. Find the volume's name
+## Find the volume's name
 
 ```sh
 ssh web01 sudo podman volume ls
@@ -11,7 +11,7 @@ ssh web01 sudo podman volume ls
 
 A volume from a hand-written quadlet is usually called `systemd-<unit name>`; to move a whole quadlet setup over, see [Migrate hand-written quadlets](migrate-hand-written-quadlets.md).
 
-## 2. Add a locked spec with that name
+## Add a locked spec with that name
 
 === "CUE"
 
@@ -41,7 +41,7 @@ Lock it from the start, so a mistake in the input can't delete data you never ha
 Leave `unit` empty, or match the options the volume was created with.
 The existing volume keeps its own options either way, and a later change to `unit` recreates the volume, which syslet refuses while it's locked.
 
-## 3. Mount it and apply
+## Mount it and apply
 
 Reference it from the container that uses the data:
 
