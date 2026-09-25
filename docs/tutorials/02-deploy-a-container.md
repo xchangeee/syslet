@@ -155,3 +155,4 @@ webapp.container                         unchanged  up to date (desired: running
 Applying an unchanged spec is always a no-op, which makes it safe to re-run syslet on every deploy, or on a schedule, without unnecessary restarts.
 
 See [Deploy over SSH](../how-to/deploy-over-ssh.md) for more on this workflow.
+Continue with [Setup CUE repository](03-setup-cue-repository.md).
