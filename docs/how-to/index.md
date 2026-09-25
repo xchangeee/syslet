@@ -24,6 +24,7 @@ Changing what runs, and how it restarts.
 - [Upgrade a container image](upgrade-a-container-image.md)
 - [Set environment variables](set-environment-variables.md)
 - [Mount config files and dirs](mount-config-files-and-dirs.md)
+- [Pass a secret to a container](pass-a-secret-to-a-container.md)
 - [Set systemd service options](set-systemd-service-options.md)
 - [Add dependencies between containers](add-dependencies-between-containers.md)
 - [Run a oneshot job](run-a-oneshot-job.md)
@@ -44,10 +45,9 @@ Volumes hold data, so these guides are about keeping it.
 
 ## Secrets
 
-Using secrets in containers, and managing the keys that encrypt them.
+Keeping secrets encrypted in the repository, and managing the keys that encrypt them.
 
 - [Set up SOPS in a CUE repository](set-up-sops-in-a-cue-repository.md)
-- [Pass a secret to a container](pass-a-secret-to-a-container.md)
 - [Rotate a secret](rotate-a-secret.md)
 - [Add a SOPS recipient](add-a-sops-recipient.md)
 - [Rotate the SSH host key](rotate-the-ssh-host-key.md)

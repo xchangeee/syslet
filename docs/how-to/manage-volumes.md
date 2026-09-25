@@ -63,30 +63,6 @@ Mount it from a container in the same input:
 The podman volume is created by the volume's service when the first container using it starts.
 A volume spec that no container references is valid, but nothing creates the podman volume.
 
-## Lock a volume
-
-Lock the volume and apply:
-
-=== "CUE"
-
-    ```cue
-    sysdef: (syslettools.#SysdefLock & {in: volumes: ["webapp-data"]}).out
-    ```
-
-=== "JSON"
-
-    ```json
-    "removalAllowed": false,
-    "reclaimPolicy": "Retain"
-    ```
-
-Both markers live in `[X-Syslet]`, so changing them rewrites the unit file without touching the volume or restarting containers.
-
-A locked volume:
-
-- is skipped, with its data intact, when its spec disappears from the input.
-- refuses any meaningful change (see [Change a volume](#change-a-volume)).
-
 ## Change a volume
 
 Podman can't reconfigure a volume in place.
@@ -112,6 +88,30 @@ Lock the volume again afterwards if it should stay protected.
 Setting the markers and the change in one apply doesn't work, because syslet reads the markers from the installed unit, not from your spec.
 
 To keep the data, don't change the volume. Add a second volume under a new name, copy the data over with podman, point the containers at the new volume, then [remove](#remove-a-volume) the old one.
+
+## Lock a volume
+
+Lock the volume and apply:
+
+=== "CUE"
+
+    ```cue
+    sysdef: (syslettools.#SysdefLock & {in: volumes: ["webapp-data"]}).out
+    ```
+
+=== "JSON"
+
+    ```json
+    "removalAllowed": false,
+    "reclaimPolicy": "Retain"
+    ```
+
+Both markers live in `[X-Syslet]`, so changing them rewrites the unit file without touching the volume or restarting containers.
+
+A locked volume:
+
+- is skipped, with its data intact, when its spec disappears from the input.
+- refuses any meaningful change (see [Change a volume](#change-a-volume)).
 
 ## Remove a volume
 

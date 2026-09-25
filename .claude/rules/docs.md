@@ -18,6 +18,7 @@ Navigation is defined explicitly in `zensical.toml`'s `nav` table, so a new page
 
 How-to headings aren't numbered.
 A procedure's steps are the page's H2 sections, in order.
+When a step offers alternatives, each alternative is an H3 under that step, and the reader picks one.
 Tasks the reader does instead of or after the procedure, such as removing what it added, go under a final `## Related tasks` as H3 sections, so they can't be mistaken for the next step.
 Caveats that belong to a step go into that step, not into a section of their own.
 

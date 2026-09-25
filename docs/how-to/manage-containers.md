@@ -1,6 +1,6 @@
 # Manage containers
 
-This guide covers adding, changing, stopping, protecting and removing a container spec, and what each change does to the running container.
+This guide covers adding, changing, stopping, locking and removing a container spec, and what each change does to the running container.
 Preview every change first, with `cue cmd plan` or `syslet --diff` (see [Preview changes with --diff](preview-changes-with-diff.md)); a plan with any error is refused as a whole, so nothing is applied halfway.
 
 ## Add a container
@@ -70,7 +70,7 @@ Set `desiredState: "stopped"` and apply.
 The unit file stays, syslet stops the container, and without `[Install] WantedBy=` it no longer starts at boot.
 Set it back to `"running"` to start it again.
 
-## Protect a container
+## Lock a container
 
 Lock the container and apply, as in [Protect a container](../tutorials/05-protect-a-container.md):
 
@@ -95,7 +95,7 @@ site.container                           skipped    protected (removalAllowed: f
 
 ## Remove a container
 
-1. Make sure the installed unit allows removal. If it was protected, drop it from `#SysdefLock` (in JSON, set `"removalAllowed": true` or omit it), keep the spec, and apply once.
+1. Make sure the installed unit allows removal. If it's locked, drop it from `#SysdefLock` (in JSON, set `"removalAllowed": true` or omit it), keep the spec, and apply once.
 2. Drop the spec from the input, preview and apply. The summary must read `removed`, not `skipped`.
 
 syslet stops the container, deletes its unit file and deletes `/etc/containers/config/<name>/` with all `configFiles` and `configDirs`.

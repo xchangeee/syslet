@@ -1,7 +1,7 @@
 # Run a oneshot job
 
 A oneshot container runs a command to completion, such as a database migration or a backup, instead of staying up.
-syslet writes its unit but never starts or stops it, so another container or a timer has to start it.
+syslet writes its unit but never starts or stops it, so another container, a timer or you have to start it.
 
 ## Define the job
 
@@ -39,7 +39,9 @@ Set `desiredState: "oneshot"`:
 syslet sets `[Service] Type=oneshot` and no `[Install]` section, so the job doesn't start at boot on its own.
 Setting `Type=oneshot` yourself on a `"running"` container is rejected.
 
-## Run it before another container
+## Choose how the job starts
+
+### Before another container
 
 Make the container that needs the job, here `app`, require it:
 
@@ -68,30 +70,7 @@ Make the container that needs the job, here `app`, require it:
 systemd now runs `migrate` to completion every time `app` starts, and doesn't start `app` if `migrate` fails.
 Unlike between two long-running containers (see [Avoid Requires=](add-dependencies-between-containers.md#avoid-requires)), `Requires=` is safe here, since syslet never stops the job.
 
-## Preview and apply
-
-=== "CUE"
-
-    ```sh
-    cue cmd plan
-    cue cmd apply
-    ```
-
-=== "JSON"
-
-    ```sh
-    cat hosts/web01/*.json | ssh web01 sudo syslet --diff --stdin
-    cat hosts/web01/*.json | ssh web01 sudo syslet --stdin
-    ```
-
-The plan shows no service action for the job.
-It runs when `app` starts, which the new `[Unit]` options trigger by restarting `app`.
-
-## Related tasks
-
-### Run it once per boot
-
-To skip the job on later starts of `app`, such as a restart by an apply, keep it active after it exits, then apply:
+To skip the job on later starts of `app`, such as a restart by an apply, keep it active after it exits:
 
 === "CUE"
 
@@ -109,9 +88,9 @@ To skip the job on later starts of `app`, such as a restart by an apply, keep it
     }
     ```
 
-A change to the job's spec then doesn't run it again until the next boot; run it by hand with `systemctl restart migrate`, which restarts `app` too.
+The job then runs once per boot: a change to its spec doesn't run it again until the next boot, unless you restart it by hand with `systemctl restart migrate`, which restarts `app` too.
 
-### Run it on a schedule
+### On a schedule
 
 syslet doesn't manage timers, so write one by hand, e.g. `/etc/systemd/system/backup.timer` for a job named `backup`:
 
@@ -131,3 +110,32 @@ sudo systemctl enable --now backup.timer
 
 The timer starts `backup.service`, the service of the same name.
 Leave `RemainAfterExit=` unset on a scheduled job, since a timer can't start a job that's still active.
+
+### By hand
+
+Start the job's service on the host:
+
+```sh
+ssh web01 sudo systemctl start migrate
+```
+
+`systemctl start` waits until the job exits, and fails if the job fails.
+
+## Preview and apply
+
+=== "CUE"
+
+    ```sh
+    cue cmd plan
+    cue cmd apply
+    ```
+
+=== "JSON"
+
+    ```sh
+    cat hosts/web01/*.json | ssh web01 sudo syslet --diff --stdin
+    cat hosts/web01/*.json | ssh web01 sudo syslet --stdin
+    ```
+
+The plan shows no service action for the job itself.
+If another container requires it, the new `[Unit]` options restart that container, which runs the job.

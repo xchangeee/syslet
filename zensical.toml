@@ -34,6 +34,7 @@ nav = [
       { "Upgrade a container image" = "how-to/upgrade-a-container-image.md" },
       { "Set environment variables" = "how-to/set-environment-variables.md" },
       { "Mount config files and dirs" = "how-to/mount-config-files-and-dirs.md" },
+      { "Pass a secret to a container" = "how-to/pass-a-secret-to-a-container.md" },
       { "Set systemd service options" = "how-to/set-systemd-service-options.md" },
       { "Add dependencies between containers" = "how-to/add-dependencies-between-containers.md" },
       { "Run a oneshot job" = "how-to/run-a-oneshot-job.md" },
@@ -50,7 +51,6 @@ nav = [
     ] },
     { "Secrets" = [
       { "Set up SOPS in a CUE repository" = "how-to/set-up-sops-in-a-cue-repository.md" },
-      { "Pass a secret to a container" = "how-to/pass-a-secret-to-a-container.md" },
       { "Rotate a secret" = "how-to/rotate-a-secret.md" },
       { "Add a SOPS recipient" = "how-to/add-a-sops-recipient.md" },
       { "Rotate the SSH host key" = "how-to/rotate-the-ssh-host-key.md" },
