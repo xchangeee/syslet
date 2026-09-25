@@ -1,59 +1,35 @@
 # Pass a secret to a container
 
-A secret spec turns each key of a SOPS-encrypted file into one podman secret named `<spec name>-<key>` (see [Set up SOPS encryption](../tutorials/06-setup-sops-encryption.md)).
+A secret spec turns each key of a SOPS-encrypted file into one podman secret named `<spec name>-<key>` (see [Set up SOPS in a CUE repository](set-up-sops-in-a-cue-repository.md)).
 A container gets it through its `Secret=` option, either as a file or as an environment variable.
 The examples below use a secret spec `webapp` with the key `db-password`.
 
 ## Mount it as a file
 
-=== "CUE"
-
-    ```cue
-    sysdef: containers: webapp: spec: {
-    	unit: Container: Secret: ["webapp-db-password"]
-    }
-    ```
-
-=== "JSON"
-
-    ```json
-    "Secret": ["webapp-db-password"]
-    ```
+```cue
+sysdef: containers: webapp: spec: {
+	unit: Container: Secret: ["webapp-db-password"]
+}
+```
 
 Podman mounts the secret at `/run/secrets/webapp-db-password`.
 Options after the name change the path and permissions:
 
-=== "CUE"
-
-    ```cue
-    sysdef: containers: webapp: spec: {
-    	unit: Container: Secret: ["webapp-db-password,target=/etc/app/db-password,uid=1000,gid=1000,mode=0400"]
-    }
-    ```
-
-=== "JSON"
-
-    ```json
-    "Secret": ["webapp-db-password,target=/etc/app/db-password,uid=1000,gid=1000,mode=0400"]
-    ```
+```cue
+sysdef: containers: webapp: spec: {
+	unit: Container: Secret: ["webapp-db-password,target=/etc/app/db-password,uid=1000,gid=1000,mode=0400"]
+}
+```
 
 A relative `target` is placed under `/run/secrets/`.
 
 ## Pass it as an environment variable
 
-=== "CUE"
-
-    ```cue
-    sysdef: containers: webapp: spec: {
-    	unit: Container: Secret: ["webapp-db-password,type=env,target=DB_PASSWORD"]
-    }
-    ```
-
-=== "JSON"
-
-    ```json
-    "Secret": ["webapp-db-password,type=env,target=DB_PASSWORD"]
-    ```
+```cue
+sysdef: containers: webapp: spec: {
+	unit: Container: Secret: ["webapp-db-password,type=env,target=DB_PASSWORD"]
+}
+```
 
 Prefer the file when the application can read one, for example through a `*_FILE` variable: environment variables are inherited by child processes and tend to end up in logs and crash reports.
 
@@ -64,28 +40,17 @@ It would be written to the unit file and printed in every plan in plain text.
 
 `Secret` also takes a map from the podman secret name to its options:
 
-=== "CUE"
-
-    ```cue
-    sysdef: containers: webapp: spec: {
-    	unit: Container: Secret: {
-    		"webapp-db-password": "type=env,target=DB_PASSWORD"
-    		"webapp-api-key":     ""
-    	}
-    }
-    ```
-
-=== "JSON"
-
-    ```json
-    "Secret": {
-      "webapp-db-password": "type=env,target=DB_PASSWORD",
-      "webapp-api-key": ""
-    }
-    ```
+```cue
+sysdef: containers: webapp: spec: {
+	unit: Container: Secret: {
+		"webapp-db-password": "type=env,target=DB_PASSWORD"
+		"webapp-api-key":     ""
+	}
+}
+```
 
 An empty string mounts the secret with the defaults.
-In CUE, maps from several files merge, so a shared file and a host file can each add secrets.
+Maps from several files merge, so a shared file and a host file can each add secrets.
 
 ## What syslet checks
 

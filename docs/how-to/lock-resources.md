@@ -1,7 +1,7 @@
 # Lock resources
 
-`#SysdefDefaults` lets syslet remove every container, network and volume you drop from a CUE repository, including a volume's data.
-`#SysdefLock` switches that off for the entries you list.
+By default, syslet removes every container, network and volume you drop from a CUE repository, including a volume's data.
+`#SysdefLock` switches that off for the entries you list (see [Removing specs](../explanation/removing-specs.md) for how syslet handles locked entries).
 
 ## Lock entries
 
@@ -18,6 +18,7 @@ sysdef: (syslettools.#SysdefLock & {in: {
 ```
 
 The lock sets `removalAllowed: false` on each entry, and for volumes also `reclaimPolicy: "Retain"`.
+`#SysdefLock` is only a shortcut; you can also set these fields in an entry's `spec` yourself.
 Builds and secrets can't be locked.
 
 You can use `#SysdefLock` several times, for example once per file next to the entries it protects; CUE merges the results.
@@ -32,14 +33,6 @@ changed:
     old: true
     new: false
 ```
-
-## What a lock does
-
-syslet reads the lock from the installed unit file, so it protects an entry even once the entry is gone from the repository:
-
-- A locked container, network or volume whose entry is deleted or disabled is `skipped` and left running, with its data.
-- A locked volume refuses changes that would recreate it (see [Manage volumes](manage-volumes.md#change-a-volume)).
-- A locked network is still recreated when it changes, since it holds no data.
 
 ## Unlock an entry
 

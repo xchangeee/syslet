@@ -42,24 +42,10 @@ ssh web01.example.com cat /etc/syslet/age_ed25519.pub | ssh-to-age
 
 Replace the host's key in `.sops.yaml` with it, then re-encrypt and apply:
 
-=== "CUE"
-
-    ```sh
-    sops updatekeys -y creds-*.enc.yaml
-    cue cmd apply
-    ```
-
-=== "JSON"
-
-    ```sh
-    sops updatekeys -y creds-*.enc.yaml
-    ```
-
-    Regenerate each secret spec from its file as in [Rotate a secret](rotate-a-secret.md#change-a-value), then apply:
-
-    ```sh
-    cat hosts/web01/*.json | ssh web01.example.com sudo syslet --stdin
-    ```
+```sh
+sops updatekeys -y creds-*.enc.yaml
+cue cmd apply
+```
 
 The new ciphertext updates the podman secrets and restarts every container that references them.
 Afterwards, drop the host-derived key from the cache as in [Rotate the SSH host key](rotate-the-ssh-host-key.md#5-drop-the-old-key).

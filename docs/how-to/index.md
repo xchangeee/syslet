@@ -3,7 +3,7 @@
 These guides solve specific tasks on a host you already deploy to with syslet.
 If you're new to syslet, start with the [Tutorials](../tutorials/index.md).
 
-Most guides show both a CUE repository and plain JSON specs; the CUE guides at the end only apply to a CUE repository.
+Most guides show both a CUE repository and plain JSON specs; the secrets and CUE guides at the end only apply to a CUE repository.
 
 ## Deploy
 
@@ -46,6 +46,7 @@ Volumes hold data, so these guides are about keeping it.
 
 Using secrets in containers, and managing the keys that encrypt them.
 
+- [Set up SOPS in a CUE repository](set-up-sops-in-a-cue-repository.md)
 - [Pass a secret to a container](pass-a-secret-to-a-container.md)
 - [Rotate a secret](rotate-a-secret.md)
 - [Add a SOPS recipient](add-a-sops-recipient.md)
@@ -56,7 +57,7 @@ Using secrets in containers, and managing the keys that encrypt them.
 
 Tools of the CUE schema for protecting entries, and for larger repositories.
 
-- [Lock resources](lock-resources.md)
 - [Disable a unit](disable-a-unit.md)
+- [Lock resources](lock-resources.md)
+- [Add ingress with Caddy](add-ingress-with-caddy.md)
 - [Manage several hosts](manage-several-hosts.md)
-- [Load secret files](load-secret-files.md)

@@ -46,7 +46,7 @@ sops updatekeys -y creds-*.enc.yaml
 
 This changes the files, although the values stay the same.
 syslet sees new ciphertext, so the next apply on each host that uses the files updates their podman secrets and restarts every container that references them.
-Commit and apply when a restart suits you; with plain JSON, regenerate the secret specs first (see [Rotate a secret](rotate-a-secret.md#change-a-value)).
+Commit and apply when a restart suits you.
 
 ## Remove a recipient
 

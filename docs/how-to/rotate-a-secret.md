@@ -13,22 +13,9 @@ sops edit creds-webapp.enc.yaml
 
 Preview the change:
 
-=== "CUE"
-
-    ```sh
-    cue cmd plan
-    ```
-
-    CUE loads the file from the repository as it is.
-
-=== "JSON"
-
-    Regenerate the secret spec from the file first:
-
-    ```sh
-    jq -Rs '{apiVersion: "v1", type: "secret", name: "webapp", ciphertext: .}' creds-webapp.enc.yaml > hosts/web01/webapp-secret.json
-    cat hosts/web01/*.json | ssh web01 sudo syslet --diff --stdin
-    ```
+```sh
+cue cmd plan
+```
 
 The plan lists every key of the file, with values hidden; set `SYSLET_SHOW_SECRETS=1` to see them.
 Every container that references one of the keys restarts:
@@ -59,6 +46,6 @@ Update the `Secret=` references in the same change: a reference to a key that no
 
 ## Remove a secret file
 
-Delete the file, or with plain JSON the secret spec, together with every `Secret=` that references its keys.
+Delete the file together with every `Secret=` that references its keys.
 syslet deletes the podman secrets on the next apply.
 It only deletes podman secrets it created itself, recognized by their `syslet/hash` label.

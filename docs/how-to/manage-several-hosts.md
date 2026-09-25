@@ -3,7 +3,7 @@
 One CUE repository can describe several hosts: shared files at the root, and one directory per host.
 CUE merges a directory's files with the files of the same package in its parent directories, so each host directory sees the shared definitions.
 
-This guide starts from the repository in [Set up SOPS encryption](../tutorials/06-setup-sops-encryption.md).
+This guide starts from a repository with SOPS set up as in [Set up SOPS in a CUE repository](set-up-sops-in-a-cue-repository.md).
 
 ## 1. Lay out the repository
 

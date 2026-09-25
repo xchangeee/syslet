@@ -49,6 +49,7 @@ nav = [
       { "Connect containers on a network" = "how-to/connect-containers-on-a-network.md" },
     ] },
     { "Secrets" = [
+      { "Set up SOPS in a CUE repository" = "how-to/set-up-sops-in-a-cue-repository.md" },
       { "Pass a secret to a container" = "how-to/pass-a-secret-to-a-container.md" },
       { "Rotate a secret" = "how-to/rotate-a-secret.md" },
       { "Add a SOPS recipient" = "how-to/add-a-sops-recipient.md" },
@@ -56,10 +57,10 @@ nav = [
       { "Use a dedicated decryption key" = "how-to/use-a-dedicated-decryption-key.md" },
     ] },
     { "CUE" = [
-      { "Lock resources" = "how-to/lock-resources.md" },
       { "Disable a unit" = "how-to/disable-a-unit.md" },
+      { "Lock resources" = "how-to/lock-resources.md" },
+      { "Add ingress with Caddy" = "how-to/add-ingress-with-caddy.md" },
       { "Manage several hosts" = "how-to/manage-several-hosts.md" },
-      { "Load secret files" = "how-to/load-secret-files.md" },
     ] },
   ] },
   { "Explanation" = [
