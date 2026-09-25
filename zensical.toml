@@ -4,6 +4,7 @@ site_description = "A GitOps-friendly deployment tool for Podman containers usin
 site_url = "https://xchangeee.github.io/syslet/"
 repo_url = "https://github.com/xchangeee/syslet"
 repo_name = "xchangeee/syslet"
+edit_uri = "edit/main/docs/"
 
 nav = [
   { "Home" = "index.md" },
@@ -93,7 +94,17 @@ nav = [
 
 [project.theme]
 language = "en"
-features = ["navigation.tabs", "content.tabs.link"]
+features = [
+  "navigation.top",
+  "content.tabs.link",
+
+  "navigation.tabs.sticky",
+  "navigation.tabs",
+  "content.action.view",
+]
+
+[project.theme.icon]
+repo = "fontawesome/brands/github"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"
