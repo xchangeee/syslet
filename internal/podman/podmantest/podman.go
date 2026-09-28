@@ -71,8 +71,12 @@ type SecretCall struct {
 // stateful store lets a test exercise that comparison against a real write
 // rather than a hand-seeded one.
 //
-// Volumes, networks and images are recorded but not modeled, because the plan
-// never reads them back — it derives their fate from unit files alone.
+// Volumes and networks are recorded but not modeled, because the plan never
+// reads them back — it derives their fate from unit files alone. The image store
+// is modeled inversely: every image counts as present unless a test marks it
+// missing with SeedMissingImages, and PullImage makes it present again. Present
+// by default keeps tests that don't care about pulls free of pull noise, while
+// the modeling keeps a second apply from pulling the same image again.
 //
 // Recorded calls are read back through the accessor methods rather than by
 // reaching into fields, so tests never need a type assertion on
@@ -81,6 +85,8 @@ type FakePodman struct {
 	deletedVolumes  []string
 	deletedNetworks []string
 	deletedImages   []string
+	pulledImages    []string
+	missingImages   map[string]bool
 	upsertedSecrets []UpsertedSecret
 	deletedSecrets  []string
 	secretCalls     []SecretCall
@@ -91,7 +97,8 @@ type FakePodman struct {
 	Log *oplog.Log
 
 	// FailOn makes a named operation return an error, keyed "<op>:<name>" —
-	// for example "delete-volume:data" or "upsert-secret:myapp-api-key".
+	// for example "delete-volume:data", "pull-image:nginx:1.28" or
+	// "upsert-secret:myapp-api-key".
 	//
 	// Reclamation and secret mutation run through syslet's best-effort exec
 	// path, which logs a failure and carries on rather than failing the apply.
@@ -116,6 +123,17 @@ func (p *FakePodman) SeedSecrets(secrets ...podman.SecretMeta) {
 	p.existingSecrets = secrets
 }
 
+// SeedMissingImages marks images as absent from the local image store, so
+// ImageExists reports them missing until PullImage fetches them.
+func (p *FakePodman) SeedMissingImages(refs ...string) {
+	if p.missingImages == nil {
+		p.missingImages = make(map[string]bool, len(refs))
+	}
+	for _, ref := range refs {
+		p.missingImages[ref] = true
+	}
+}
+
 // DeletedVolumes returns the volume names passed to DeleteVolume, in order.
 func (p *FakePodman) DeletedVolumes() []string { return p.deletedVolumes }
 
@@ -124,6 +142,9 @@ func (p *FakePodman) DeletedNetworks() []string { return p.deletedNetworks }
 
 // DeletedImages returns the image tags passed to DeleteImage, in order.
 func (p *FakePodman) DeletedImages() []string { return p.deletedImages }
+
+// PulledImages returns the image refs passed to PullImage, in order.
+func (p *FakePodman) PulledImages() []string { return p.pulledImages }
 
 // UpsertedSecrets returns the secrets passed to UpsertSecret, in order.
 func (p *FakePodman) UpsertedSecrets() []UpsertedSecret { return p.upsertedSecrets }
@@ -145,6 +166,7 @@ func (p *FakePodman) ResetRecordings() {
 	p.deletedVolumes = []string{}
 	p.deletedNetworks = []string{}
 	p.deletedImages = []string{}
+	p.pulledImages = nil
 	p.upsertedSecrets = nil
 	p.deletedSecrets = nil
 	p.secretCalls = nil
@@ -184,6 +206,26 @@ func (p *FakePodman) DeleteImage(_ context.Context, tag string) error {
 	}
 	p.Log.Record(podmanChannel, "delete-image", tag)
 	p.deletedImages = append(p.deletedImages, tag)
+	return nil
+}
+
+// ImageExists reports every image as present unless SeedMissingImages marked it
+// missing and no PullImage has fetched it since.
+func (p *FakePodman) ImageExists(_ context.Context, ref string) (bool, error) {
+	if err := p.fail("image-exists", ref); err != nil {
+		return false, err
+	}
+	return !p.missingImages[ref], nil
+}
+
+// PullImage records the pull and marks the image present in the modeled store.
+func (p *FakePodman) PullImage(_ context.Context, ref string) error {
+	if err := p.fail("pull-image", ref); err != nil {
+		return err
+	}
+	p.Log.Record(podmanChannel, "pull-image", ref)
+	p.pulledImages = append(p.pulledImages, ref)
+	delete(p.missingImages, ref)
 	return nil
 }
 

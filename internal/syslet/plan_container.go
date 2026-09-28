@@ -9,11 +9,12 @@ import (
 
 	"github.com/xchangeee/syslet/internal/filestore"
 	"github.com/xchangeee/syslet/internal/model"
+	"github.com/xchangeee/syslet/internal/podman"
 	"github.com/xchangeee/syslet/internal/render"
 	"github.com/xchangeee/syslet/internal/systemd"
 )
 
-func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *filestore.ContainerConfigFileStore, planner *planner, r render.RenderedUnit, changedNetworks map[model.NetworkUnitRef]bool, changedBuilds map[model.BuildUnitRef]bool, changedVolumes map[model.VolumeUnitRef]bool, changedSecrets map[string]bool) {
+func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *filestore.ContainerConfigFileStore, images *imageChecker, planner *planner, r render.RenderedUnit, changedNetworks map[model.NetworkUnitRef]bool, changedBuilds map[model.BuildUnitRef]bool, changedVolumes map[model.VolumeUnitRef]bool, changedSecrets map[string]bool) {
 	container, ok := r.Unit.(*model.ContainerUnit)
 	if !ok {
 		panic("buildPlanUnitContainer called with non-container spec")
@@ -41,6 +42,18 @@ func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *file
 	}
 
 	unitRef := container.TypedUnitRef()
+
+	if image, ok := containerPullableImage(r.UnitOptions); ok {
+		exists, err := images.exists(ctx, image)
+		if err != nil {
+			planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("checking image %s: %v", image, err))
+			return
+		}
+		if !exists {
+			planner.PullPodmanImage(image, unitRef)
+			changes.markImagePulled()
+		}
+	}
 
 	if !buildPlanUnitContainerConfigFiles(store, planner, container, unitRef, &changes) {
 		return
@@ -190,6 +203,7 @@ type containerChanges struct {
 	buildChanged      bool // a referenced build image is being rebuilt this plan pass
 	volumeChanged     bool // a referenced volume is being recreated this plan pass
 	secretChanged     bool // a referenced secret is being upserted this plan pass
+	imagePulled       bool // the image is missing locally and is pulled before any other change
 }
 
 type containerAction int
@@ -208,8 +222,12 @@ func (c *containerChanges) markNetworkChanged()    { c.networkChanged = true }
 func (c *containerChanges) markBuildChanged()      { c.buildChanged = true }
 func (c *containerChanges) markVolumeChanged()     { c.volumeChanged = true }
 func (c *containerChanges) markSecretChanged()     { c.secretChanged = true }
+func (c *containerChanges) markImagePulled()       { c.imagePulled = true }
 
 // planLifecycle converts detected changes and current runtime state into a single action.
+// A pulled image is not a restart trigger of its own: a changed image already
+// restarts the container through the Image= change in its unit, and the pull only
+// makes sure the download happens before the stop instead of inside the start.
 // Exactly one action is returned; reload and stop/start are mutually exclusive by construction.
 // A new unit whose service is already running counts as a restart trigger: the running
 // container came from another unit file, and only a stop/start moves it onto this one.
@@ -230,7 +248,7 @@ func (c containerChanges) planLifecycle(isRunning bool) containerAction {
 }
 
 func (c containerChanges) recordOutcome(planner *planner, action containerAction) {
-	anyChange := c.isChanged || c.configFileChanged || c.configDirChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged || action != actionNone
+	anyChange := c.isChanged || c.configFileChanged || c.configDirChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged || c.imagePulled || action != actionNone
 	var status UnitStatus
 	var parts []string
 	if c.isNew {
@@ -244,6 +262,9 @@ func (c containerChanges) recordOutcome(planner *planner, action containerAction
 
 	if c.isChanged && !c.isNew {
 		parts = append(parts, "unit updated")
+	}
+	if c.imagePulled {
+		parts = append(parts, "image pulled")
 	}
 	if c.configFileChanged {
 		parts = append(parts, "config updated")
@@ -292,6 +313,47 @@ func containerReferencesChangedBuild(opts []gounit.UnitOption, changedBuilds map
 		return changedBuilds[model.BuildUnitRef(before)]
 	}
 	return false
+}
+
+// containerPullableImage returns the registry image a container's Image= entry
+// names, and false when there is nothing podman could pull: no Image= at all, or
+// a reference to a quadlet unit (".build", which syslet builds itself, or
+// ".image") instead of a registry image.
+func containerPullableImage(opts []gounit.UnitOption) (string, bool) {
+	val := render.FindOptValue(opts, render.SectionContainer, render.KeyContainerImage)
+	if val == "" || strings.HasSuffix(val, ".build") || strings.HasSuffix(val, ".image") {
+		return "", false
+	}
+	return val, true
+}
+
+// imageChecker answers whether an image is present in podman's local store,
+// asking podman once per distinct image during a plan pass. It keeps the image
+// check of containers sharing an image to a single podman call. With no podman
+// client (callers that don't manage podman resources) every image counts as
+// present, so no pulls are planned.
+type imageChecker struct {
+	pc      podman.Interface
+	checked map[string]bool
+}
+
+func newImageChecker(pc podman.Interface) *imageChecker {
+	return &imageChecker{pc: pc, checked: make(map[string]bool)}
+}
+
+func (c *imageChecker) exists(ctx context.Context, image string) (bool, error) {
+	if c.pc == nil {
+		return true, nil
+	}
+	if exists, ok := c.checked[image]; ok {
+		return exists, nil
+	}
+	exists, err := c.pc.ImageExists(ctx, image)
+	if err != nil {
+		return false, err
+	}
+	c.checked[image] = exists
+	return exists, nil
 }
 
 // containerReferencesChangedVolume reports whether any Volume= entry in opts

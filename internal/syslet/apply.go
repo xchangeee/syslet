@@ -56,6 +56,8 @@ func (r *ApplyReport) outcomes() []UnitOutcome {
 }
 
 // Apply executes a plan from BuildPlan in coordinated order:
+//  0. Pull container images missing from the local store; if any pull fails,
+//     return before anything else changes
 //  1. Stop containers that changed or are being pruned
 //  2. Write config files
 //  3. Write unit files
@@ -72,6 +74,24 @@ func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr syst
 	r := &applyRunner{logger: logger, report: report}
 
 	// Execute in strict global order (4 phases).
+
+	// Phase 0: Pull missing images while the old containers still run, so the
+	// download doesn't count as downtime. A failed pull aborts the apply before
+	// the host is touched: restarting a container whose image can't be pulled
+	// would only repeat the failing pull inside the start, turning it into an
+	// outage. Every pull is attempted first, so one run reports all failures.
+	for _, op := range plan.PullPodmanImages {
+		logger.Info("pulling image", "image", op.image)
+		if err := pc.PullImage(ctx, op.image); err != nil {
+			logger.Error("pulling image failed", "image", op.image, "error", err)
+			for _, unit := range op.units {
+				report.recordError(unit.FullName(), fmt.Sprintf("pulling image: %v", err))
+			}
+		}
+	}
+	if report.failed() {
+		return report, fmt.Errorf("pulling images failed")
+	}
 
 	// Phase 1: Stop all services that need stopping (containers and network services).
 	for _, op := range plan.StopSystemdServices {

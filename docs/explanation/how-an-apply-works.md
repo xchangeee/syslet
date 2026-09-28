@@ -8,7 +8,7 @@ Every syslet invocation runs the same pipeline, whether it's a local dry-run, an
    syslet adds what it manages itself: the resource name, its `X-Syslet` markers for `removalAllowed` and `reclaimPolicy`, `Restart=always` and `WantedBy=` for `desiredState: "running"` or `Type=oneshot` for `"oneshot"`, and a read-only `Volume=` mount for every config file and directory.
 4. **Post-render validation** checks the rendered units, such as references between containers and the volumes, networks and builds they use.
 5. **Diff** the rendered units and config files against the installed state on disk, and find stale units.
-   Two parts come from the live system instead: systemd reports whether each container is running, which decides between start, stop and restart, and podman's secret store is listed and compared by each secret's `syslet/hash` label.
+   Three parts come from the live system instead: systemd reports whether each container is running, which decides between start, stop and restart; podman's secret store is listed and compared by each secret's `syslet/hash` label; and podman reports which container images are missing from its local image store.
 6. **Stage** the rendered units through podman's quadlet generator and `systemd-analyze verify`, when the plan writes unit files.
 7. **Execute** the resulting plan, in strict order (see below).
 8. **Exit** with a status summary, non-zero if anything failed.
@@ -26,16 +26,19 @@ An apply builds its own plan when it runs, so if the input or the host changes a
 
 Step 7 always executes in this order, regardless of how many units are affected:
 
-1. Stop containers that changed or are being removed.
-2. Write config files to `/etc/containers/config/<name>/`.
-3. Write quadlet unit files to `/etc/containers/systemd/`.
-4. Remove stale unit files and config directories (pruning).
-5. Delete podman volumes/networks/images whose `reclaimPolicy` is `Delete`.
-6. A single `systemctl daemon-reload`.
-7. Reload containers that only need an in-place config reload (see below).
-8. Start containers with `desiredState: "running"`.
+1. Pull container images that aren't on the host yet.
+   Images from a build unit are skipped.
+   If a pull fails, the apply stops here, before anything on the host changes.
+2. Stop containers that changed or are being removed.
+3. Write config files to `/etc/containers/config/<name>/`.
+4. Write quadlet unit files to `/etc/containers/systemd/`.
+5. Remove stale unit files and config directories (pruning).
+6. Delete podman volumes/networks/images whose `reclaimPolicy` is `Delete`.
+7. A single `systemctl daemon-reload`.
+8. Reload containers that only need an in-place config reload (see below).
+9. Start containers with `desiredState: "running"`.
 
-The order never changes: stopping before rewriting avoids a running container referencing a unit file mid-change, files exist before the unit files that reference them, pruning happens before the reload so systemd never sees stale units, and starting happens last so a container only comes up once everything it depends on is in its final state.
+The order never changes: pulling first keeps a slow download from counting as downtime, stopping before rewriting avoids a running container referencing a unit file mid-change, files exist before the unit files that reference them, pruning happens before the reload so systemd never sees stale units, and starting happens last so a container only comes up once everything it depends on is in its final state.
 
 ## Restart, reload, or no-op
 

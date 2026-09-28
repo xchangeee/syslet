@@ -12,6 +12,9 @@ import (
 // syslet.Apply is a strictly phased executor, and the phases are not an
 // implementation detail — each boundary exists to protect something:
 //
+//   - missing images are pulled before anything else, so a slow download
+//     happens while the old containers still run instead of counting as
+//     downtime, and a failed pull aborts the apply before the host is touched;
 //   - services stop before their config and unit files are rewritten, so a
 //     running container never has its bind-mounted content swapped underneath it;
 //   - secret deletes precede secret upserts, so a renamed key never leaves the
@@ -39,6 +42,8 @@ import (
 // one rank deliberately. Their order among themselves protects nothing; what
 // matters is that all of them land after the stops and before the unit files.
 var phaseRank = map[string]int{
+	"pull-image": 0,
+
 	"stop": 1,
 
 	"write-config":  2,

@@ -33,9 +33,14 @@ Preview it:
     cat hosts/web01/*.json | ssh web01 sudo syslet --diff --stdin
     ```
 
-The plan shows the changed `Image` and a restart:
+The plan shows the image to pull, the changed `Image` and a restart:
 
 ```text
+Images to pull:
+  - docker.io/library/nginx:1.28
+
+Unit file changes:
+
 --- webapp.container
 changed:
   [Container] Image
@@ -44,17 +49,12 @@ changed:
 
 ...
 
-webapp.container                         updated    unit updated, restarted (desired: running)
+webapp.container                         updated    unit updated, image pulled, restarted (desired: running)
 ```
 
-## Pull the image first
-
-Podman pulls a missing image while the container starts, so the download counts as downtime and can hit systemd's start timeout.
-Pull it before applying:
-
-```sh
-ssh web01 sudo podman pull docker.io/library/nginx:1.28
-```
+syslet pulls an image that isn't on the host yet before it stops anything, so the download doesn't count as downtime.
+An image that is already on the host is not pulled again.
+If the pull fails, the apply stops before changing anything, and the old container keeps running.
 
 ## Apply
 

@@ -242,6 +242,22 @@ func (e *Env) AssertNoImagesDeleted() {
 	}
 }
 
+// AssertImagesPulled checks that exactly the given image refs were pulled,
+// order-independently. Each ref appearing once also pins that an image shared
+// by several containers is pulled only once.
+func (e *Env) AssertImagesPulled(refs ...string) {
+	e.t.Helper()
+	assertExactly(e.t, "image pulls", "pulled", e.Podman.PulledImages(), refs)
+}
+
+// AssertNoImagesPulled checks that no image was pulled.
+func (e *Env) AssertNoImagesPulled() {
+	e.t.Helper()
+	if got := e.Podman.PulledImages(); len(got) != 0 {
+		e.t.Errorf("expected no image pulls, got: %v", got)
+	}
+}
+
 // --- Podman secrets ---
 //
 // These assert the apply side of a secret change — what actually reached the

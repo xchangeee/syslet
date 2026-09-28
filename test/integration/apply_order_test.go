@@ -37,7 +37,8 @@ func TestApplyTouchingEveryPhase_RunsInPhaseOrder(t *testing.T) {
 		systest.WithOSConfigStore(),
 		systest.WithDecryptor(sops.NewDecryptor(keyPath)))
 
-	// webapp changes image: stop, unit write, start.
+	// webapp changes image: pull, stop, unit write, start.
+	env.Podman.SeedMissingImages("nginx:alpine")
 	webapp := systest.NewContainer("webapp", "nginx:alpine",
 		systest.Unit(systest.Set("Container", "Secret", "myapp-db-password")))
 	env.SeedActive(systest.NewContainer("webapp", "nginx:latest",
@@ -71,6 +72,7 @@ func TestApplyTouchingEveryPhase_RunsInPhaseOrder(t *testing.T) {
 
 	// Guard the premise: an ordering assertion over a phase that produced no
 	// effect passes vacuously, so check every phase actually fired.
+	env.AssertImagesPulled("nginx:alpine")
 	env.AssertStopped("webapp.service")
 	env.AssertStarted("webapp.service")
 	env.AssertContainerReloaded("sidecar.service")
@@ -79,6 +81,10 @@ func TestApplyTouchingEveryPhase_RunsInPhaseOrder(t *testing.T) {
 	env.AssertVolumesDeleted("olddata")
 	env.AssertUnitAbsent("olddata.volume")
 	env.AssertReloaded()
+
+	// The new image is downloaded while the old container still runs, so the
+	// pull never counts as downtime.
+	env.AssertHappensBefore("pull-image", "nginx:alpine", "stop", "webapp.service")
 
 	// A container is stopped before its unit file is rewritten, so systemd
 	// never has a unit changed underneath a running service.

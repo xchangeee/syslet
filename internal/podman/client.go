@@ -1,4 +1,4 @@
-// Package podman wraps podman CLI operations for managing volumes, networks, and secrets.
+// Package podman wraps podman CLI operations for managing volumes, networks, secrets, and images.
 // It provides the low-level building blocks for interacting with podman resources
 // that are referenced by quadlet units but need to be managed separately from systemd.
 package podman
@@ -6,6 +6,7 @@ package podman
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -27,6 +28,8 @@ type Interface interface {
 	DeleteVolume(ctx context.Context, name string) error
 	DeleteNetwork(ctx context.Context, name string) error
 	DeleteImage(ctx context.Context, tag string) error
+	ImageExists(ctx context.Context, ref string) (bool, error)
+	PullImage(ctx context.Context, ref string) error
 	ListSecrets(ctx context.Context) ([]SecretMeta, error)
 	UpsertSecret(ctx context.Context, name string, value model.Plaintext, labels map[string]string) error
 	DeleteSecret(ctx context.Context, name string) error
@@ -74,6 +77,38 @@ func (c *Client) DeleteImage(ctx context.Context, tag string) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("podman rmi %s failed: %w (output: %s)", tag, err, string(output))
+	}
+	return nil
+}
+
+// ImageExists executes 'podman image exists <ref>' to check whether an image is
+// present in the local image store. The plan phase calls it once per distinct
+// container image, so that apply can pull missing images before stopping any
+// container. Name resolution (short names, default registries) is left to podman,
+// so the answer matches what podman would resolve when the container starts.
+// Exit code 1 means the image is absent; any other failure is returned as an error.
+func (c *Client) ImageExists(ctx context.Context, ref string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "podman", "image", "exists", ref)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("podman image exists %s failed: %w (output: %s)", ref, err, string(output))
+}
+
+// PullImage executes 'podman pull <ref>' to download an image into the local store.
+// Apply runs it as its very first phase for images ImageExists reported missing,
+// so the download happens while the old containers are still running instead of
+// during the container start, where it would count as downtime.
+func (c *Client) PullImage(ctx context.Context, ref string) error {
+	cmd := exec.CommandContext(ctx, "podman", "pull", ref)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("podman pull %s failed: %w (output: %s)", ref, err, string(output))
 	}
 	return nil
 }

@@ -32,6 +32,14 @@ type DisplayOptions struct {
 // unit that isn't unchanged. A plan that BuildPlan refused never gets here: its
 // *PlanError is printed by DisplayPlanErrors instead.
 func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
+	// 0. Image pulls, listed first because Apply runs them first
+	if len(plan.PullPodmanImages) > 0 {
+		_, _ = fmt.Fprintln(w, "\nImages to pull:")
+		for _, op := range plan.PullPodmanImages {
+			_, _ = fmt.Fprintf(w, "  - %s\n", op.image)
+		}
+	}
+
 	// 1. Unit file changes
 	if len(plan.WriteFsQuadletUnitFiles) > 0 {
 		_, _ = fmt.Fprintln(w, "\nUnit file changes:")

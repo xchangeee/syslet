@@ -46,6 +46,7 @@ const (
 // without errors, so holding an ApplyPlan means it is safe to display and
 // apply; errors come back as a *PlanError instead.
 type ApplyPlan struct {
+	PullPodmanImages             []PullPodmanImageOp
 	StopSystemdServices          []StopSystemdServiceOp
 	DeleteFsQuadletUnitFiles     []DeleteFsQuadletUnitFileOp
 	DeleteFsBuildContextFiles    []DeleteFsBuildContextFileOp
@@ -66,6 +67,16 @@ type ApplyPlan struct {
 	StartSystemdServices         []StartSystemdServiceOp
 
 	Outcomes []UnitOutcome
+}
+
+// PullPodmanImageOp downloads a container image that is missing from the local
+// image store. Apply runs these before any other operation, so the download
+// happens while the old containers still run rather than as part of a restart.
+// units lists every container that needs the image, one op per distinct image,
+// so a failed pull is reported against each of them.
+type PullPodmanImageOp struct {
+	image string
+	units []model.ContainerUnitRef
 }
 
 type StopSystemdServiceOp struct {
@@ -205,6 +216,18 @@ type UnitOutcome struct {
 	message string
 }
 
+// PullPodmanImage schedules pulling image for unit. A second container needing
+// the same image joins the existing op instead of adding another pull.
+func (p *ApplyPlan) PullPodmanImage(image string, unit model.ContainerUnitRef) {
+	for i := range p.PullPodmanImages {
+		if p.PullPodmanImages[i].image == image {
+			p.PullPodmanImages[i].units = append(p.PullPodmanImages[i].units, unit)
+			return
+		}
+	}
+	p.PullPodmanImages = append(p.PullPodmanImages, PullPodmanImageOp{image: image, units: []model.ContainerUnitRef{unit}})
+}
+
 func (p *ApplyPlan) StopSystemdService(ref model.UnitRef) {
 	p.StopSystemdServices = append(p.StopSystemdServices, StopSystemdServiceOp{ref: ref})
 }
@@ -297,7 +320,8 @@ func (p *ApplyPlan) NeedsReload() bool {
 // whether to print "No changes detected"; units that are skipped or unchanged
 // record outcomes but no operations, so they don't count.
 func (p *ApplyPlan) HasChanges() bool {
-	return len(p.StopSystemdServices) > 0 ||
+	return len(p.PullPodmanImages) > 0 ||
+		len(p.StopSystemdServices) > 0 ||
 		len(p.DeleteFsQuadletUnitFiles) > 0 ||
 		len(p.DeleteFsBuildContextFiles) > 0 ||
 		len(p.DeleteFsBuildContexts) > 0 ||
@@ -438,8 +462,9 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 	if planner.hasErrors() {
 		return planner.build()
 	}
+	images := newImageChecker(pc)
 	for _, r := range result.Containers {
-		buildPlanUnitContainer(ctx, sd, mgrs.Config, planner, r, changedNetworks, changedBuilds, changedVolumes, changedSecrets)
+		buildPlanUnitContainer(ctx, sd, mgrs.Config, images, planner, r, changedNetworks, changedBuilds, changedVolumes, changedSecrets)
 	}
 
 	stale, err := loadStaleUnits(sd, result.UnitNames)
