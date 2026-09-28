@@ -31,7 +31,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -184,20 +183,6 @@ func displayOptionsFromEnv(getenv func(string) string) (syslet.DisplayOptions, e
 	return opts, nil
 }
 
-// checkPlan refuses a plan that has errors, printing them to errW, before
-// either a --diff or an apply acts on it. Running the same check for both
-// keeps their exit codes in agreement, which lets CI gate on `syslet --diff`.
-// The errors go to stderr, not stdout: callers like a CUE exec.Run task
-// capture stdout and drop it when the command fails, so errors printed there
-// would never be seen. Stdout carries only a plan or apply results.
-func checkPlan(errW io.Writer, plan *syslet.ApplyPlan) error {
-	if !plan.HasErrors() {
-		return nil
-	}
-	syslet.DisplayPlanErrors(errW, plan)
-	return fmt.Errorf("plan has errors")
-}
-
 func main() {
 	diffFlag := flag.Bool("diff", false, "Show what would change without applying (dry-run)")
 	stdinFlag := flag.Bool("stdin", false, "Read the JSON spec stream from standard input")
@@ -279,11 +264,15 @@ func main() {
 
 	plan, err := syslet.BuildPlan(ctx, fs, mgrs, sd, jr, sq, sa, pc, decryptor, raw)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := checkPlan(os.Stderr, plan); err != nil {
+		// A refused plan lists why, before the generic error line. This runs
+		// for a --diff and an apply alike, so both exit 1 on the same plans,
+		// which lets CI gate on `syslet --diff`. The details go to stderr, not
+		// stdout: callers like a CUE exec.Run task capture stdout and drop it
+		// when the command fails, so errors printed there would never be seen.
+		// Stdout carries only a plan or an apply report.
+		if perr, ok := errors.AsType[*syslet.PlanError](err); ok {
+			syslet.DisplayPlanErrors(os.Stderr, perr)
+		}
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -298,8 +287,8 @@ func main() {
 		syslet.DisplayPlan(os.Stdout, plan, opts)
 	} else {
 		// Apply changes
-		err := syslet.Apply(ctx, logger, sd, jr, pc, mgrs, plan)
-		syslet.DisplayResults(os.Stdout, plan)
+		report, err := syslet.Apply(ctx, logger, sd, jr, pc, mgrs, plan)
+		syslet.DisplayReport(os.Stdout, report)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)

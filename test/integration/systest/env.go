@@ -19,6 +19,7 @@ package systest
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"testing"
@@ -229,17 +230,17 @@ func (e *Env) With(t *testing.T) *Env {
 // collapsing the long, invariant argument tail that every test used to repeat.
 //
 // Which terminal a test uses is not a free choice. Apply runs BuildPlan first
-// and refuses a plan carrying errors, so it already asserts everything a plan
+// and fails on a plan error, so it already asserts everything a plan
 // assertion would and then proves the decision was carried out. Default to it.
 //
 // Reach for Plan only when the plan itself is the subject and there is nothing
 // on the host to observe — today that means the syslet.DisplayPlan tests in
-// diff_test.go, which render a plan rather than execute one. Tests of what
-// syslet.DisplayResults prints after an apply use ApplyWithPlan instead.
+// diff_test.go, which render a plan rather than execute one. PlanErrors is its
+// counterpart for specs the planner must refuse, and tests of what
+// syslet.DisplayReport prints after an apply use ApplyWithReport.
 
-// Plan builds the plan, failing the test if plan construction itself errors.
-// It deliberately does not check plan.HasErrors: the diff and validation tests
-// need a plan that carries errors in order to render it.
+// Plan builds the plan, failing the test on any error, including a
+// *syslet.PlanError: BuildPlan only returns a plan that can be applied.
 func (e *Env) Plan() *syslet.ApplyPlan {
 	e.t.Helper()
 	plan, err := e.PlanErr()
@@ -247,6 +248,18 @@ func (e *Env) Plan() *syslet.ApplyPlan {
 		e.t.Fatalf("BuildPlan: %v", err)
 	}
 	return plan
+}
+
+// PlanErrors builds the plan and returns the *syslet.PlanError it was refused
+// with, failing the test if BuildPlan succeeded or failed any other way.
+func (e *Env) PlanErrors() *syslet.PlanError {
+	e.t.Helper()
+	_, err := e.PlanErr()
+	var perr *syslet.PlanError
+	if !errors.As(err, &perr) {
+		e.t.Fatalf("BuildPlan: got error %v, want *syslet.PlanError", err)
+	}
+	return perr
 }
 
 // PlanErr builds the plan and returns any construction error to the caller.
@@ -275,15 +288,15 @@ func (e *Env) Apply() {
 // caller. Use when the error itself is the assertion.
 func (e *Env) ApplyErr() error {
 	e.t.Helper()
-	_, err := e.ApplyWithPlan()
+	_, err := e.ApplyWithReport()
 	return err
 }
 
-// ApplyWithPlan is ApplyErr that also returns the plan it applied, as the
-// apply left it: a unit whose operation failed carries an error result. Use it
-// when what syslet.DisplayResults prints after an apply is the assertion. The
-// plan is nil only when BuildPlan itself failed.
-func (e *Env) ApplyWithPlan() (*syslet.ApplyPlan, error) {
+// ApplyWithReport is ApplyErr that also returns the report of the apply, in
+// which a unit whose operation failed carries an error result. Use it when what
+// syslet.DisplayReport prints after an apply is the assertion. The report is
+// nil only when BuildPlan failed and nothing was applied.
+func (e *Env) ApplyWithReport() (*syslet.ApplyReport, error) {
 	e.t.Helper()
 	plan, err := e.PlanErr()
 	if err != nil {
@@ -293,9 +306,9 @@ func (e *Env) ApplyWithPlan() (*syslet.ApplyPlan, error) {
 	// does, so the timeline is cleared here — after planning, immediately before
 	// the effects under test — rather than at construction.
 	e.Log.Reset()
-	applyErr := syslet.Apply(context.Background(), e.logger, e.Systemd, e.journal, e.Podman, e.Mgrs, plan)
+	report, applyErr := syslet.Apply(context.Background(), e.logger, e.Systemd, e.journal, e.Podman, e.Mgrs, plan)
 	e.assertPhaseOrder()
-	return plan, applyErr
+	return report, applyErr
 }
 
 // ResetRecordings clears everything the fakes recorded while leaving the host

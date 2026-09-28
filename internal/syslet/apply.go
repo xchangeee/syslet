@@ -4,14 +4,58 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/xchangeee/syslet/internal/filestore"
+	"github.com/xchangeee/syslet/internal/model"
 	"github.com/xchangeee/syslet/internal/podman"
 	"github.com/xchangeee/syslet/internal/systemd"
 )
 
-// Apply executes a pre-built plan in coordinated order:
+// ApplyReport is the result of an apply: the plan it executed and the units
+// whose operations failed. Apply returns it and leaves the plan unchanged;
+// DisplayReport prints it as the plan's outcomes with the failures in place.
+type ApplyReport struct {
+	plan *ApplyPlan
+	// failures holds one entry per failed unit, in the order they failed.
+	failures []UnitError
+}
+
+// recordError marks a unit as failed. A later failure of the same unit
+// replaces the earlier one, as it did when failures overwrote the outcome.
+func (r *ApplyReport) recordError(name model.FullUnitName, message string) {
+	for i := range r.failures {
+		if r.failures[i].Unit == name {
+			r.failures[i].Message = message
+			return
+		}
+	}
+	r.failures = append(r.failures, UnitError{Unit: name, Message: message})
+}
+
+func (r *ApplyReport) failed() bool {
+	return len(r.failures) > 0
+}
+
+// outcomes returns the plan's outcomes with every failed unit turned into a
+// StatusError row carrying the failure message. A failed unit the plan has no
+// outcome for gets a row of its own at the end, so no failure goes unreported.
+func (r *ApplyReport) outcomes() []UnitOutcome {
+	outcomes := slices.Clone(r.plan.Outcomes)
+	for _, f := range r.failures {
+		i := slices.IndexFunc(outcomes, func(o UnitOutcome) bool { return o.unit == f.Unit })
+		failed := UnitOutcome{unit: f.Unit, status: StatusError, message: f.Message}
+		if i < 0 {
+			outcomes = append(outcomes, failed)
+		} else {
+			outcomes[i] = failed
+		}
+	}
+	return outcomes
+}
+
+// Apply executes a plan from BuildPlan in coordinated order:
 //  1. Stop containers that changed or are being pruned
 //  2. Write config files
 //  3. Write unit files
@@ -20,12 +64,12 @@ import (
 //     recreate a changed network)
 //  6. Single daemon-reload
 //  7. Start containers that should be running
-func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr systemd.JournalReader, pc podman.Interface, mgrs filestore.FileManagers, plan *ApplyPlan) error {
-	if plan.HasErrors() {
-		return fmt.Errorf("plan has errors, refusing to apply (fix planning errors first)")
-	}
-
-	r := &applyRunner{logger: logger, plan: plan}
+//
+// The report is returned even when Apply fails, so the caller can show which
+// units failed.
+func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr systemd.JournalReader, pc podman.Interface, mgrs filestore.FileManagers, plan *ApplyPlan) (*ApplyReport, error) {
+	report := &ApplyReport{plan: plan}
+	r := &applyRunner{logger: logger, report: report}
 
 	// Execute in strict global order (4 phases).
 
@@ -60,7 +104,7 @@ func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr syst
 		for _, f := range op.files {
 			if err := mgrs.Config.WriteVersionedDirFile(op.container, op.mountPath, op.version, f.Name, f.Mode, f.Content); err != nil {
 				logger.Error("failed to write configDir file", "container", op.container, "mountPath", op.mountPath, "file", f.Name, "error", err)
-				plan.RecordError(op.container.FullName(), fmt.Sprintf("failed to write configDir %s file %s: %v", op.mountPath, f.Name, err))
+				report.recordError(op.container.FullName(), fmt.Sprintf("failed to write configDir %s file %s: %v", op.mountPath, f.Name, err))
 				writeErr = true
 			}
 		}
@@ -69,7 +113,7 @@ func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr syst
 		}
 		if err := mgrs.Config.UpdateDirSymlink(op.container, op.mountPath, op.version); err != nil {
 			logger.Error("failed to update configDir symlink", "container", op.container, "mountPath", op.mountPath, "error", err)
-			plan.RecordError(op.container.FullName(), fmt.Sprintf("failed to update configDir symlink %s: %v", op.mountPath, err))
+			report.recordError(op.container.FullName(), fmt.Sprintf("failed to update configDir symlink %s: %v", op.mountPath, err))
 			continue
 		}
 		if err := mgrs.Config.PruneOldVersions(op.container, op.mountPath, op.version); err != nil {
@@ -160,7 +204,7 @@ func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr syst
 					logger.Error("quadlet generator error", "message", msg)
 				}
 			}
-			return fmt.Errorf("daemon-reload failed: %w", err)
+			return report, fmt.Errorf("daemon-reload failed: %w", err)
 		}
 	}
 
@@ -179,11 +223,8 @@ func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr syst
 			"unit", op.ref.FullName())
 	}
 
-	// Return error if any operations failed.
-	for _, result := range plan.Results {
-		if result.errored {
-			return fmt.Errorf("one or more units failed to apply")
-		}
+	if report.failed() {
+		return report, fmt.Errorf("one or more units failed to apply")
 	}
-	return nil
+	return report, nil
 }

@@ -14,26 +14,26 @@ import (
 // recreated. Without opt-in, a meaningful change is a hard error — silently writing
 // a unit file that diverges from the actual running volume would misrepresent system
 // state. The operator must either set both permissions or revert the change.
-func buildPlanUnitVolume(sd *systemd.Client, plan *ApplyPlan, r render.RenderedUnit, changedVolumes map[model.VolumeUnitRef]bool) {
-	uc, ok := computeUnitChanges(sd, plan, r)
+func buildPlanUnitVolume(sd *systemd.Client, planner *planner, r render.RenderedUnit, changedVolumes map[model.VolumeUnitRef]bool) {
+	uc, ok := computeUnitChanges(sd, planner, r)
 	if !ok {
 		return
 	}
 	volumeRef := r.Unit.(*model.VolumeUnit).TypedUnitRef()
 	if !uc.isNew && uc.meaningfullyChanged {
 		if render.IsUnitRemovalAllowed(uc.existingOptions) && render.IsReclaimPolicyDelete(uc.existingOptions) {
-			plan.StopSystemdService(volumeRef)
-			plan.DeletePodmanVolume(volumeRef)
+			planner.StopSystemdService(volumeRef)
+			planner.DeletePodmanVolume(volumeRef)
 			changedVolumes[volumeRef] = true
 		} else {
-			plan.RecordError(uc.fullUnitName, "volume has meaningful changes but recreation is not permitted: set removalAllowed=true and reclaimPolicy=delete to allow")
+			planner.recordUnitError(uc.fullUnitName, "volume has meaningful changes but recreation is not permitted: set removalAllowed=true and reclaimPolicy=delete to allow")
 			return
 		}
 	}
-	uc.applyToPlan(plan)
-	uc.recordResult(plan)
+	uc.applyToPlan(planner)
+	uc.recordOutcome(planner)
 }
 
-func buildPlanUnitStaleVolume(plan *ApplyPlan, volume model.VolumeUnitRef, options []gounit.UnitOption) {
-	buildPlanUnitStaleResource(plan, volume.FullName(), options, func() { plan.DeletePodmanVolume(volume) })
+func buildPlanUnitStaleVolume(planner *planner, volume model.VolumeUnitRef, options []gounit.UnitOption) {
+	buildPlanUnitStaleResource(planner, volume.FullName(), options, func() { planner.DeletePodmanVolume(volume) })
 }

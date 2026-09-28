@@ -26,21 +26,21 @@ import (
 // Returns the full podman secret names that will be upserted (empty map when
 // nothing changes). Returns nil when pc is nil (no podman client; secrets are
 // skipped for backward compat with callers that don't need secret support).
-func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.Decryptor, plan *ApplyPlan, secrets []model.PodmanSecret) map[string]bool {
+func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.Decryptor, planner *planner, secrets []model.PodmanSecret) map[string]bool {
 	if pc == nil {
 		return nil
 	}
 	if len(secrets) > 0 && decryptor == nil {
 		// main only passes a nil decryptor when the default SSH key is missing
 		// and no keys are cached; it has already logged a warning naming the path.
-		plan.RecordGenericError("secrets present in spec but no age key available (no SSH key at the default sshKeyPath and no cached keys)")
+		planner.recordGenericError("secrets present in spec but no age key available (no SSH key at the default sshKeyPath and no cached keys)")
 		return nil
 	}
 
 	for i := range secrets {
 		values, err := decryptor.Decrypt(secrets[i].Ciphertext)
 		if err != nil {
-			plan.RecordGenericError(fmt.Sprintf("secret %q: decryption failed: %v", secrets[i].Name, err))
+			planner.recordGenericError(fmt.Sprintf("secret %q: decryption failed: %v", secrets[i].Name, err))
 			return nil
 		}
 		secrets[i].Values = values
@@ -48,7 +48,7 @@ func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.
 
 	existing, err := pc.ListSecrets(ctx)
 	if err != nil {
-		plan.RecordGenericError(fmt.Sprintf("listing podman secrets: %v", err))
+		planner.recordGenericError(fmt.Sprintf("listing podman secrets: %v", err))
 		return nil
 	}
 
@@ -68,7 +68,7 @@ func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.
 			desired[fullName] = true
 			meta, exists := existingByName[fullName]
 			if !exists || meta.Labels["syslet/hash"] != secret.ContentHash {
-				plan.UpsertPodmanSecret(secret.Name, fullName, secret.Values[key], map[string]string{"syslet/hash": secret.ContentHash})
+				planner.UpsertPodmanSecret(secret.Name, fullName, secret.Values[key], map[string]string{"syslet/hash": secret.ContentHash})
 				upserted[fullName] = true
 			}
 		}
@@ -83,7 +83,7 @@ func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.
 		if _, ok := meta.Labels["syslet/hash"]; !ok {
 			continue
 		}
-		plan.DeletePodmanSecret(inferSpecName(meta.Name, specNames), meta.Name)
+		planner.DeletePodmanSecret(inferSpecName(meta.Name, specNames), meta.Name)
 	}
 
 	return upserted

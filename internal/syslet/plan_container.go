@@ -13,19 +13,19 @@ import (
 	"github.com/xchangeee/syslet/internal/systemd"
 )
 
-func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *filestore.ContainerConfigFileStore, plan *ApplyPlan, r render.RenderedUnit, changedNetworks map[model.NetworkUnitRef]bool, changedBuilds map[model.BuildUnitRef]bool, changedVolumes map[model.VolumeUnitRef]bool, changedSecrets map[string]bool) {
+func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *filestore.ContainerConfigFileStore, planner *planner, r render.RenderedUnit, changedNetworks map[model.NetworkUnitRef]bool, changedBuilds map[model.BuildUnitRef]bool, changedVolumes map[model.VolumeUnitRef]bool, changedSecrets map[string]bool) {
 	container, ok := r.Unit.(*model.ContainerUnit)
 	if !ok {
 		panic("buildPlanUnitContainer called with non-container spec")
 	}
 
-	uc, ok := computeUnitChanges(sd, plan, r)
+	uc, ok := computeUnitChanges(sd, planner, r)
 	if !ok {
 		return
 	}
 
 	changes := containerChanges{unitChanges: uc, desiredState: container.DesiredState}
-	changes.applyToPlan(plan)
+	changes.applyToPlan(planner)
 
 	if containerReferencesChangedNetwork(r.UnitOptions, changedNetworks) {
 		changes.markNetworkChanged()
@@ -42,11 +42,11 @@ func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *file
 
 	unitRef := container.TypedUnitRef()
 
-	if !buildPlanUnitContainerConfigFiles(store, plan, container, unitRef, &changes) {
+	if !buildPlanUnitContainerConfigFiles(store, planner, container, unitRef, &changes) {
 		return
 	}
 
-	if !buildPlanUnitContainerConfigDirs(store, plan, container, unitRef, &changes) {
+	if !buildPlanUnitContainerConfigDirs(store, planner, container, unitRef, &changes) {
 		return
 	}
 
@@ -58,38 +58,38 @@ func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *file
 		// inactive rather than failing, so a genuinely new unit plans a start.
 		state, err := sd.ContainerState(ctx, unitRef)
 		if err != nil {
-			plan.RecordError(unitRef.FullName(), fmt.Sprintf("querying state of %s: %v", unitRef.FullName(), err))
+			planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("querying state of %s: %v", unitRef.FullName(), err))
 			return
 		}
 		action = changes.planLifecycle(state.ActiveState.IsRunning())
 		switch action {
 		case actionRestart:
-			plan.StopSystemdService(unitRef)
-			plan.StartSystemdService(unitRef)
+			planner.StopSystemdService(unitRef)
+			planner.StartSystemdService(unitRef)
 		case actionStop:
-			plan.StopSystemdService(unitRef)
+			planner.StopSystemdService(unitRef)
 		case actionReload:
-			plan.ReloadSystemdService(unitRef)
+			planner.ReloadSystemdService(unitRef)
 		case actionStart:
-			plan.StartSystemdService(unitRef)
+			planner.StartSystemdService(unitRef)
 		}
 	}
 
-	changes.recordResult(plan, action)
+	changes.recordOutcome(planner, action)
 }
 
-func buildPlanUnitContainerConfigFiles(store *filestore.ContainerConfigFileStore, plan *ApplyPlan, container *model.ContainerUnit, unitRef model.ContainerUnitRef, changes *containerChanges) bool {
+func buildPlanUnitContainerConfigFiles(store *filestore.ContainerConfigFileStore, planner *planner, container *model.ContainerUnit, unitRef model.ContainerUnitRef, changes *containerChanges) bool {
 	desiredFilenames := make(map[string]bool, len(container.FileMounts))
 	for _, fm := range container.FileMounts {
 		internalName := store.InternalFilename(fm.FullPath())
 		desiredFilenames[internalName] = true
 		changed, oldContent, oldMode, err := store.IsFileChanged(unitRef, fm.FullPath(), fm.File.Content, fm.File.Mode)
 		if err != nil {
-			plan.RecordError(unitRef.FullName(), fmt.Sprintf("checking config %s: %v", internalName, err))
+			planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("checking config %s: %v", internalName, err))
 			return false
 		}
 		if changed {
-			plan.WriteFsContainerConfigFile(unitRef, fm.FullPath(), fm.File.Content, oldContent, fm.File.Mode, oldMode)
+			planner.WriteFsContainerConfigFile(unitRef, fm.FullPath(), fm.File.Content, oldContent, fm.File.Mode, oldMode)
 			changes.markConfigFileChanged()
 		}
 	}
@@ -97,27 +97,27 @@ func buildPlanUnitContainerConfigFiles(store *filestore.ContainerConfigFileStore
 	// Determine stale config files
 	deployed, stale, err := store.ListStaleFiles(unitRef, desiredFilenames)
 	if err != nil {
-		plan.RecordError(unitRef.FullName(), fmt.Sprintf("listing stale files: %v", err))
+		planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("listing stale files: %v", err))
 		return false
 	}
 	for _, f := range stale {
-		plan.DeleteFsContainerConfigFile(unitRef, f)
+		planner.DeleteFsContainerConfigFile(unitRef, f)
 		changes.markConfigFileChanged()
 	}
 	if len(desiredFilenames) == 0 && len(deployed) > 0 {
-		plan.DeleteFsContainerConfig(unitRef)
+		planner.DeleteFsContainerConfig(unitRef)
 	}
 	return true
 }
 
-func buildPlanUnitContainerConfigDirs(store *filestore.ContainerConfigFileStore, plan *ApplyPlan, container *model.ContainerUnit, unitRef model.ContainerUnitRef, changes *containerChanges) bool {
+func buildPlanUnitContainerConfigDirs(store *filestore.ContainerConfigFileStore, planner *planner, container *model.ContainerUnit, unitRef model.ContainerUnitRef, changes *containerChanges) bool {
 	desiredDirnames := make(map[string]bool, len(container.DirMounts))
 	for _, dm := range container.DirMounts {
 		internalDirname := store.InternalDirname(dm.Directory)
 		desiredDirnames[internalDirname] = true
 		currentVersion, err := store.CurrentDirVersion(unitRef, dm.Directory)
 		if err != nil {
-			plan.RecordError(unitRef.FullName(), fmt.Sprintf("checking configDir %s version: %v", internalDirname, err))
+			planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("checking configDir %s version: %v", internalDirname, err))
 			return false
 		}
 		// currentVersion == 0 means no version has ever been deployed for this dir, so it
@@ -132,7 +132,7 @@ func buildPlanUnitContainerConfigDirs(store *filestore.ContainerConfigFileStore,
 			}
 			changed, err := store.IsVersionedFileChanged(unitRef, dm.Directory, currentVersion, f.Name, f.Mode, f.Content)
 			if err != nil {
-				plan.RecordError(unitRef.FullName(), fmt.Sprintf("checking configDir %s file %s: %v", internalDirname, f.Name, err))
+				planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("checking configDir %s file %s: %v", internalDirname, f.Name, err))
 				return false
 			}
 			if changed {
@@ -143,7 +143,7 @@ func buildPlanUnitContainerConfigDirs(store *filestore.ContainerConfigFileStore,
 			// Detect file removals: if the deployed version has files not in the desired set, the dir changed.
 			deployed, err := store.ListVersionedDirFiles(unitRef, dm.Directory, currentVersion)
 			if err != nil {
-				plan.RecordError(unitRef.FullName(), fmt.Sprintf("listing configDir %s files: %v", internalDirname, err))
+				planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("listing configDir %s files: %v", internalDirname, err))
 				return false
 			}
 			for _, name := range deployed {
@@ -156,15 +156,15 @@ func buildPlanUnitContainerConfigDirs(store *filestore.ContainerConfigFileStore,
 		if dirChanged {
 			oldFiles, err := store.ReadVersionedDirFiles(unitRef, dm.Directory, currentVersion)
 			if err != nil {
-				plan.RecordError(unitRef.FullName(), fmt.Sprintf("reading configDir %s old files: %v", internalDirname, err))
+				planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("reading configDir %s old files: %v", internalDirname, err))
 				return false
 			}
 			oldModes, err := store.ReadVersionedDirFileModes(unitRef, dm.Directory, currentVersion)
 			if err != nil {
-				plan.RecordError(unitRef.FullName(), fmt.Sprintf("reading configDir %s old modes: %v", internalDirname, err))
+				planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("reading configDir %s old modes: %v", internalDirname, err))
 				return false
 			}
-			plan.WriteFsContainerConfigDir(unitRef, dm.Directory, currentVersion+1, dm.Files, oldFiles, oldModes)
+			planner.WriteFsContainerConfigDir(unitRef, dm.Directory, currentVersion+1, dm.Files, oldFiles, oldModes)
 			changes.markConfigDirChanged()
 		}
 	}
@@ -172,11 +172,11 @@ func buildPlanUnitContainerConfigDirs(store *filestore.ContainerConfigFileStore,
 	// determine stale config files inside config dirs
 	staleDirs, err := store.ListStaleDirs(unitRef, desiredDirnames)
 	if err != nil {
-		plan.RecordError(unitRef.FullName(), fmt.Sprintf("listing stale configDir groups: %v", err))
+		planner.recordUnitError(unitRef.FullName(), fmt.Sprintf("listing stale configDir groups: %v", err))
 		return false
 	}
 	for _, internalDirname := range staleDirs {
-		plan.DeleteFsContainerConfigDir(unitRef, internalDirname)
+		planner.DeleteFsContainerConfigDir(unitRef, internalDirname)
 	}
 	return true
 }
@@ -229,9 +229,9 @@ func (c containerChanges) planLifecycle(isRunning bool) containerAction {
 	}
 }
 
-func (c containerChanges) recordResult(plan *ApplyPlan, action containerAction) {
+func (c containerChanges) recordOutcome(planner *planner, action containerAction) {
 	anyChange := c.isChanged || c.configFileChanged || c.configDirChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged || action != actionNone
-	var status OperationStatus
+	var status UnitStatus
 	var parts []string
 	if c.isNew {
 		parts = append(parts, "created")
@@ -280,7 +280,7 @@ func (c containerChanges) recordResult(plan *ApplyPlan, action containerAction) 
 	} else {
 		message = fmt.Sprintf("%s (desired: %s)", strings.Join(parts, ", "), string(c.desiredState))
 	}
-	plan.RecordResult(c.fullUnitName, status, message)
+	planner.RecordOutcome(c.fullUnitName, status, message)
 }
 
 // containerReferencesChangedBuild reports whether the Image= entry in opts
@@ -358,19 +358,19 @@ func containerUnitReferences(opts []gounit.UnitOption) []model.FullUnitName {
 	return refs
 }
 
-func buildPlanUnitStaleContainer(ctx context.Context, sd *systemd.Client, plan *ApplyPlan, containerName model.ContainerUnitRef, options []gounit.UnitOption) {
+func buildPlanUnitStaleContainer(ctx context.Context, sd *systemd.Client, planner *planner, containerName model.ContainerUnitRef, options []gounit.UnitOption) {
 	fullName := containerName.FullName()
 	if render.IsUnitRemovalAllowed(options) {
-		plan.RecordResult(fullName, StatusRemoved, "removed")
-		plan.DeleteFsQuadletUnitFile(fullName)
-		plan.DeleteFsContainerConfig(containerName)
+		planner.RecordOutcome(fullName, StatusRemoved, "removed")
+		planner.DeleteFsQuadletUnitFile(fullName)
+		planner.DeleteFsContainerConfig(containerName)
 		if !render.IsOneshotUnit(options) {
 			state, err := sd.ContainerState(ctx, containerName)
 			if err == nil && state.ActiveState.IsRunning() {
-				plan.StopSystemdService(containerName)
+				planner.StopSystemdService(containerName)
 			}
 		}
 	} else {
-		plan.RecordResult(fullName, StatusSkipped, render.RemovalSkipReason(options))
+		planner.RecordOutcome(fullName, StatusSkipped, render.RemovalSkipReason(options))
 	}
 }

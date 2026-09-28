@@ -29,16 +29,9 @@ type DisplayOptions struct {
 
 // DisplayPlan prints a human-readable diff showing what would change.
 // It shows operations that would be performed and the final status of each
-// unit that isn't unchanged.
-// If the plan has any errors (validation or per-unit), only those errors are
-// printed, as DisplayPlanErrors does — the diff is suppressed because the plan
-// cannot safely be applied.
+// unit that isn't unchanged. A plan that BuildPlan refused never gets here: its
+// *PlanError is printed by DisplayPlanErrors instead.
 func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
-	if plan.HasErrors() {
-		DisplayPlanErrors(w, plan)
-		return
-	}
-
 	// 1. Unit file changes
 	if len(plan.WriteFsQuadletUnitFiles) > 0 {
 		_, _ = fmt.Fprintln(w, "\nUnit file changes:")
@@ -216,11 +209,11 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	// nothing prints noChangesMessage alone. Every section above requires an
 	// operation, so without rows and changes that message is the only output
 	// and needs no blank line in front of it.
-	rows := visibleResults(plan)
+	rows := visibleOutcomes(plan.Outcomes)
 	if len(rows) > 0 {
 		_, _ = fmt.Fprintln(w, "\nSummary:")
 		_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", "UNIT", "STATUS", "CHANGES")
-		displayResultRows(w, rows)
+		displayOutcomeRows(w, rows)
 	}
 
 	if !plan.HasChanges() {
@@ -231,19 +224,17 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 }
 
-// DisplayPlanErrors prints the errors that make a plan unappliable: generic
-// validation errors and per-unit errors found while planning. The CLI writes
-// them to stderr, for a --diff and a refused apply alike, so a caller that
-// captures stdout (a CUE task, a CI step) still shows them.
-func DisplayPlanErrors(w io.Writer, plan *ApplyPlan) {
+// DisplayPlanErrors prints why BuildPlan refused a plan: generic validation
+// errors and per-unit errors found while planning. The CLI writes them to
+// stderr, for a --diff and a refused apply alike, so a caller that captures
+// stdout (a CUE task, a CI step) still shows them.
+func DisplayPlanErrors(w io.Writer, perr *PlanError) {
 	_, _ = fmt.Fprintln(w, "Validation errors:")
-	for _, msg := range plan.Errors {
+	for _, msg := range perr.Errors {
 		_, _ = fmt.Fprintf(w, "  error: %s\n", msg)
 	}
-	for _, r := range plan.Results {
-		if r.errored {
-			_, _ = fmt.Fprintf(w, "  error [%s]: %s\n", string(r.fullUnitName), r.message)
-		}
+	for _, ue := range perr.UnitErrors {
+		_, _ = fmt.Fprintf(w, "  error [%s]: %s\n", string(ue.Unit), ue.Message)
 	}
 }
 
@@ -251,36 +242,33 @@ func DisplayPlanErrors(w io.Writer, plan *ApplyPlan) {
 // so a run with no summary rows still confirms it ran.
 const noChangesMessage = "No changes detected. All units are up to date."
 
-// DisplayResults prints the post-apply results summary table, followed by
+// DisplayReport prints the post-apply summary table of an ApplyReport, followed by
 // noChangesMessage when the apply had nothing to do.
-func DisplayResults(w io.Writer, plan *ApplyPlan) {
-	for _, msg := range plan.Errors {
-		_, _ = fmt.Fprintf(w, "error: %s\n", msg)
-	}
-	displayResultRows(w, visibleResults(plan))
-	if !plan.HasChanges() && !plan.HasErrors() {
+func DisplayReport(w io.Writer, report *ApplyReport) {
+	displayOutcomeRows(w, visibleOutcomes(report.outcomes()))
+	if !report.plan.HasChanges() {
 		_, _ = fmt.Fprintln(w, noChangesMessage)
 	}
 }
 
-// visibleResults returns the results DisplayPlan and DisplayResults print as
+// visibleOutcomes returns the outcomes DisplayPlan and DisplayReport print as
 // summary rows. Unchanged units are left out: on a host with many units they
 // would bury the few rows that matter. Skipped and errored units stay, since
 // they tell the reader something the apply didn't do.
-func visibleResults(plan *ApplyPlan) []ApplyResult {
-	var rows []ApplyResult
-	for _, result := range plan.Results {
-		if result.status != StatusUnchanged {
-			rows = append(rows, result)
+func visibleOutcomes(outcomes []UnitOutcome) []UnitOutcome {
+	var rows []UnitOutcome
+	for _, outcome := range outcomes {
+		if outcome.status != StatusUnchanged {
+			rows = append(rows, outcome)
 		}
 	}
 	return rows
 }
 
-// displayResultRows prints one summary row per result.
-func displayResultRows(w io.Writer, rows []ApplyResult) {
-	for _, result := range rows {
-		_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", result.fullUnitName, result.status, result.message)
+// displayOutcomeRows prints one summary row per outcome.
+func displayOutcomeRows(w io.Writer, rows []UnitOutcome) {
+	for _, outcome := range rows {
+		_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", outcome.unit, outcome.status, outcome.message)
 	}
 }
 

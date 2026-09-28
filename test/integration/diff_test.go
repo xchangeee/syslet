@@ -109,10 +109,10 @@ Secret changes:
 `)
 }
 
-// TestPlanWithValidationErrors_PrintsErrorsOnly verifies that ValidateUnits failures are recorded
-// in the plan (not returned as a fatal error), and that syslet.DisplayPlan suppresses
-// the diff when the plan contains errors.
-func TestPlanWithValidationErrors_PrintsErrorsOnly(t *testing.T) {
+// TestPlanWithValidationErrors_ReturnsPlanError verifies that ValidateUnits
+// failures refuse the plan with a *syslet.PlanError that lists them, rather
+// than failing BuildPlan with an opaque error.
+func TestPlanWithValidationErrors_ReturnsPlanError(t *testing.T) {
 	// X-Syslet section is reserved; NoXSysletSection in ValidateUnits rejects this.
 	badSpec := model.NewContainerUnit(
 		model.ContainerUnitRef("myapp"),
@@ -126,19 +126,15 @@ func TestPlanWithValidationErrors_PrintsErrorsOnly(t *testing.T) {
 	env := systest.New(t)
 	env.Specs(badSpec)
 
-	// Plan fatals if BuildPlan itself errored, which is half the contract here:
-	// a validation failure must be recorded on the plan, not returned.
-	plan := env.Plan()
-	systest.AssertPlanHasErrors(t, plan)
+	perr := env.PlanErrors()
 
-	systest.AssertPlanOutputOmits(t, plan, "Unit file changes:")
-	systest.AssertPlanOutputContains(t, plan, "X-Syslet")
+	systest.AssertPlanErrorsContain(t, perr, "X-Syslet")
 }
 
-// TestPlanWithStagingErrors_SuppressesDiff verifies that when staging validation records
-// errors on an otherwise fully-built plan (with unit file changes), syslet.DisplayPlan
-// suppresses the diff and shows only the errors.
-func TestPlanWithStagingErrors_SuppressesDiff(t *testing.T) {
+// TestPlanWithStagingErrors_ReturnsPlanError verifies that staging validation
+// errors on an otherwise fully-built plan (with unit file changes) refuse the
+// whole plan, so none of its operations can be displayed or applied.
+func TestPlanWithStagingErrors_ReturnsPlanError(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	az := &systemdtest.MockAnalyzeRunner{
 		Result: systemd.AnalyzeResult{
@@ -157,11 +153,9 @@ func TestPlanWithStagingErrors_SuppressesDiff(t *testing.T) {
 	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
 	env.Specs(systest.NewContainer("webapp", "nginx:alpine"))
 
-	plan := env.Plan()
-	systest.AssertPlanHasErrors(t, plan)
+	perr := env.PlanErrors()
 
-	systest.AssertPlanOutputOmits(t, plan, "Unit file changes:")
-	systest.AssertPlanOutputContains(t, plan, "Invalid memory limit")
+	systest.AssertPlanErrorsContain(t, perr, "Invalid memory limit")
 }
 
 // TestPlanWithConfigDirChanges_ShowsFileDiff verifies that syslet.DisplayPlan shows per-file unified diffs

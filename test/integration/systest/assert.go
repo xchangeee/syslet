@@ -666,40 +666,33 @@ func renderPlanWithOptions(plan *syslet.ApplyPlan, opts syslet.DisplayOptions) s
 	return buf.String()
 }
 
-// renderResults returns what syslet.DisplayResults, the post-apply summary,
-// writes for a plan. Pass the plan from Env.ApplyWithPlan, so it carries the
-// errors the apply recorded.
-func renderResults(plan *syslet.ApplyPlan) string {
+// renderReport returns what syslet.DisplayReport, the post-apply summary,
+// writes for the report from Env.ApplyWithReport.
+func renderReport(report *syslet.ApplyReport) string {
 	var buf bytes.Buffer
-	syslet.DisplayResults(&buf, plan)
+	syslet.DisplayReport(&buf, report)
 	return buf.String()
 }
 
-// AssertResultsOutput checks the full post-apply summary against an expected block.
-func AssertResultsOutput(t *testing.T, plan *syslet.ApplyPlan, want string) {
+// AssertReportOutput checks the full post-apply summary against an expected block.
+func AssertReportOutput(t *testing.T, report *syslet.ApplyReport, want string) {
 	t.Helper()
-	if got := renderResults(plan); got != want {
+	if got := renderReport(report); got != want {
 		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", want, got)
 	}
 }
 
-// AssertResultsOutputOmits checks that the post-apply summary excludes each snippet.
-func AssertResultsOutputOmits(t *testing.T, plan *syslet.ApplyPlan, unwanted ...string) {
+// AssertPlanErrorsContain checks that what syslet.DisplayPlanErrors prints for
+// a refused plan includes each snippet.
+func AssertPlanErrorsContain(t *testing.T, perr *syslet.PlanError, want ...string) {
 	t.Helper()
-	out := renderResults(plan)
-	for _, u := range unwanted {
-		if strings.Contains(out, u) {
-			t.Errorf("expected output to omit %q, got:\n%s", u, out)
+	var buf bytes.Buffer
+	syslet.DisplayPlanErrors(&buf, perr)
+	out := buf.String()
+	for _, w := range want {
+		if !strings.Contains(out, w) {
+			t.Errorf("expected plan errors to contain %q, got:\n%s", w, out)
 		}
-	}
-}
-
-// AssertPlanHasErrors checks that the plan recorded errors rather than syslet
-// failing outright — the contract that lets DisplayPlan report them to the user.
-func AssertPlanHasErrors(t *testing.T, plan *syslet.ApplyPlan) {
-	t.Helper()
-	if !plan.HasErrors() {
-		t.Error("plan.HasErrors() == false, want true")
 	}
 }
 
@@ -732,7 +725,7 @@ func AssertPlanOutputContains(t *testing.T, plan *syslet.ApplyPlan, want ...stri
 }
 
 // AssertPlanOutputOmits checks that the rendered plan includes none of the
-// snippets — used to pin that a plan carrying errors suppresses its diff.
+// snippets, such as a unit the summary must leave out.
 func AssertPlanOutputOmits(t *testing.T, plan *syslet.ApplyPlan, unwanted ...string) {
 	t.Helper()
 	out := renderPlan(plan)

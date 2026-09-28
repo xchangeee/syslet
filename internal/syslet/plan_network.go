@@ -13,21 +13,21 @@ import (
 // must be torn down and recreated because podman networks are immutable after creation.
 // It records the network in changedNetworks so buildPlanUnitContainer can arrange
 // container restarts on behalf of the affected containers.
-func buildPlanUnitNetwork(sd *systemd.Client, plan *ApplyPlan, r render.RenderedUnit, changedNetworks map[model.NetworkUnitRef]bool) {
-	uc, ok := computeUnitChanges(sd, plan, r)
+func buildPlanUnitNetwork(sd *systemd.Client, planner *planner, r render.RenderedUnit, changedNetworks map[model.NetworkUnitRef]bool) {
+	uc, ok := computeUnitChanges(sd, planner, r)
 	if !ok {
 		return
 	}
 	networkRef := r.Unit.(*model.NetworkUnit).TypedUnitRef()
 	if !uc.isNew && uc.meaningfullyChanged {
-		plan.StopSystemdService(networkRef)
-		plan.RecreatePodmanNetwork(networkRef)
+		planner.StopSystemdService(networkRef)
+		planner.RecreatePodmanNetwork(networkRef)
 		changedNetworks[networkRef] = true
 	}
-	uc.applyToPlan(plan)
-	uc.recordResult(plan)
+	uc.applyToPlan(planner)
+	uc.recordOutcome(planner)
 }
 
-func buildPlanUnitStaleNetwork(plan *ApplyPlan, network model.NetworkUnitRef, options []gounit.UnitOption) {
-	buildPlanUnitStaleResource(plan, network.FullName(), options, func() { plan.DeletePodmanNetwork(network) })
+func buildPlanUnitStaleNetwork(planner *planner, network model.NetworkUnitRef, options []gounit.UnitOption) {
+	buildPlanUnitStaleResource(planner, network.FullName(), options, func() { planner.DeletePodmanNetwork(network) })
 }

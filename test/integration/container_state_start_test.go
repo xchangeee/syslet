@@ -26,11 +26,10 @@ func TestNewRunningContainer_StartsService(t *testing.T) {
 // TestContainerSpecValidationError covers the guard that stops a plan carrying
 // errors from being executed at all.
 //
-// A validation failure is recorded as a *generic* plan error, which — unlike a
-// per-unit error — leaves no errored entry in plan.Results. Apply's trailing
-// "did any unit fail" loop therefore cannot see it, and the explicit HasErrors
-// check at the top of Apply is the only thing standing between an invalid spec
-// and a unit file on disk.
+// A validation failure is a *generic* plan error, not tied to any unit. The
+// guard is that BuildPlan returns a *syslet.PlanError instead of a plan, so
+// there is nothing for Apply to run; this pins that an invalid spec never
+// reaches a unit file on disk.
 func TestContainerSpecValidationError(t *testing.T) {
 	// The X-Syslet section is reserved; ValidateUnits rejects a spec declaring it.
 	env := systest.New(t)

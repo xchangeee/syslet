@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/spf13/afero"
-
-	"github.com/xchangeee/syslet/internal/syslet"
 )
 
 func TestVersionString(t *testing.T) {
@@ -85,30 +83,6 @@ func TestDisplayOptionsFromEnv(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestCheckPlan(t *testing.T) {
-	t.Run("PlanWithoutErrors", func(t *testing.T) {
-		var errOut bytes.Buffer
-		if err := checkPlan(&errOut, &syslet.ApplyPlan{}); err != nil {
-			t.Errorf("checkPlan() error = %v, want nil", err)
-		}
-		if errOut.Len() != 0 {
-			t.Errorf("checkPlan() output = %q, want none", errOut.String())
-		}
-	})
-
-	t.Run("PlanWithErrors", func(t *testing.T) {
-		plan := &syslet.ApplyPlan{}
-		plan.RecordGenericError("spec web: image is required")
-		var errOut bytes.Buffer
-		if err := checkPlan(&errOut, plan); err == nil {
-			t.Error("checkPlan() error = nil, want error for plan with validation errors")
-		}
-		if !strings.Contains(errOut.String(), "spec web: image is required") {
-			t.Errorf("checkPlan() output = %q, want validation error listed", errOut.String())
-		}
-	})
 }
 
 // statErrFs fails every Stat with a permission error, standing in for a key

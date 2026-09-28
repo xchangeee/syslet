@@ -33,7 +33,7 @@ Supporting packages:
 
 ## Plan and apply
 
-- `internal/syslet.BuildPlan` computes an `ApplyPlan`, every operation an apply would run, without changing the host. `--diff` prints it.
-- `internal/syslet.Apply` executes an `ApplyPlan`.
+- `internal/syslet.BuildPlan` computes an `ApplyPlan`, every operation an apply would run, without changing the host. `--diff` prints it. When the specs or the host state don't allow a plan, it returns a `PlanError` listing why, instead of a plan.
+- `internal/syslet.Apply` executes an `ApplyPlan` and returns an `ApplyReport`, the planned result of every unit with the failed ones marked as errors. The plan itself is left unchanged.
 
 See [How an apply works](../explanation/how-an-apply-works.md) for the phase ordering and why planning and applying are split, and [Safety mechanisms](../explanation/safety-mechanisms.md) for the validation stages.

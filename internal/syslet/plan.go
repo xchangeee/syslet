@@ -28,19 +28,23 @@ import (
 	"github.com/xchangeee/syslet/internal/validate"
 )
 
-// OperationStatus is the outcome of a single unit operation.
-type OperationStatus string
+// UnitStatus classifies a UnitOutcome: what the plan does to the unit, or
+// StatusError once an operation on it failed during the apply.
+type UnitStatus string
 
 const (
-	StatusCreated   OperationStatus = "created"
-	StatusUpdated   OperationStatus = "updated"
-	StatusUnchanged OperationStatus = "unchanged"
-	StatusRemoved   OperationStatus = "removed"
-	StatusSkipped   OperationStatus = "skipped"
-	StatusError     OperationStatus = "error"
+	StatusCreated   UnitStatus = "created"
+	StatusUpdated   UnitStatus = "updated"
+	StatusUnchanged UnitStatus = "unchanged"
+	StatusRemoved   UnitStatus = "removed"
+	StatusSkipped   UnitStatus = "skipped"
+	StatusError     UnitStatus = "error"
 )
 
-// ApplyPlan contains all operations to execute, organized by phase.
+// ApplyPlan contains all operations to execute, organized by phase, and the
+// planned outcome of every unit. BuildPlan only returns a plan it could build
+// without errors, so holding an ApplyPlan means it is safe to display and
+// apply; errors come back as a *PlanError instead.
 type ApplyPlan struct {
 	StopSystemdServices          []StopSystemdServiceOp
 	DeleteFsQuadletUnitFiles     []DeleteFsQuadletUnitFileOp
@@ -61,8 +65,7 @@ type ApplyPlan struct {
 	ReloadSystemdServices        []ReloadSystemdServiceOp
 	StartSystemdServices         []StartSystemdServiceOp
 
-	Errors  []string
-	Results []ApplyResult
+	Outcomes []UnitOutcome
 }
 
 type StopSystemdServiceOp struct {
@@ -191,12 +194,15 @@ type StartSystemdServiceOp struct {
 // the accessor exists.
 func (op StartSystemdServiceOp) Ref() model.UnitRef { return op.ref }
 
-// ApplyResult tracks the outcome for a single unit.
-type ApplyResult struct {
-	fullUnitName model.FullUnitName
-	status       OperationStatus
-	message      string
-	errored      bool
+// UnitOutcome is the planned effect of an apply on one unit, one row of the
+// summary: its status and a description of what changes, such as "unit
+// updated, restarted (desired: running)". BuildPlan records one for every unit
+// in the input or on the host. The plan keeps it as planned; when an operation
+// on the unit fails, the ApplyReport shows a StatusError row in its place.
+type UnitOutcome struct {
+	unit    model.FullUnitName
+	status  UnitStatus
+	message string
 }
 
 func (p *ApplyPlan) StopSystemdService(ref model.UnitRef) {
@@ -278,8 +284,8 @@ func (p *ApplyPlan) DeletePodmanSecret(specName, name string) {
 	p.DeletePodmanSecrets = append(p.DeletePodmanSecrets, DeletePodmanSecretOp{SpecName: specName, Name: name})
 }
 
-func (p *ApplyPlan) RecordResult(fn model.FullUnitName, status OperationStatus, message string) {
-	p.Results = append(p.Results, ApplyResult{fullUnitName: fn, status: status, message: message})
+func (p *ApplyPlan) RecordOutcome(fn model.FullUnitName, status UnitStatus, message string) {
+	p.Outcomes = append(p.Outcomes, UnitOutcome{unit: fn, status: status, message: message})
 }
 
 func (p *ApplyPlan) NeedsReload() bool {
@@ -287,9 +293,9 @@ func (p *ApplyPlan) NeedsReload() bool {
 }
 
 // HasChanges reports whether the plan holds any operation, which is what an
-// apply would do to the host. DisplayPlan and DisplayResults use it to decide
+// apply would do to the host. DisplayPlan and DisplayReport use it to decide
 // whether to print "No changes detected"; units that are skipped or unchanged
-// record results but no operations, so they don't count.
+// record outcomes but no operations, so they don't count.
 func (p *ApplyPlan) HasChanges() bool {
 	return len(p.StopSystemdServices) > 0 ||
 		len(p.DeleteFsQuadletUnitFiles) > 0 ||
@@ -311,32 +317,70 @@ func (p *ApplyPlan) HasChanges() bool {
 		len(p.StartSystemdServices) > 0
 }
 
-func (p *ApplyPlan) HasErrors() bool {
-	if len(p.Errors) > 0 {
-		return true
-	}
-	for _, r := range p.Results {
-		if r.errored {
-			return true
-		}
-	}
-	return false
+// PlanError is the error BuildPlan returns when the specs or the host state
+// don't allow a plan: validation failures and per-unit problems found while
+// planning. It replaces the plan rather than accompanying it, so a plan that
+// must not be applied can't reach DisplayPlan or Apply. The CLI prints it with
+// DisplayPlanErrors.
+type PlanError struct {
+	// Errors are failures not tied to one unit, such as a validation stage or
+	// a secret that can't be decrypted.
+	Errors []string
+	// UnitErrors are failures of single units, one per unit.
+	UnitErrors []UnitError
 }
 
-func (p *ApplyPlan) RecordGenericError(message string) {
-	p.Errors = append(p.Errors, message)
+// UnitError is a planning failure of one unit.
+type UnitError struct {
+	Unit    model.FullUnitName
+	Message string
 }
 
-func (p *ApplyPlan) RecordError(name model.FullUnitName, message string) {
-	for i := range p.Results {
-		if p.Results[i].fullUnitName == name {
-			p.Results[i].errored = true
-			p.Results[i].status = StatusError
-			p.Results[i].message = message
+func (e *PlanError) Error() string { return "plan has errors" }
+
+// planner holds the ApplyPlan under construction. The buildPlan* functions
+// add operations and outcomes to it through the embedded plan, and record
+// errors on the planner, which BuildPlan turns into a *PlanError instead of
+// returning the plan. Keeping errors off ApplyPlan is what makes an ApplyPlan
+// with errors unrepresentable.
+type planner struct {
+	*ApplyPlan
+	errors     []string
+	unitErrors []UnitError
+}
+
+func newPlanner() *planner {
+	return &planner{ApplyPlan: &ApplyPlan{}}
+}
+
+func (p *planner) recordGenericError(message string) {
+	p.errors = append(p.errors, message)
+}
+
+// recordUnitError records a planning failure of one unit. A later failure of
+// the same unit replaces the earlier one, since planning stops working on a
+// unit once it failed and the last message is the most specific.
+func (p *planner) recordUnitError(name model.FullUnitName, message string) {
+	for i := range p.unitErrors {
+		if p.unitErrors[i].Unit == name {
+			p.unitErrors[i].Message = message
 			return
 		}
 	}
-	p.Results = append(p.Results, ApplyResult{fullUnitName: name, status: StatusError, message: message, errored: true})
+	p.unitErrors = append(p.unitErrors, UnitError{Unit: name, Message: message})
+}
+
+func (p *planner) hasErrors() bool {
+	return len(p.errors) > 0 || len(p.unitErrors) > 0
+}
+
+// build returns either the finished plan or, if anything was recorded as an
+// error, a *PlanError; never both.
+func (p *planner) build() (*ApplyPlan, error) {
+	if p.hasErrors() {
+		return nil, &PlanError{Errors: p.errors, UnitErrors: p.unitErrors}
+	}
+	return p.ApplyPlan, nil
 }
 
 // BuildPlan validates already-loaded specs, builds an execution plan by diffing
@@ -345,6 +389,10 @@ func (p *ApplyPlan) RecordError(name model.FullUnitName, message string) {
 // api.LoadSpecsFS or a stream via api.LoadSpecsReader), keeping BuildPlan free of
 // any I/O concerning the spec source. pc and decryptor are required for secret
 // support: pass nil for both when the caller does not manage secrets.
+//
+// It returns a *PlanError when the specs or the host state don't allow a plan,
+// and any other error when it couldn't finish looking, such as an unreadable
+// unit directory.
 func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd *systemd.Client, jr systemd.JournalReader, gen systemd.QuadletGeneratorRunner, az systemd.AnalyzeRunner, pc podman.Interface, decryptor *sops.Decryptor, raw api.LoadResult) (*ApplyPlan, error) {
 	units, err := loader.Parse(raw)
 	if err != nil {
@@ -355,11 +403,11 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 		return nil, err
 	}
 
-	plan := &ApplyPlan{}
+	planner := newPlanner()
 
 	if err := validate.PreRender(units, secrets); err != nil {
-		plan.RecordGenericError(fmt.Sprintf("pre-render validation: %v", err))
-		return plan, nil
+		planner.recordGenericError(fmt.Sprintf("pre-render validation: %v", err))
+		return planner.build()
 	}
 
 	result, err := render.NewResult(units, mgrs.Config.Resolve, mgrs.Build.Resolve)
@@ -368,30 +416,30 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 	}
 
 	if err := validate.PostRender(result); err != nil {
-		plan.RecordGenericError(fmt.Sprintf("post-render validation: %v", err))
-		return plan, nil
+		planner.recordGenericError(fmt.Sprintf("post-render validation: %v", err))
+		return planner.build()
 	}
 
 	changedNetworks := make(map[model.NetworkUnitRef]bool)
 	changedBuilds := make(map[model.BuildUnitRef]bool)
 	changedVolumes := make(map[model.VolumeUnitRef]bool)
 	for _, r := range result.Volumes {
-		buildPlanUnitVolume(sd, plan, r, changedVolumes)
+		buildPlanUnitVolume(sd, planner, r, changedVolumes)
 	}
 	for _, r := range result.Networks {
-		buildPlanUnitNetwork(sd, plan, r, changedNetworks)
+		buildPlanUnitNetwork(sd, planner, r, changedNetworks)
 	}
 	for _, r := range result.Builds {
-		buildPlanUnitBuild(sd, mgrs.Build, plan, r, changedBuilds)
+		buildPlanUnitBuild(sd, mgrs.Build, planner, r, changedBuilds)
 	}
 	// Secrets must be diffed before containers so that containers referencing
 	// a changed secret can be scheduled for restart in the same pass.
-	changedSecrets := buildPlanSecrets(ctx, pc, decryptor, plan, secrets)
-	if plan.HasErrors() {
-		return plan, nil
+	changedSecrets := buildPlanSecrets(ctx, pc, decryptor, planner, secrets)
+	if planner.hasErrors() {
+		return planner.build()
 	}
 	for _, r := range result.Containers {
-		buildPlanUnitContainer(ctx, sd, mgrs.Config, plan, r, changedNetworks, changedBuilds, changedVolumes, changedSecrets)
+		buildPlanUnitContainer(ctx, sd, mgrs.Config, planner, r, changedNetworks, changedBuilds, changedVolumes, changedSecrets)
 	}
 
 	stale, err := loadStaleUnits(sd, result.UnitNames)
@@ -401,22 +449,22 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 	heldBy := skippedContainerReferences(stale)
 	for _, u := range stale {
 		if holders := heldBy[u.ref.FullName()]; len(holders) > 0 {
-			plan.RecordResult(u.ref.FullName(), StatusSkipped, "still referenced by "+strings.Join(holders, ", "))
+			planner.RecordOutcome(u.ref.FullName(), StatusSkipped, "still referenced by "+strings.Join(holders, ", "))
 			continue
 		}
 		switch u.ref.UnitType() {
 		case model.UnitTypeContainer:
-			buildPlanUnitStaleContainer(ctx, sd, plan, u.ref.(model.ContainerUnitRef), u.options)
+			buildPlanUnitStaleContainer(ctx, sd, planner, u.ref.(model.ContainerUnitRef), u.options)
 		case model.UnitTypeVolume:
-			buildPlanUnitStaleVolume(plan, u.ref.(model.VolumeUnitRef), u.options)
+			buildPlanUnitStaleVolume(planner, u.ref.(model.VolumeUnitRef), u.options)
 		case model.UnitTypeNetwork:
-			buildPlanUnitStaleNetwork(plan, u.ref.(model.NetworkUnitRef), u.options)
+			buildPlanUnitStaleNetwork(planner, u.ref.(model.NetworkUnitRef), u.options)
 		case model.UnitTypeBuild:
-			buildPlanUnitStaleBuild(plan, u.ref.(model.BuildUnitRef), u.options)
+			buildPlanUnitStaleBuild(planner, u.ref.(model.BuildUnitRef), u.options)
 		}
 	}
 
-	if len(plan.WriteFsQuadletUnitFiles) > 0 {
+	if len(planner.WriteFsQuadletUnitFiles) > 0 {
 		stage, err := validate.NewStaging(fs, gen, az)
 		if err != nil {
 			return nil, fmt.Errorf("setting up staging: %w", err)
@@ -434,11 +482,11 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 			stage.AddRenderedUnit(r)
 		}
 		for _, msg := range stage.Validate(ctx, slog.Default(), jr) {
-			plan.RecordGenericError(msg)
+			planner.recordGenericError(msg)
 		}
 	}
 
-	return plan, nil
+	return planner.build()
 }
 
 // staleUnit holds data about an installed unit not in the desired set.
@@ -514,7 +562,7 @@ type unitChanges struct {
 	existingOptions     []gounit.UnitOption // parsed options of the installed unit; nil for new units
 }
 
-func computeUnitChanges(sd *systemd.Client, plan *ApplyPlan, r render.RenderedUnit) (uc unitChanges, ok bool) {
+func computeUnitChanges(sd *systemd.Client, planner *planner, r render.RenderedUnit) (uc unitChanges, ok bool) {
 	fn := r.Unit.Ref().FullName()
 	newContent := r.Content
 	existing, err := sd.ReadUnitFile(fn)
@@ -526,13 +574,13 @@ func computeUnitChanges(sd *systemd.Client, plan *ApplyPlan, r render.RenderedUn
 			newContent:   newContent,
 		}, true
 	} else if err != nil {
-		plan.RecordError(fn, fmt.Sprintf("reading installed unit: %v", err))
+		planner.recordUnitError(fn, fmt.Sprintf("reading installed unit: %v", err))
 		return unitChanges{}, false
 	}
 	oldContent := string(existing)
 	ptrOpts, err := gounit.DeserializeOptions(bytes.NewReader(existing))
 	if err != nil {
-		plan.RecordError(fn, fmt.Sprintf("parsing installed unit: %v", err))
+		planner.recordUnitError(fn, fmt.Sprintf("parsing installed unit: %v", err))
 		return unitChanges{}, false
 	}
 	existingOptions := make([]gounit.UnitOption, len(ptrOpts))
@@ -544,12 +592,12 @@ func computeUnitChanges(sd *systemd.Client, plan *ApplyPlan, r render.RenderedUn
 	if contentChanged {
 		oldStripped, err := render.StripMetadataSections(oldContent)
 		if err != nil {
-			plan.RecordError(fn, fmt.Sprintf("processing installed unit: %v", err))
+			planner.recordUnitError(fn, fmt.Sprintf("processing installed unit: %v", err))
 			return unitChanges{}, false
 		}
 		newStripped, err := render.StripMetadataSections(newContent)
 		if err != nil {
-			plan.RecordError(fn, fmt.Sprintf("processing new unit: %v", err))
+			planner.recordUnitError(fn, fmt.Sprintf("processing new unit: %v", err))
 			return unitChanges{}, false
 		}
 		meaningfullyChanged = util.SHA256Hex([]byte(newStripped)) != util.SHA256Hex([]byte(oldStripped))
@@ -564,33 +612,33 @@ func computeUnitChanges(sd *systemd.Client, plan *ApplyPlan, r render.RenderedUn
 	}, true
 }
 
-func (uc unitChanges) applyToPlan(plan *ApplyPlan) {
+func (uc unitChanges) applyToPlan(planner *planner) {
 	if uc.isChanged {
-		plan.WriteFsQuadletUnitFile(uc.fullUnitName, uc.newContent, uc.oldContent)
+		planner.WriteFsQuadletUnitFile(uc.fullUnitName, uc.newContent, uc.oldContent)
 	}
 }
 
-func (uc unitChanges) recordResult(plan *ApplyPlan) {
+func (uc unitChanges) recordOutcome(planner *planner) {
 	if uc.isNew {
-		plan.RecordResult(uc.fullUnitName, StatusCreated, "created")
+		planner.RecordOutcome(uc.fullUnitName, StatusCreated, "created")
 	} else if uc.isChanged {
-		plan.RecordResult(uc.fullUnitName, StatusUpdated, "unit updated")
+		planner.RecordOutcome(uc.fullUnitName, StatusUpdated, "unit updated")
 	} else {
-		plan.RecordResult(uc.fullUnitName, StatusUnchanged, "up to date")
+		planner.RecordOutcome(uc.fullUnitName, StatusUnchanged, "up to date")
 	}
 }
 
 // buildPlanUnitStaleResource records removal or skip for a prune-eligible resource unit.
 // deleteFn is called only when IsReclaimPolicyDelete is true; it performs the actual
 // Podman-side deletion (volume rm, network rm, etc.).
-func buildPlanUnitStaleResource(plan *ApplyPlan, fullName model.FullUnitName, options []gounit.UnitOption, deleteFn func()) {
+func buildPlanUnitStaleResource(planner *planner, fullName model.FullUnitName, options []gounit.UnitOption, deleteFn func()) {
 	if render.IsUnitRemovalAllowed(options) {
-		plan.RecordResult(fullName, StatusRemoved, "removed")
-		plan.DeleteFsQuadletUnitFile(fullName)
+		planner.RecordOutcome(fullName, StatusRemoved, "removed")
+		planner.DeleteFsQuadletUnitFile(fullName)
 		if render.IsReclaimPolicyDelete(options) {
 			deleteFn()
 		}
 	} else {
-		plan.RecordResult(fullName, StatusSkipped, render.RemovalSkipReason(options))
+		planner.RecordOutcome(fullName, StatusSkipped, render.RemovalSkipReason(options))
 	}
 }
