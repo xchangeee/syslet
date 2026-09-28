@@ -5,8 +5,17 @@ Use them for timeouts, restart behavior and dependencies between containers (see
 
 ## Allow slow starts
 
-Podman pulls a missing image while the service starts, and systemd gives up after 90 seconds by default.
-For large images, raise the limit:
+systemd gives up on a service that hasn't started after 90 seconds by default.
+By default, podman reports a container as started as soon as its process runs, so most containers finish starting well within that limit.
+syslet pulls missing images before it stops anything during an apply, so that download doesn't count against the limit either.
+
+A start still takes longer when:
+
+- The container waits until it's healthy: the start then includes the app's whole warm-up (see [Wait until a container is healthy](wait-until-a-container-is-healthy.md)).
+- Podman pulls the image during the start: with `[Container] Pull=always` or `Pull=newer`, which check the registry on every start, or when the image is gone at boot, for example after `podman image prune`.
+- A large volume is mounted with `:Z` or `:z`, which relabels every file for SELinux on each start.
+
+For these containers, raise the limit:
 
 === "CUE"
 

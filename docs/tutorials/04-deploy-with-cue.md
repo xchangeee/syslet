@@ -29,6 +29,9 @@ cue cmd plan
 The plan lists the unit file syslet will write, including the options it adds on its own, such as `ContainerName`, `Restart=always` and the bind mount for the config file, followed by the config file itself:
 
 ```text
+Images to pull:
+  - docker.io/library/nginx:1.27
+
 Unit file changes:
 
 --- site.container
@@ -60,7 +63,7 @@ Containers to start:
 
 Summary:
 UNIT                                     STATUS     CHANGES
-site.container                           created    created, config updated, started (desired: running)
+site.container                           created    created, image pulled, config updated, started (desired: running)
 ```
 
 ## 3. Apply it
@@ -74,6 +77,7 @@ Answer `yes`, and syslet logs each action as it runs:
 
 ```text
 Continue? (yes/no) yes
+time=2026-09-23T08:34:46.819+02:00 level=INFO msg="pulling image" image=docker.io/library/nginx:1.27
 time=2026-09-23T08:34:52.267+02:00 level=INFO msg="writing config" container=site mountPath=/etc/nginx/conf.d/default.conf
 time=2026-09-23T08:34:52.267+02:00 level=INFO msg="writing unit file" unit=site.container
 time=2026-09-23T08:34:52.267+02:00 level=INFO msg=daemon-reload

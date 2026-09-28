@@ -30,6 +30,9 @@ cat webapp.json | ssh web01 sudo syslet --stdin --diff
 It shows the unit file syslet would write, including the options it adds on its own, and that the container would be started:
 
 ```text
+Images to pull:
+  - docker.io/library/nginx:latest
+
 Unit file changes:
 
 --- webapp.container
@@ -49,7 +52,7 @@ Containers to start:
 
 Summary:
 UNIT                                     STATUS     CHANGES
-webapp.container                         created    created, started (desired: running)
+webapp.container                         created    created, image pulled, started (desired: running)
 ```
 
 Nothing on the server is touched yet.
@@ -66,10 +69,11 @@ syslet reads the spec, validates it, generates `/etc/containers/systemd/webapp.c
 It logs each action as it runs, then prints the result per unit:
 
 ```text
+time=2026-09-23T09:39:41.102+02:00 level=INFO msg="pulling image" image=docker.io/library/nginx:latest
 time=2026-09-23T09:39:47.345+02:00 level=INFO msg="writing unit file" unit=webapp.container
 time=2026-09-23T09:39:47.345+02:00 level=INFO msg=daemon-reload
 time=2026-09-23T09:39:47.345+02:00 level=INFO msg=starting unit=webapp.container
-webapp.container                         created    created, started (desired: running)
+webapp.container                         created    created, image pulled, started (desired: running)
 ```
 
 It also saves the applied spec to `/etc/syslet/config.json`.

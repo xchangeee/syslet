@@ -17,7 +17,7 @@ error: plan has errors
 The prefix names the stage that failed (see [Safety mechanisms](../explanation/safety-mechanisms.md#multi-stage-validation)):
 
 - `pre-render validation` and `post-render validation`: syslet's own checks on the specs, such as references to missing specs or secret keys, overlapping mount paths, or `configDirs` without `ExecReload=`. The message names the spec; fix it and preview again.
-- `error [<unit>]`: a check on one unit against the host, such as a volume change that the installed markers don't allow (see [Manage volumes](manage-volumes.md#change-a-volume)).
+- `error [<unit>]`: a check on one unit against the host, such as a volume change that the installed markers don't allow (see [Manage volumes](manage-volumes.md#change-a-volume)), or `checking image`, when podman can't tell whether the container's image is on the host.
 - `secret "<name>": decryption failed`: the host can't decrypt the file. Check that it's encrypted to the host's key (see [Add a SOPS recipient](add-a-sops-recipient.md)).
 - `quadlet generator failed` and `unit verification failed`: podman's generator or `systemd-analyze verify` rejected the rendered units, usually because of a misspelled option or a value podman doesn't accept.
 - `unit verification warnings`: `systemd-analyze verify` accepted the units but would ignore a setting, such as `Invalid memory limit 'asd', ignoring: Invalid argument`. syslet refuses these like failures, since the unit wouldn't run as specified; fix the setting it names.
@@ -55,7 +55,7 @@ webapp.container                         error      starting: starting webapp.se
 error: one or more units failed to apply
 ```
 
-Most failures are a container that doesn't start, for example because the image can't be pulled or the process exits.
+Most failures are a container that doesn't start, for example because the process exits.
 Look at the service:
 
 ```sh
@@ -67,3 +67,23 @@ sudo journalctl -u webapp.service -n 50
 
 The files syslet wrote before the failure stay in place.
 Fix the cause and apply again: syslet diffs against what's now installed and starts the container again, since it isn't running.
+
+## An image can't be pulled
+
+syslet pulls missing images before any other change.
+If a pull fails, the apply stops there, so nothing on the host changes and the old containers keep running:
+
+```text
+time=2026-09-23T10:14:31.870+02:00 level=ERROR msg="pulling image failed" image=docker.io/library/nginx:1.28 error="podman pull docker.io/library/nginx:1.28 failed: exit status 125 (output: ...)"
+webapp.container                         error      pulling image: podman pull docker.io/library/nginx:1.28 failed: exit status 125 (output: ...)
+error: pulling images failed
+```
+
+Every container that needs the image gets an error row.
+Check the image name and tag, and that the host can reach the registry:
+
+```sh
+sudo podman pull docker.io/library/nginx:1.28
+```
+
+Then apply again.

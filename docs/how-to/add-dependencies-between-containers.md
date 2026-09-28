@@ -36,6 +36,7 @@ Quadlet translates `db.container` into the service name `db.service`.
 - `After=` makes `app` wait until `db`'s service has started, and stops `app` before `db` on shutdown.
 
 `After=` waits for the container to start, not for the database to accept connections, so `app` should retry its first connection.
+To make `After=` wait until `db` is ready, give `db` a health check and `Notify=healthy` (see [Wait until a container is healthy](wait-until-a-container-is-healthy.md)).
 
 syslet doesn't check the name.
 With a misspelled one, systemd ignores the dependency and starts `app` on its own.

@@ -37,6 +37,7 @@ nav = [
       { "Pass a secret to a container" = "how-to/pass-a-secret-to-a-container.md" },
       { "Set systemd service options" = "how-to/set-systemd-service-options.md" },
       { "Add dependencies between containers" = "how-to/add-dependencies-between-containers.md" },
+      { "Wait until a container is healthy" = "how-to/wait-until-a-container-is-healthy.md" },
       { "Run a oneshot job" = "how-to/run-a-oneshot-job.md" },
       { "Build a container image" = "how-to/build-a-container-image.md" },
     ] },

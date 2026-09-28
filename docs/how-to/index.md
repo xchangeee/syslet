@@ -27,6 +27,7 @@ Changing what runs, and how it restarts.
 - [Pass a secret to a container](pass-a-secret-to-a-container.md)
 - [Set systemd service options](set-systemd-service-options.md)
 - [Add dependencies between containers](add-dependencies-between-containers.md)
+- [Wait until a container is healthy](wait-until-a-container-is-healthy.md)
 - [Run a oneshot job](run-a-oneshot-job.md)
 - [Build a container image](build-a-container-image.md)
 

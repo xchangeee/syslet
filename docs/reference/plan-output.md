@@ -21,7 +21,7 @@ error: plan has errors
 | `error: post-render validation: ...` | Checks on the rendered unit files. |
 | `error: quadlet generator failed ...`, `error: unit verification failed ...` | Staging checks by podman's generator and `systemd-analyze verify`. |
 | `error: secret "<name>": decryption failed: ...`, `error: secrets present in spec but no age key available ...` | The host can't decrypt a secret spec. |
-| `error [<unit>]: ...` | A check of one unit against the host, such as a volume change the installed markers don't allow. |
+| `error [<unit>]: ...` | A check of one unit against the host, such as a volume change the installed markers don't allow, or `checking image <image>: ...` when podman can't tell whether the container's image is on the host. |
 
 See [Validation rules](validation-rules.md) for every check, and [Safety mechanisms](../explanation/safety-mechanisms.md#multi-stage-validation) for why the stages exist.
 
@@ -31,6 +31,7 @@ A section is printed only when it has entries, in this order:
 
 | Section | Lists |
 | --- | --- |
+| `Images to pull:` | Container images not on the host yet, pulled before any other change. Images of build units are never listed. |
 | `Unit file changes:` | Per unit, `--- <unit>` followed by `added:`, `changed:` (with `old:`/`new:`) and `removed:` options. |
 | `Unit files to delete:` | Unit files of stale units. |
 | `Config file changes:` | Unified diff per `configFiles` entry, as `<container>:<mountPath>`, and mode changes. |
@@ -82,6 +83,7 @@ A comma-separated list, followed by `(desired: <state>)`:
 | --- | --- |
 | `created` | New unit file. |
 | `unit updated` | The unit file changed. |
+| `image pulled` | The container's image isn't on the host and is pulled first. On its own, this doesn't restart the container. |
 | `config updated` | A `configFiles` entry changed. |
 | `configDir updated` | A `configDirs` entry's files changed. |
 | `volume recreated`, `network recreated`, `build recreated` | A referenced volume, network or build is recreated in the same apply. |
