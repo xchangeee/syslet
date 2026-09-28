@@ -31,18 +31,11 @@ type DisplayOptions struct {
 // It shows operations that would be performed and the final status of each
 // unit that isn't unchanged.
 // If the plan has any errors (validation or per-unit), only those errors are
-// printed — the diff is suppressed because the plan cannot safely be applied.
+// printed, as DisplayPlanErrors does — the diff is suppressed because the plan
+// cannot safely be applied.
 func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	if plan.HasErrors() {
-		_, _ = fmt.Fprintln(w, "Validation errors:")
-		for _, msg := range plan.Errors {
-			_, _ = fmt.Fprintf(w, "  error: %s\n", msg)
-		}
-		for _, r := range plan.Results {
-			if r.errored {
-				_, _ = fmt.Fprintf(w, "  error [%s]: %s\n", string(r.fullUnitName), r.message)
-			}
-		}
+		DisplayPlanErrors(w, plan)
 		return
 	}
 
@@ -235,6 +228,22 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 			_, _ = fmt.Fprintln(w)
 		}
 		_, _ = fmt.Fprintln(w, noChangesMessage)
+	}
+}
+
+// DisplayPlanErrors prints the errors that make a plan unappliable: generic
+// validation errors and per-unit errors found while planning. The CLI writes
+// them to stderr, for a --diff and a refused apply alike, so a caller that
+// captures stdout (a CUE task, a CI step) still shows them.
+func DisplayPlanErrors(w io.Writer, plan *ApplyPlan) {
+	_, _ = fmt.Fprintln(w, "Validation errors:")
+	for _, msg := range plan.Errors {
+		_, _ = fmt.Fprintf(w, "  error: %s\n", msg)
+	}
+	for _, r := range plan.Results {
+		if r.errored {
+			_, _ = fmt.Fprintf(w, "  error [%s]: %s\n", string(r.fullUnitName), r.message)
+		}
 	}
 }
 

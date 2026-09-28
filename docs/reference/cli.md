@@ -32,7 +32,7 @@ With `--stdin` and no `--diff`, the received stream is persisted to `/etc/syslet
 - Exit code `0`: applied (or diffed) successfully.
 - Exit code `1`: any error, whether spec loading/parsing, validation failure, or an apply-time error. Errors are printed to stderr as `error: <message>`.
 - A `--diff` that succeeds prints the plan to stdout; a normal apply prints a results summary to stdout after execution.
-- A `--diff` whose plan has validation errors prints them to stdout and exits `1`, like an apply would refuse the same plan.
+- A `--diff` or an apply whose plan has validation errors prints them to stderr, followed by `error: plan has errors`, prints nothing to stdout and exits `1`.
 
 ## Environment
 

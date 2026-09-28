@@ -6,11 +6,12 @@ The output tells you which.
 ## The plan has errors
 
 A plan with any error is refused as a whole, and nothing on the host changes.
-`--diff` prints the errors instead of the diff:
+`--diff` and an apply both print the errors to stderr, instead of the diff or the results:
 
 ```text
 Validation errors:
   error: post-render validation: container "webapp": references undefined volume "webapp-data"
+error: plan has errors
 ```
 
 The prefix names the stage that failed (see [Safety mechanisms](../explanation/safety-mechanisms.md#multi-stage-validation)):

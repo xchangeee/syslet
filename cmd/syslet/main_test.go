@@ -87,26 +87,26 @@ func TestDisplayOptionsFromEnv(t *testing.T) {
 	}
 }
 
-func TestDiff(t *testing.T) {
+func TestCheckPlan(t *testing.T) {
 	t.Run("PlanWithoutErrors", func(t *testing.T) {
-		var out bytes.Buffer
-		if err := diff(&out, &syslet.ApplyPlan{}, syslet.DisplayOptions{}); err != nil {
-			t.Errorf("diff() error = %v, want nil", err)
+		var errOut bytes.Buffer
+		if err := checkPlan(&errOut, &syslet.ApplyPlan{}); err != nil {
+			t.Errorf("checkPlan() error = %v, want nil", err)
 		}
-		if !strings.Contains(out.String(), "No changes detected.") {
-			t.Errorf("diff() output = %q, want plan printed", out.String())
+		if errOut.Len() != 0 {
+			t.Errorf("checkPlan() output = %q, want none", errOut.String())
 		}
 	})
 
 	t.Run("PlanWithErrors", func(t *testing.T) {
 		plan := &syslet.ApplyPlan{}
 		plan.RecordGenericError("spec web: image is required")
-		var out bytes.Buffer
-		if err := diff(&out, plan, syslet.DisplayOptions{}); err == nil {
-			t.Error("diff() error = nil, want error for plan with validation errors")
+		var errOut bytes.Buffer
+		if err := checkPlan(&errOut, plan); err == nil {
+			t.Error("checkPlan() error = nil, want error for plan with validation errors")
 		}
-		if !strings.Contains(out.String(), "spec web: image is required") {
-			t.Errorf("diff() output = %q, want validation error listed", out.String())
+		if !strings.Contains(errOut.String(), "spec web: image is required") {
+			t.Errorf("checkPlan() output = %q, want validation error listed", errOut.String())
 		}
 	})
 }

@@ -184,15 +184,18 @@ func displayOptionsFromEnv(getenv func(string) string) (syslet.DisplayOptions, e
 	return opts, nil
 }
 
-// diff prints the plan for a --diff dry-run and reports whether it would be
-// refused. It mirrors the error check in syslet.Apply so a dry-run and a real
-// apply agree on the exit code, which lets CI gate on `syslet --diff`.
-func diff(w io.Writer, plan *syslet.ApplyPlan, opts syslet.DisplayOptions) error {
-	syslet.DisplayPlan(w, plan, opts)
-	if plan.HasErrors() {
-		return fmt.Errorf("plan has errors")
+// checkPlan refuses a plan that has errors, printing them to errW, before
+// either a --diff or an apply acts on it. Running the same check for both
+// keeps their exit codes in agreement, which lets CI gate on `syslet --diff`.
+// The errors go to stderr, not stdout: callers like a CUE exec.Run task
+// capture stdout and drop it when the command fails, so errors printed there
+// would never be seen. Stdout carries only a plan or apply results.
+func checkPlan(errW io.Writer, plan *syslet.ApplyPlan) error {
+	if !plan.HasErrors() {
+		return nil
 	}
-	return nil
+	syslet.DisplayPlanErrors(errW, plan)
+	return fmt.Errorf("plan has errors")
 }
 
 func main() {
@@ -280,6 +283,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := checkPlan(os.Stderr, plan); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
 	if *diffFlag {
 		// Show diff without applying changes
 		opts, err := displayOptionsFromEnv(os.Getenv)
@@ -287,10 +295,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		if err := diff(os.Stdout, plan, opts); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
+		syslet.DisplayPlan(os.Stdout, plan, opts)
 	} else {
 		// Apply changes
 		err := syslet.Apply(ctx, logger, sd, jr, pc, mgrs, plan)

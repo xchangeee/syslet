@@ -5,12 +5,14 @@ An apply logs each operation to stderr and prints only the summary rows to stdou
 
 ## Validation errors
 
-A plan with any error prints only its errors, and no other section:
+A plan with any error prints only its errors, to stderr, and no other section.
+`--diff` and an apply print them the same way:
 
 ```text
 Validation errors:
   error: <message>
   error [<unit>]: <message>
+error: plan has errors
 ```
 
 | Line | Source |
