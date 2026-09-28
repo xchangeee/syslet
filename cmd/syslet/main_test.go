@@ -93,8 +93,8 @@ func TestDiff(t *testing.T) {
 		if err := diff(&out, &syslet.ApplyPlan{}, syslet.DisplayOptions{}); err != nil {
 			t.Errorf("diff() error = %v, want nil", err)
 		}
-		if !strings.Contains(out.String(), "Summary:") {
-			t.Errorf("diff() output = %q, want plan summary", out.String())
+		if !strings.Contains(out.String(), "No changes detected.") {
+			t.Errorf("diff() output = %q, want plan printed", out.String())
 		}
 	})
 

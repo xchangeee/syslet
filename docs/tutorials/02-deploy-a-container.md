@@ -149,7 +149,7 @@ cat webapp.json | ssh web01 sudo syslet --stdin
 syslet reports no changes and does not stop or restart `webapp.service`:
 
 ```text
-webapp.container                         unchanged  up to date (desired: running)
+No changes detected. All units are up to date.
 ```
 
 Applying an unchanged spec is always a no-op, which makes it safe to re-run syslet on every deploy, or on a schedule, without unnecessary restarts.

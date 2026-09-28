@@ -71,9 +71,6 @@ cue cmd plan
 On an empty server, syslet finds nothing to do:
 
 ```text
-Summary:
-UNIT                                     STATUS     CHANGES
-
 No changes detected. All units are up to date.
 ```
 

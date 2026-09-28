@@ -36,9 +36,7 @@ build:
 
 build-bin:
 	mkdir -p build
-	GOOS=darwin GOARCH=arm64 go build -o ./build/syslet-darwin-arm64 ./cmd/syslet
 	GOOS=linux GOARCH=amd64 go build -o ./build/syslet-linux-amd64 ./cmd/syslet
-	GOOS=linux GOARCH=arm64 go build -o ./build/syslet-linux-arm64 ./cmd/syslet
 
 docs:
 	uvx zensical build --strict

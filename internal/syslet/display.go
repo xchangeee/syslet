@@ -28,7 +28,8 @@ type DisplayOptions struct {
 }
 
 // DisplayPlan prints a human-readable diff showing what would change.
-// It shows operations that would be performed and the final status of each unit.
+// It shows operations that would be performed and the final status of each
+// unit that isn't unchanged.
 // If the plan has any errors (validation or per-unit), only those errors are
 // printed — the diff is suppressed because the plan cannot safely be applied.
 func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
@@ -45,11 +46,8 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 		return
 	}
 
-	hasChanges := false
-
 	// 1. Unit file changes
 	if len(plan.WriteFsQuadletUnitFiles) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nUnit file changes:")
 		for _, op := range plan.WriteFsQuadletUnitFiles {
 			displayContentDiff(w, string(op.fullUnitName), op.oldContent, op.content)
@@ -57,7 +55,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeleteFsQuadletUnitFiles) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nUnit files to delete:")
 		for _, op := range plan.DeleteFsQuadletUnitFiles {
 			_, _ = fmt.Fprintf(w, "  - %s\n", op.fullUnitName)
@@ -66,7 +63,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 
 	// 2. Config file changes
 	if len(plan.WriteFsContainerConfigFiles) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nConfig file changes:")
 		for _, op := range plan.WriteFsContainerConfigFiles {
 			displayContentDiff(w, fmt.Sprintf("%s:%s", op.container, op.mountPath), op.oldContent, op.content)
@@ -77,7 +73,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeleteFsContainerConfigFiles) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nConfig files to delete:")
 		for _, op := range plan.DeleteFsContainerConfigFiles {
 			_, _ = fmt.Fprintf(w, "  - %s/%s\n", op.container, op.internalFilename)
@@ -85,7 +80,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeleteFsContainerConfigs) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nConfig directories to delete:")
 		for _, op := range plan.DeleteFsContainerConfigs {
 			_, _ = fmt.Fprintf(w, "  - %s/\n", op.container)
@@ -94,7 +88,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 
 	// 3. ConfigDir changes
 	if len(plan.WriteFsContainerConfigDirs) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nConfigDir changes:")
 		for _, op := range plan.WriteFsContainerConfigDirs {
 			_, _ = fmt.Fprintf(w, "  %s:%s → version %d\n", op.container, op.mountPath, op.version)
@@ -115,7 +108,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeleteFsContainerConfigDirs) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nConfigDir groups to delete:")
 		for _, op := range plan.DeleteFsContainerConfigDirs {
 			_, _ = fmt.Fprintf(w, "  - %s/%s\n", op.container, op.mountPathHash)
@@ -124,7 +116,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 
 	// Build context changes (grouped with file changes)
 	if len(plan.WriteFsBuildContextFiles) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nBuild context file changes:")
 		for _, op := range plan.WriteFsBuildContextFiles {
 			displayContentDiff(w, fmt.Sprintf("%s:%s", op.build, op.destination), op.oldContent, op.content)
@@ -135,7 +126,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeleteFsBuildContextFiles) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nBuild context files to delete:")
 		for _, op := range plan.DeleteFsBuildContextFiles {
 			_, _ = fmt.Fprintf(w, "  - %s/%s\n", op.build, op.filename)
@@ -143,7 +133,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeleteFsBuildContexts) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nBuild context directories to delete:")
 		for _, op := range plan.DeleteFsBuildContexts {
 			_, _ = fmt.Fprintf(w, "  - %s/\n", op.build)
@@ -152,7 +141,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 
 	// 4. Secret changes
 	if len(plan.UpsertPodmanSecrets) > 0 || len(plan.DeletePodmanSecrets) > 0 {
-		hasChanges = true
 		seen := make(map[string]bool)
 		var specOrder []string
 		for _, op := range plan.DeletePodmanSecrets {
@@ -193,7 +181,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 
 	// 5. Systemd actions
 	if len(plan.StopSystemdServices) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nServices to stop:")
 		for _, op := range plan.StopSystemdServices {
 			_, _ = fmt.Fprintf(w, "  - %s\n", op.ref.FullName())
@@ -201,12 +188,10 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if plan.NeedsReload() {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nSystemd daemon-reload: required")
 	}
 
 	if len(plan.StartSystemdServices) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nContainers to start:")
 		for _, op := range plan.StartSystemdServices {
 			_, _ = fmt.Fprintf(w, "  - %s\n", op.ref.FullName())
@@ -214,7 +199,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeletePodmanVolumes) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nPodman volumes to delete:")
 		for _, op := range plan.DeletePodmanVolumes {
 			_, _ = fmt.Fprintf(w, "  - %s\n", op.volume)
@@ -222,7 +206,6 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeletePodmanNetworks) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nPodman networks to delete:")
 		for _, op := range plan.DeletePodmanNetworks {
 			_, _ = fmt.Fprintf(w, "  - %s\n", op.network)
@@ -230,31 +213,64 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 	}
 
 	if len(plan.DeletePodmanImages) > 0 {
-		hasChanges = true
 		_, _ = fmt.Fprintln(w, "\nPodman images to delete:")
 		for _, op := range plan.DeletePodmanImages {
 			_, _ = fmt.Fprintf(w, "  - %s\n", op.tag)
 		}
 	}
 
-	// Summary
-	_, _ = fmt.Fprintln(w, "\nSummary:")
-	_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", "UNIT", "STATUS", "CHANGES")
-	for _, result := range plan.Results {
-		_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", result.fullUnitName, result.status, result.message)
+	// The summary is printed only when it has rows, so a plan that changes
+	// nothing prints noChangesMessage alone. Every section above requires an
+	// operation, so without rows and changes that message is the only output
+	// and needs no blank line in front of it.
+	rows := visibleResults(plan)
+	if len(rows) > 0 {
+		_, _ = fmt.Fprintln(w, "\nSummary:")
+		_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", "UNIT", "STATUS", "CHANGES")
+		displayResultRows(w, rows)
 	}
 
-	if !hasChanges {
-		_, _ = fmt.Fprintln(w, "\nNo changes detected. All units are up to date.")
+	if !plan.HasChanges() {
+		if len(rows) > 0 {
+			_, _ = fmt.Fprintln(w)
+		}
+		_, _ = fmt.Fprintln(w, noChangesMessage)
 	}
 }
 
-// DisplayResults prints the post-apply results summary table.
+// noChangesMessage closes the output of a plan or apply that touches nothing,
+// so a run with no summary rows still confirms it ran.
+const noChangesMessage = "No changes detected. All units are up to date."
+
+// DisplayResults prints the post-apply results summary table, followed by
+// noChangesMessage when the apply had nothing to do.
 func DisplayResults(w io.Writer, plan *ApplyPlan) {
 	for _, msg := range plan.Errors {
 		_, _ = fmt.Fprintf(w, "error: %s\n", msg)
 	}
+	displayResultRows(w, visibleResults(plan))
+	if !plan.HasChanges() && !plan.HasErrors() {
+		_, _ = fmt.Fprintln(w, noChangesMessage)
+	}
+}
+
+// visibleResults returns the results DisplayPlan and DisplayResults print as
+// summary rows. Unchanged units are left out: on a host with many units they
+// would bury the few rows that matter. Skipped and errored units stay, since
+// they tell the reader something the apply didn't do.
+func visibleResults(plan *ApplyPlan) []ApplyResult {
+	var rows []ApplyResult
 	for _, result := range plan.Results {
+		if result.status != StatusUnchanged {
+			rows = append(rows, result)
+		}
+	}
+	return rows
+}
+
+// displayResultRows prints one summary row per result.
+func displayResultRows(w io.Writer, rows []ApplyResult) {
+	for _, result := range rows {
 		_, _ = fmt.Fprintf(w, "%-40s %-10s %s\n", result.fullUnitName, result.status, result.message)
 	}
 }

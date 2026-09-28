@@ -57,8 +57,10 @@ UNIT                                     STATUS     CHANGES
 site.container                           updated    unit updated, restarted (desired: running)
 ```
 
-One row per unit in the input or on the host.
-When no section was printed, the summary is followed by `No changes detected. All units are up to date.`
+One row per unit in the input or on the host, except `unchanged` units, which are left out.
+The summary is printed only when it has rows.
+An apply prints the same rows, without the `Summary:` and header lines.
+When nothing changes, the output ends with `No changes detected. All units are up to date.`, which is the whole output when there are no rows either.
 
 ### STATUS
 
@@ -66,7 +68,6 @@ When no section was printed, the summary is followed by `No changes detected. Al
 | --- | --- |
 | `created` | The unit file is new. |
 | `updated` | The unit, its files or its runtime state change. |
-| `unchanged` | Nothing changes. |
 | `removed` | The unit is stale and will be deleted. |
 | `skipped` | The unit is stale but its installed unit has `RemovalAllowed=false`; it is left as it is. |
 | `error` | The unit failed, during the plan or the apply. |
@@ -84,7 +85,6 @@ A comma-separated list, followed by `(desired: <state>)`:
 | `volume recreated`, `network recreated`, `build recreated` | A referenced volume, network or build is recreated in the same apply. |
 | `secret updated` | A referenced secret changed. |
 | `restarted`, `started`, `stopped`, `reloaded` | The service action. |
-| `up to date` | Nothing changes. |
 
-For other types, CHANGES is `created`, `unit updated`, `up to date` or `removed`; builds also report `build context updated` and `unit and build context updated`.
+For other types, CHANGES is `created`, `unit updated` or `removed`; builds also report `build context updated` and `unit and build context updated`.
 A skipped unit reads `protected (removalAllowed: false)`, or `not managed by syslet (no [X-Syslet] marker)` for a unit file syslet didn't write.

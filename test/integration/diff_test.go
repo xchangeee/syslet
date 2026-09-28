@@ -38,9 +38,6 @@ Secret changes:
     - old-token=(secret)
     + db-password=(secret)
     + api-key=(secret)
-
-Summary:
-UNIT                                     STATUS     CHANGES
 `,
 		},
 		{
@@ -52,9 +49,6 @@ UNIT                                     STATUS     CHANGES
 Secret changes:
   infra:
     + cert=(secret)
-
-Summary:
-UNIT                                     STATUS     CHANGES
 `,
 		},
 		{
@@ -66,9 +60,6 @@ UNIT                                     STATUS     CHANGES
 Secret changes:
   infra:
     - old-cert=(secret)
-
-Summary:
-UNIT                                     STATUS     CHANGES
 `,
 		},
 		{
@@ -83,9 +74,6 @@ Secret changes:
     + token=(secret)
   app2:
     + key=(secret)
-
-Summary:
-UNIT                                     STATUS     CHANGES
 `,
 		},
 	}
@@ -118,9 +106,6 @@ Secret changes:
   myapp:
     - old-token=(secret)
     + db-password=s3cr3t
-
-Summary:
-UNIT                                     STATUS     CHANGES
 `)
 }
 
@@ -244,6 +229,58 @@ webapp.container                         updated    configDir updated, reloaded 
 `
 
 	systest.AssertPlanOutput(t, plan, wantOutput)
+}
+
+// TestPlanWithUnchangedUnits_OmitsThemFromSummary verifies that the summary
+// lists only units that change, so a diff for a host with many containers
+// stays focused on what the apply would actually do.
+func TestPlanWithUnchangedUnits_OmitsThemFromSummary(t *testing.T) {
+	env := systest.New(t)
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
+	env.SeedActive(systest.NewContainer("worker", "busybox:latest"))
+	env.Specs(
+		systest.NewContainer("webapp", "nginx:alpine"),
+		systest.NewContainer("worker", "busybox:latest"),
+	)
+
+	plan := env.Plan()
+
+	systest.AssertPlanOutputContains(t, plan, "webapp.container")
+	systest.AssertPlanOutputOmits(t, plan, "worker.container")
+}
+
+// TestPlanWithOnlyUnchangedUnits_PrintsNoChangesOnly verifies that a plan
+// without changes or summary rows prints just the "No changes detected" line,
+// without an empty summary table.
+func TestPlanWithOnlyUnchangedUnits_PrintsNoChangesOnly(t *testing.T) {
+	spec := systest.NewContainer("webapp", "nginx:latest")
+
+	env := systest.New(t)
+	env.SeedActive(spec)
+	env.Specs(spec)
+
+	plan := env.Plan()
+
+	systest.AssertPlanOutput(t, plan, "No changes detected. All units are up to date.\n")
+}
+
+// TestPlanWithStaleLockedContainer_PrintsSummaryAndNoChanges verifies that a
+// skipped unit keeps the summary table even though the plan changes nothing:
+// the row tells the reader why a unit missing from the input stays installed.
+func TestPlanWithStaleLockedContainer_PrintsSummaryAndNoChanges(t *testing.T) {
+	env := systest.New(t)
+	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
+	env.Specs()
+
+	plan := env.Plan()
+
+	systest.AssertPlanOutput(t, plan, `
+Summary:
+UNIT                                     STATUS     CHANGES
+webapp.container                         skipped    protected (removalAllowed: false)
+
+No changes detected. All units are up to date.
+`)
 }
 
 func TestPlanDiffOutput(t *testing.T) {

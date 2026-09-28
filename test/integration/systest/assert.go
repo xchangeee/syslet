@@ -666,6 +666,34 @@ func renderPlanWithOptions(plan *syslet.ApplyPlan, opts syslet.DisplayOptions) s
 	return buf.String()
 }
 
+// renderResults returns what syslet.DisplayResults, the post-apply summary,
+// writes for a plan. Pass the plan from Env.ApplyWithPlan, so it carries the
+// errors the apply recorded.
+func renderResults(plan *syslet.ApplyPlan) string {
+	var buf bytes.Buffer
+	syslet.DisplayResults(&buf, plan)
+	return buf.String()
+}
+
+// AssertResultsOutput checks the full post-apply summary against an expected block.
+func AssertResultsOutput(t *testing.T, plan *syslet.ApplyPlan, want string) {
+	t.Helper()
+	if got := renderResults(plan); got != want {
+		t.Errorf("output mismatch\nExpected:\n%s\nGot:\n%s", want, got)
+	}
+}
+
+// AssertResultsOutputOmits checks that the post-apply summary excludes each snippet.
+func AssertResultsOutputOmits(t *testing.T, plan *syslet.ApplyPlan, unwanted ...string) {
+	t.Helper()
+	out := renderResults(plan)
+	for _, u := range unwanted {
+		if strings.Contains(out, u) {
+			t.Errorf("expected output to omit %q, got:\n%s", u, out)
+		}
+	}
+}
+
 // AssertPlanHasErrors checks that the plan recorded errors rather than syslet
 // failing outright — the contract that lets DisplayPlan report them to the user.
 func AssertPlanHasErrors(t *testing.T, plan *syslet.ApplyPlan) {

@@ -286,6 +286,31 @@ func (p *ApplyPlan) NeedsReload() bool {
 	return len(p.WriteFsQuadletUnitFiles) > 0 || len(p.DeleteFsQuadletUnitFiles) > 0
 }
 
+// HasChanges reports whether the plan holds any operation, which is what an
+// apply would do to the host. DisplayPlan and DisplayResults use it to decide
+// whether to print "No changes detected"; units that are skipped or unchanged
+// record results but no operations, so they don't count.
+func (p *ApplyPlan) HasChanges() bool {
+	return len(p.StopSystemdServices) > 0 ||
+		len(p.DeleteFsQuadletUnitFiles) > 0 ||
+		len(p.DeleteFsBuildContextFiles) > 0 ||
+		len(p.DeleteFsBuildContexts) > 0 ||
+		len(p.DeleteFsContainerConfigFiles) > 0 ||
+		len(p.DeleteFsContainerConfigDirs) > 0 ||
+		len(p.DeleteFsContainerConfigs) > 0 ||
+		len(p.DeletePodmanSecrets) > 0 ||
+		len(p.DeletePodmanVolumes) > 0 ||
+		len(p.DeletePodmanNetworks) > 0 ||
+		len(p.DeletePodmanImages) > 0 ||
+		len(p.WriteFsQuadletUnitFiles) > 0 ||
+		len(p.WriteFsBuildContextFiles) > 0 ||
+		len(p.WriteFsContainerConfigFiles) > 0 ||
+		len(p.WriteFsContainerConfigDirs) > 0 ||
+		len(p.UpsertPodmanSecrets) > 0 ||
+		len(p.ReloadSystemdServices) > 0 ||
+		len(p.StartSystemdServices) > 0
+}
+
 func (p *ApplyPlan) HasErrors() bool {
 	if len(p.Errors) > 0 {
 		return true

@@ -234,7 +234,8 @@ func (e *Env) With(t *testing.T) *Env {
 //
 // Reach for Plan only when the plan itself is the subject and there is nothing
 // on the host to observe — today that means the syslet.DisplayPlan tests in
-// diff_test.go, which render a plan rather than execute one.
+// diff_test.go, which render a plan rather than execute one. Tests of what
+// syslet.DisplayResults prints after an apply use ApplyWithPlan instead.
 
 // Plan builds the plan, failing the test if plan construction itself errors.
 // It deliberately does not check plan.HasErrors: the diff and validation tests
@@ -274,9 +275,19 @@ func (e *Env) Apply() {
 // caller. Use when the error itself is the assertion.
 func (e *Env) ApplyErr() error {
 	e.t.Helper()
+	_, err := e.ApplyWithPlan()
+	return err
+}
+
+// ApplyWithPlan is ApplyErr that also returns the plan it applied, as the
+// apply left it: a unit whose operation failed carries an error result. Use it
+// when what syslet.DisplayResults prints after an apply is the assertion. The
+// plan is nil only when BuildPlan itself failed.
+func (e *Env) ApplyWithPlan() (*syslet.ApplyPlan, error) {
+	e.t.Helper()
 	plan, err := e.PlanErr()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Seeding writes through the same stores and the same filesystem that apply
 	// does, so the timeline is cleared here — after planning, immediately before
@@ -284,7 +295,7 @@ func (e *Env) ApplyErr() error {
 	e.Log.Reset()
 	applyErr := syslet.Apply(context.Background(), e.logger, e.Systemd, e.journal, e.Podman, e.Mgrs, plan)
 	e.assertPhaseOrder()
-	return applyErr
+	return plan, applyErr
 }
 
 // ResetRecordings clears everything the fakes recorded while leaving the host
