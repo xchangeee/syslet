@@ -9,4 +9,6 @@ package addons
 	[VolumeName=string]: [...string]
 }
 
-#SysdefBackupDefaults: {}
+#SysdefBackupDefaults: {
+	backup: {}
+}
