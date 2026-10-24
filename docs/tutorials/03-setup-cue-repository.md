@@ -52,7 +52,7 @@ These two files are a starting point; adapt them to your setup.
 Add the syslet schema to `cue.mod/module.cue`, pinned to the latest `v0` release:
 
 ```sh
-cue mod tidy
+cue mod get github.com/xchangeee/syslet/schema@latest
 ```
 
 Check that it evaluates:
