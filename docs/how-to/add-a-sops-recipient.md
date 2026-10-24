@@ -36,7 +36,7 @@ creation_rules:
 ```
 
 New files pick up the rule when you create them.
-To give each host only its own secrets, use one rule per host directory instead (see [Manage several hosts](manage-several-hosts.md#encrypt-secrets-per-host)).
+To give each host only its own secrets, generate one rule per host directory instead (see [Manage several hosts](manage-several-hosts.md#describe-the-sops-rules)).
 
 ## Re-encrypt the existing files
 

@@ -57,7 +57,7 @@ Create `.sops.yaml` in the repository root and list the public keys from above:
 sops applies this rule to every file ending in `.enc.yaml` when it encrypts one, so you never pass recipients on the command line.
 Keep the suffix: the CUE config below loads secret files by it.
 
-If the repository describes several hosts, use one rule per host directory instead, so each host only decrypts its own secrets (see [Manage several hosts](manage-several-hosts.md#encrypt-secrets-per-host)).
+If the repository describes several hosts, generate one rule per host directory instead, so each host only decrypts its own secrets (see [Manage several hosts](manage-several-hosts.md#describe-the-sops-rules)).
 
 ## Load the secret files in CUE
 
@@ -81,9 +81,8 @@ Add `@extern(embed)` as the first line of `syslet.cue`, and the `secretFiles` an
 `@extern(embed)` has to be the first line of every file that uses `@embed`.
 `allowEmptyGlob` keeps the config valid while there are no secret files.
 
-The secret files must sit in the same directory as the CUE file that embeds them.
-With a glob into a subdirectory, the directory stays part of each file name, so the `creds-` prefix isn't stripped and the spec name contains the path.
-To keep one secret file per host directory, move these lines into each host's CUE file (see [Manage several hosts](manage-several-hosts.md#describe-each-host)).
+`#SysdefSecretsFromEmbeddedFiles` only handles files in the same directory as the CUE file that embeds them, to keep it simple.
+For a file elsewhere, [load it as a single file](#load-a-single-file).
 
 ### Load a single file
 

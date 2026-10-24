@@ -13,7 +13,7 @@ cue export -e syslet.specRendered --out text > /dev/null
 
 `cue vet` checks every entry against the syslet schema, and `cue export` checks that the spec renders.
 Neither needs an age key, since secret files stay encrypted.
-In a repository with [several hosts](manage-several-hosts.md), check `./hosts/...` and export each host directory.
+In a repository with [several hosts](manage-several-hosts.md), export each host's spec instead, such as `cue export -e hosts.web01.specRendered --out text`.
 
 The schema doesn't check option names under `unit`; only the host's podman can do that.
 
@@ -45,7 +45,7 @@ Add the plan to your pipeline, once per host:
 === "CUE"
 
     ```sh
-    cue export -e syslet.specRendered --out text ./hosts/web01 | ssh ci@web01 sudo syslet --diff --stdin
+    cue export -e hosts.web01.specRendered --out text | ssh ci@web01 sudo syslet --diff --stdin
     ```
 
 === "JSON"
