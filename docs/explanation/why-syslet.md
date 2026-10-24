@@ -68,3 +68,16 @@ syslet also doesn't correct drift between applies.
 It assumes it's the sole manager of the host, and that when several people work on it, every change goes through a git repository rather than by hand.
 
 See [Reconciliation model](reconciliation-model.md) for how syslet gets this without running continuously.
+
+## Why not NixOS?
+
+NixOS has some good ideas, and we used it for a few years before building syslet.
+The whole system, from packages to config files to services, is built from Nix expressions, so a host can be rebuilt in a more or less repeatable way.
+
+But in our experience, the learning curve and day-to-day maintenance cost more than that repeatability gives back.
+Combined with an OS like Fedora CoreOS, a syslet setup isn't as repeatable as NixOS, but it's repeatable enough for our taste, with a much less steep learning curve.
+
+## Why not X?
+
+syslet doesn't try to be the right choice for everyone.
+It's what fits our hosts and the way we like to run them, and if another tool fits yours better, use that.
