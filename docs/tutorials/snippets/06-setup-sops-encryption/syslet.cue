@@ -3,8 +3,8 @@
 package syslet
 
 import (
-	sysletcore "github.com/xchangeee/syslet/schema/core@v0"
-	syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+	sysletcore "github.com/xchangeee/syslet/schema/core"
+	syslettools "github.com/xchangeee/syslet/schema/tools"
 )
 
 // Host that cue cmd plan/apply deploy to

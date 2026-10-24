@@ -32,8 +32,8 @@ Declare `fqdn` without a value, and move the secret loading into the host direct
 package syslet
 
 import (
-	sysletcore "github.com/xchangeee/syslet/schema/core@v0"
-	syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+	sysletcore "github.com/xchangeee/syslet/schema/core"
+	syslettools "github.com/xchangeee/syslet/schema/tools"
 )
 
 // Host that cue cmd plan/apply deploy to, set per host
@@ -73,7 +73,7 @@ _site: spec: {
 
 package syslet
 
-import syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+import syslettools "github.com/xchangeee/syslet/schema/tools"
 
 fqdn: "web01.example.com"
 

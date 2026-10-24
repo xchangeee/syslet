@@ -1,12 +1,12 @@
 # CUE schema
 
-The CUE module `github.com/xchangeee/syslet@v0` describes the JSON specs and renders them from a `sysdef` struct.
+The CUE module [`github.com/xchangeee/syslet/schema`](https://registry.cue.works/docs/github.com/xchangeee/syslet/schema) describes the JSON specs and renders them from a `sysdef` struct.
 Its schema is in two packages:
 
 ```cue
 import (
-	sysletcore "github.com/xchangeee/syslet/schema/core@v0"
-	syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+	sysletcore "github.com/xchangeee/syslet/schema/core"
+	syslettools "github.com/xchangeee/syslet/schema/tools"
 )
 ```
 

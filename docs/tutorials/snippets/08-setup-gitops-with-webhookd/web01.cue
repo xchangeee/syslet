@@ -1,6 +1,6 @@
 package syslet
 
-import syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+import syslettools "github.com/xchangeee/syslet/schema/tools"
 
 sysdef: containers: site: spec: {
 	unit: Container: {

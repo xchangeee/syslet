@@ -8,7 +8,7 @@ By default, syslet removes every container, network and volume you drop from a C
 Import the tools package and list the names per type:
 
 ```cue
-import syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+import syslettools "github.com/xchangeee/syslet/schema/tools"
 
 sysdef: (syslettools.#SysdefLock & {in: {
 	containers: ["site"]

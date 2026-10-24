@@ -17,9 +17,9 @@ Add `#SysdefIngress` and its defaults to `#Sysdef`:
 package syslet
 
 import (
-	sysletaddons "github.com/xchangeee/syslet/schema/addons@v0"
-	sysletcore "github.com/xchangeee/syslet/schema/core@v0"
-	syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+	sysletaddons "github.com/xchangeee/syslet/schema/addons"
+	sysletcore "github.com/xchangeee/syslet/schema/core"
+	syslettools "github.com/xchangeee/syslet/schema/tools"
 )
 
 fqdn: "web01.example.com"
@@ -44,7 +44,7 @@ package syslet
 import (
 	"text/template"
 
-	syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+	syslettools "github.com/xchangeee/syslet/schema/tools"
 )
 
 _caddyVersion: "2.11.2"
@@ -210,7 +210,7 @@ package syslet
 import (
 	"text/template"
 
-	syslettools "github.com/xchangeee/syslet/schema/tools@v0"
+	syslettools "github.com/xchangeee/syslet/schema/tools"
 )
 
 _caddyVersion: "2.11.2"
