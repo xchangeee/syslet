@@ -3,7 +3,7 @@
 ```
 /etc/syslet/
 ├── config.json                     # spec stream persisted on --stdin apply (re-applyable record)
-└── syslet.json                     # optional daemon config (sshKeyPath)
+└── syslet.json                     # optional host config (sshKeyPath)
 
 /var/lib/syslet/
 └── key.txt                         # cached age private keys, derived from the SSH host key

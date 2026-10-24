@@ -15,7 +15,7 @@ What you run and read:
 
 What's on the host:
 
-- [Daemon config](daemon-config.md)
+- [Host config](host-config.md)
 - [File layout](file-layout.md)
 
 For contributors working on syslet itself:

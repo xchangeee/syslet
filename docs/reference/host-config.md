@@ -1,4 +1,4 @@
-# Daemon config
+# Host config
 
 An optional JSON file at `/etc/syslet/syslet.json` configures host-level settings. syslet works without it, using the defaults below.
 

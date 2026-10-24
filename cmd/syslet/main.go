@@ -15,7 +15,7 @@
 // and, on apply, persisted to /etc/syslet/config.json as the host's on-disk
 // record so it can be re-applied manually.
 //
-// Optional daemon config is read from /etc/syslet/syslet.json:
+// Optional host config is read from /etc/syslet/syslet.json:
 //
 //	{"sshKeyPath": "/etc/ssh/ssh_host_ed25519_key"}
 //
@@ -50,36 +50,36 @@ import (
 )
 
 const defaultConfigPath = "/etc/syslet/config.json"
-const daemonConfigPath = "/etc/syslet/syslet.json"
+const hostConfigPath = "/etc/syslet/syslet.json"
 
 // ageKeyFilePath is the append-only cache of derived age private keys.
 // Old keys are kept across SSH key rotations so previously-encrypted secrets
 // remain decryptable.
 const ageKeyFilePath = "/var/lib/syslet/key.txt"
 
-// daemonConfig holds optional daemon-level configuration read from daemonConfigPath.
+// hostConfig holds optional host-level configuration read from hostConfigPath.
 // An empty SSHKeyPath means it was not configured, so newDecryptor falls back to
 // defaultSSHKeyPath and treats a missing key more leniently.
-type daemonConfig struct {
+type hostConfig struct {
 	SSHKeyPath string `json:"sshKeyPath"`
 }
 
 // defaultSSHKeyPath is used when syslet.json is absent or does not set sshKeyPath.
 const defaultSSHKeyPath = "/etc/ssh/ssh_host_ed25519_key"
 
-// loadDaemonConfig reads daemonConfigPath. Returns an empty config when the file
+// loadHostConfig reads hostConfigPath. Returns an empty config when the file
 // does not exist, so syslet works without a config file.
-func loadDaemonConfig(fs afero.Fs) (daemonConfig, error) {
-	data, err := afero.ReadFile(fs, daemonConfigPath)
+func loadHostConfig(fs afero.Fs) (hostConfig, error) {
+	data, err := afero.ReadFile(fs, hostConfigPath)
 	if os.IsNotExist(err) {
-		return daemonConfig{}, nil
+		return hostConfig{}, nil
 	}
 	if err != nil {
-		return daemonConfig{}, fmt.Errorf("reading %s: %w", daemonConfigPath, err)
+		return hostConfig{}, fmt.Errorf("reading %s: %w", hostConfigPath, err)
 	}
-	var cfg daemonConfig
+	var cfg hostConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return daemonConfig{}, fmt.Errorf("parsing %s: %w", daemonConfigPath, err)
+		return hostConfig{}, fmt.Errorf("parsing %s: %w", hostConfigPath, err)
 	}
 	return cfg, nil
 }
@@ -94,7 +94,7 @@ func loadDaemonConfig(fs afero.Fs) (daemonConfig, error) {
 // and falls back to the cached keys, or returns nil when there are none and
 // lets the plan reject any secret spec. An explicitly configured path that is
 // missing, or any stat error other than not-exist, is an error naming the path.
-func newDecryptor(fs afero.Fs, logger *slog.Logger, cfg daemonConfig) (*sops.Decryptor, error) {
+func newDecryptor(fs afero.Fs, logger *slog.Logger, cfg hostConfig) (*sops.Decryptor, error) {
 	sshKeyPath := cfg.SSHKeyPath
 	if sshKeyPath == "" {
 		sshKeyPath = defaultSSHKeyPath
@@ -113,7 +113,7 @@ func newDecryptor(fs afero.Fs, logger *slog.Logger, cfg daemonConfig) (*sops.Dec
 	case !errors.Is(statErr, os.ErrNotExist):
 		return nil, fmt.Errorf("checking SSH key %s: %w", sshKeyPath, statErr)
 	case cfg.SSHKeyPath != "":
-		return nil, fmt.Errorf("SSH key %s (sshKeyPath in %s) does not exist", sshKeyPath, daemonConfigPath)
+		return nil, fmt.Errorf("SSH key %s (sshKeyPath in %s) does not exist", sshKeyPath, hostConfigPath)
 	}
 
 	cached, err := afero.Exists(fs, ageKeyFilePath)
@@ -212,7 +212,7 @@ func main() {
 
 	fs := afero.NewOsFs()
 
-	cfg, err := loadDaemonConfig(fs)
+	cfg, err := loadHostConfig(fs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

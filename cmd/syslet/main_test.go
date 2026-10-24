@@ -103,7 +103,7 @@ func TestNewDecryptor(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		cfg           daemonConfig
+		cfg           hostConfig
 		files         map[string][]byte
 		statErr       bool
 		wantDecryptor bool
@@ -112,7 +112,7 @@ func TestNewDecryptor(t *testing.T) {
 	}{
 		{
 			name:          "ExplicitKeyPresent",
-			cfg:           daemonConfig{SSHKeyPath: explicitPath},
+			cfg:           hostConfig{SSHKeyPath: explicitPath},
 			files:         map[string][]byte{explicitPath: sshKey},
 			wantDecryptor: true,
 		},
@@ -123,7 +123,7 @@ func TestNewDecryptor(t *testing.T) {
 		},
 		{
 			name:    "ExplicitKeyMissingFails",
-			cfg:     daemonConfig{SSHKeyPath: explicitPath},
+			cfg:     hostConfig{SSHKeyPath: explicitPath},
 			files:   map[string][]byte{ageKeyFilePath: []byte(cachedKey)},
 			wantErr: explicitPath,
 		},
@@ -139,7 +139,7 @@ func TestNewDecryptor(t *testing.T) {
 		},
 		{
 			name:    "StatErrorFails",
-			cfg:     daemonConfig{SSHKeyPath: explicitPath},
+			cfg:     hostConfig{SSHKeyPath: explicitPath},
 			statErr: true,
 			wantErr: explicitPath,
 		},

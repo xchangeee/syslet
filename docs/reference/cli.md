@@ -40,6 +40,6 @@ With `--stdin` and no `--diff`, the received stream is persisted to `/etc/syslet
 |---|---|
 | `SYSLET_SHOW_SECRETS` | Set to `1` or `true` to print decrypted secret values in `--diff` output. Unset, they print as `(secret)`. Any value [`strconv.ParseBool`](https://pkg.go.dev/strconv#ParseBool) rejects is an error. Meant for local use; don't set it in CI. |
 
-## Daemon configuration
+## Host configuration
 
-syslet reads optional daemon-level settings from `/etc/syslet/syslet.json` on every invocation. See [Daemon config](daemon-config.md).
+syslet reads optional host-level settings from `/etc/syslet/syslet.json` on every invocation. See [Host config](host-config.md).

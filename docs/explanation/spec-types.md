@@ -30,7 +30,7 @@ Like `container`, a build spec owns files as well as a unit: `containerfile` and
 
 A SOPS-encrypted YAML file, stored in podman's native secret store. Each key in the file becomes one podman secret named `<spec-name>-<key>`, referenced from a container's `Secret=` option. There is no quadlet unit and no systemd involvement — syslet decrypts during the plan phase and writes the values to podman directly.
 
-The spec carries the encrypted YAML text inline rather than a path to it, so a spec bundle stays self-contained and the ciphertext can be committed to git. Encryption is against an age recipient derived from the target host's SSH host key; syslet decrypts with the key at `sshKeyPath`, so a host decrypts only what was encrypted for it. See [Daemon config](../reference/daemon-config.md).
+The spec carries the encrypted YAML text inline rather than a path to it, so a spec bundle stays self-contained and the ciphertext can be committed to git. Encryption is against an age recipient derived from the target host's SSH host key; syslet decrypts with the key at `sshKeyPath`, so a host decrypts only what was encrypted for it. See [Host config](../reference/host-config.md).
 
 Key names are not encrypted by SOPS, so syslet can read them without a key. That is what lets it validate every container `Secret=` reference against the declared keys before any decryption happens, and keep plaintext out of the plan for specs that turn out to be misreferenced.
 
