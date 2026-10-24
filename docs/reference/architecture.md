@@ -16,12 +16,12 @@ internal/model        domain types: ContainerUnit, VolumeUnit, NetworkUnit, Buil
   │
   ▼
 internal/syslet       orchestration core: BuildPlan (diff desired vs. on-disk state) → Apply (execute the plan)
-  │         │      │
-  │         │      └─ internal/podman     — volume/network/secret/image operations not owned by systemd
-  │         └─ internal/systemd — D-Bus client, quadlet unit files on disk, daemon-reload, journal reads
-  └─ internal/render — renders model units into quadlet unit file content
-  └─ internal/filestore — on-disk container config files/dirs and build context files
-  └─ internal/validate — pre-render, post-render, and staging validation
+  │
+  ├─ internal/validate    pre-render, post-render, and staging validation
+  ├─ internal/render      renders model units into quadlet unit file content
+  ├─ internal/filestore   on-disk container config files/dirs and build context files
+  ├─ internal/systemd     D-Bus client, quadlet unit files on disk, daemon-reload, journal reads
+  └─ internal/podman      volume/network/secret/image operations not owned by systemd
 ```
 
 Supporting packages:
