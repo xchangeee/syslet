@@ -2,13 +2,24 @@
 //
 // buildPlanSecrets decrypts all secret specs in the desired set, diffs them
 // against the podman secret store, and emits Upsert/Delete ops on the plan.
-// It also returns the set of upserted secret names so buildPlanUnitContainer
+// It also returns the set of changed secret names so buildPlanUnitContainer
 // can mark affected containers for restart.
 //
-// Orphan detection uses the syslet/hash label as the ownership marker: any
-// podman secret that carries that label but is absent from the desired set is
-// scheduled for deletion — including keys left behind by a spec that was
-// removed from the zip entirely.
+// Change detection works per key and on plaintext: a key is changed when
+// podman holds no value for it yet or holds a different value. The stored
+// values are read back from podman (podman.Interface.SecretValues) rather than
+// inferred from the ciphertext, because SOPS produces fresh ciphertext on every
+// re-encryption — adding a recipient or rotating a key would otherwise rewrite
+// every secret and restart every container consuming one, although no value
+// changed.
+//
+// syslet owns podman's whole secret store: any podman secret absent from the
+// desired set is scheduled for deletion — including keys left behind by a spec
+// that was removed from the zip entirely, and secrets syslet never created.
+//
+// Secrets are written without labels. Earlier versions labeled every secret
+// with syslet/hash; a secret still carrying that label but holding the desired
+// value is rewritten once to drop it, without counting as a change.
 package syslet
 
 import (
@@ -21,10 +32,14 @@ import (
 	"github.com/xchangeee/syslet/internal/sops"
 )
 
+// legacyHashLabel is the label earlier syslet versions wrote on every secret.
+// It is only ever read, to find secrets that still need to have it removed.
+const legacyHashLabel = "syslet/hash"
+
 // buildPlanSecrets decrypts secrets, computes the diff against the podman
 // secret store, and records UpsertPodmanSecret / DeletePodmanSecret ops.
-// Returns the full podman secret names that will be upserted (empty map when
-// nothing changes). Returns nil when pc is nil (no podman client; secrets are
+// Returns the full podman secret names whose value changes (empty map when
+// nothing changes); upserts that only drop the legacy label are not included. Returns nil when pc is nil (no podman client; secrets are
 // skipped for backward compat with callers that don't need secret support).
 func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.Decryptor, planner *planner, secrets []model.PodmanSecret) map[string]bool {
 	if pc == nil {
@@ -57,8 +72,14 @@ func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.
 		existingByName[s.Name] = s
 	}
 
+	stored, err := pc.SecretValues(ctx, existingDesiredSecrets(secrets, existingByName))
+	if err != nil {
+		planner.recordGenericError(fmt.Sprintf("reading podman secret values: %v", err))
+		return nil
+	}
+
 	desired := make(map[string]bool)
-	upserted := make(map[string]bool)
+	changed := make(map[string]bool)
 	specNames := make([]string, len(secrets))
 
 	for i, secret := range secrets {
@@ -66,27 +87,43 @@ func buildPlanSecrets(ctx context.Context, pc podman.Interface, decryptor *sops.
 		for _, key := range secret.Keys {
 			fullName := secret.Name + "-" + key
 			desired[fullName] = true
-			meta, exists := existingByName[fullName]
-			if !exists || meta.Labels["syslet/hash"] != secret.ContentHash {
-				planner.UpsertPodmanSecret(secret.Name, fullName, secret.Values[key], map[string]string{"syslet/hash": secret.ContentHash})
-				upserted[fullName] = true
+			current, ok := stored[fullName]
+			if !ok || current != secret.Values[key] {
+				planner.UpsertPodmanSecret(secret.Name, fullName, secret.Values[key], false)
+				changed[fullName] = true
+				continue
+			}
+			if _, legacy := existingByName[fullName].Labels[legacyHashLabel]; legacy {
+				planner.UpsertPodmanSecret(secret.Name, fullName, secret.Values[key], true)
 			}
 		}
 	}
 
-	// Delete syslet-managed secrets that are no longer in the desired set.
-	// The syslet/hash label marks ownership; unmanaged secrets are left alone.
+	// Delete every secret that is no longer in the desired set.
 	for _, meta := range existing {
 		if desired[meta.Name] {
-			continue
-		}
-		if _, ok := meta.Labels["syslet/hash"]; !ok {
 			continue
 		}
 		planner.DeletePodmanSecret(inferSpecName(meta.Name, specNames), meta.Name)
 	}
 
-	return upserted
+	return changed
+}
+
+// existingDesiredSecrets returns the full names of desired keys that already
+// exist in podman — the only secrets whose stored values are worth reading.
+// Absent keys are upserted regardless.
+func existingDesiredSecrets(secrets []model.PodmanSecret, existingByName map[string]podman.SecretMeta) []string {
+	var names []string
+	for _, secret := range secrets {
+		for _, key := range secret.Keys {
+			fullName := secret.Name + "-" + key
+			if _, exists := existingByName[fullName]; exists {
+				names = append(names, fullName)
+			}
+		}
+	}
+	return names
 }
 
 // inferSpecName returns the longest spec name whose "<name>-" prefix matches

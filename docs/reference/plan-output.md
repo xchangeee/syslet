@@ -42,7 +42,7 @@ A section is printed only when it has entries, in this order:
 | `Build context file changes:` | Unified diff per `containerfile` and `contextFiles` entry. |
 | `Build context files to delete:` | Stale context files, as `<build>/<file>`. |
 | `Build context directories to delete:` | A build's whole context directory, as `<build>/`. |
-| `Secret changes:` | Per secret spec, `+ <key>=(secret)` for new or changed keys and `- <key>=(secret)` for deleted ones. With `SYSLET_SHOW_SECRETS` set, new values print in plain text. |
+| `Secret changes:` | Per secret spec, `+ <key>=(secret)` for new or changed keys and `- <key>=(secret)` for deleted ones. With `SYSLET_SHOW_SECRETS` set, new values print in plain text. `~ <key> (drops legacy syslet/hash label, value unchanged)` marks a secret written by an earlier syslet version that is rewritten once without its label; it restarts no container. |
 | `Services to stop:` | Units stopped before files are written. |
 | `Systemd daemon-reload: required` | Printed when any unit file is written or deleted. |
 | `Containers to start:` | Containers started at the end of the apply. |

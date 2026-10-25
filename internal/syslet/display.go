@@ -162,6 +162,10 @@ func DisplayPlan(w io.Writer, plan *ApplyPlan, opts DisplayOptions) {
 				}
 			}
 			for _, op := range plan.UpsertPodmanSecrets {
+				if op.SpecName == specName && op.DropsLegacyLabel {
+					_, _ = fmt.Fprintf(w, "    ~ %s (drops legacy syslet/hash label, value unchanged)\n", secretKey(specName, op.Name))
+					continue
+				}
 				if op.SpecName == specName {
 					value := "(secret)"
 					if opts.ShowSecrets {

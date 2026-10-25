@@ -42,7 +42,7 @@ sops updatekeys -y creds-*.enc.yaml
 cue cmd apply
 ```
 
-The new ciphertext updates the podman secrets and restarts every container that references them.
+The values stay the same, so the apply leaves the podman secrets alone and restarts no container.
 
 ## Drop the old key
 

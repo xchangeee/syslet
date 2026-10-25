@@ -22,8 +22,8 @@ func Parse(raw api.LoadResult) ([]model.Unit, error) {
 
 // ParseSecrets converts the secret specs of every apiVersion into domain
 // PodmanSecret values. It reads key names from the SOPS YAML metadata without
-// decrypting, and computes the content hash used for change detection during
-// the plan phase.
+// decrypting; the plan phase decrypts the values and compares them against
+// podman's secret store.
 func ParseSecrets(raw api.LoadResult) ([]model.PodmanSecret, error) {
 	return parseSecretsV1(raw.V1.Secrets)
 }

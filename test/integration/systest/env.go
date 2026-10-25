@@ -334,7 +334,7 @@ func (e *Env) ResetRecordings() {
 // Reaching a fixed point in one pass is the defining property of a converger,
 // and it is the assertion that catches a whole class of bugs no single
 // after-the-fact check does: a unit file written with the wrong content, a
-// secret upserted without the syslet/hash label its own change detection reads,
+// secret whose stored value never matches what the plan compares it against,
 // a configDir whose files never made it to disk. Each of those looks correct in
 // isolation and betrays itself on the second run, as work that should not exist.
 func (e *Env) AssertIdempotent() {

@@ -15,8 +15,10 @@ import (
 )
 
 // SecretMeta holds the name and labels of a single entry in podman's secret store.
-// It is used during the plan phase to detect which secrets already exist and whether
-// their content has changed (via the syslet/hash label).
+// The plan phase uses it to detect which secrets exist and which still carry the
+// legacy syslet/hash label that earlier versions wrote. It deliberately carries no
+// value: stored plaintext is read separately, and only for desired secrets, by
+// SecretValues.
 type SecretMeta struct {
 	Name   string            `json:"Name"`
 	Labels map[string]string `json:"Labels"`
@@ -31,7 +33,8 @@ type Interface interface {
 	ImageExists(ctx context.Context, ref string) (bool, error)
 	PullImage(ctx context.Context, ref string) error
 	ListSecrets(ctx context.Context) ([]SecretMeta, error)
-	UpsertSecret(ctx context.Context, name string, value model.Plaintext, labels map[string]string) error
+	SecretValues(ctx context.Context, names []string) (map[string]model.Plaintext, error)
+	UpsertSecret(ctx context.Context, name string, value model.Plaintext) error
 	DeleteSecret(ctx context.Context, name string) error
 }
 
@@ -148,16 +151,53 @@ func (c *Client) ListSecrets(ctx context.Context) ([]SecretMeta, error) {
 	return secrets, nil
 }
 
-// UpsertSecret creates or replaces a podman secret with the given name, value, and labels.
+// SecretValues returns the stored plaintext of each named secret, keyed by name.
+//
+// The plan phase compares these against the freshly decrypted values to decide
+// which keys actually changed. Comparing plaintext rather than a ciphertext hash
+// is what keeps a SOPS re-encryption (new recipient, rotated key) from rewriting
+// every secret and restarting every container that consumes one. The values are
+// held in memory only and never stored as a label, so no derivative of the
+// plaintext ever becomes readable through 'podman secret ls'.
+//
+// Callers pass only secrets present in the desired set, so plaintext of secrets
+// about to be deleted is never read. The command's output is never included in
+// errors.
+func (c *Client) SecretValues(ctx context.Context, names []string) (map[string]model.Plaintext, error) {
+	values := make(map[string]model.Plaintext, len(names))
+	if len(names) == 0 {
+		return values, nil
+	}
+
+	cmd := exec.CommandContext(ctx, "podman", append([]string{"secret", "inspect", "--showsecret"}, names...)...)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("podman secret inspect --showsecret failed: %w", err)
+	}
+
+	// SecretData is omitted from the JSON when the stored value is empty, which
+	// decodes to "" — exactly the value that was stored.
+	var raw []struct {
+		Spec       SecretMeta `json:"Spec"`
+		SecretData string     `json:"SecretData"`
+	}
+	if err := json.Unmarshal(output, &raw); err != nil {
+		return nil, fmt.Errorf("podman secret inspect --showsecret: parse JSON: %w", err)
+	}
+
+	for _, r := range raw {
+		values[r.Spec.Name] = model.Plaintext(r.SecretData)
+	}
+	return values, nil
+}
+
+// UpsertSecret creates or replaces a podman secret with the given name and value.
 // It uses 'podman secret create --replace' which is atomic — there is no window where the
 // secret is absent. The value is passed via stdin to avoid exposure in process arguments.
-// Labels are written as key=value pairs and include syslet/hash for change detection.
-func (c *Client) UpsertSecret(ctx context.Context, name string, value model.Plaintext, labels map[string]string) error {
-	args := []string{"secret", "create", "--replace"}
-	for k, v := range labels {
-		args = append(args, "--label", k+"="+v)
-	}
-	args = append(args, name, "-")
+// The secret is written without labels; replacing a secret also drops any labels
+// it carried, which is how the legacy syslet/hash label is removed.
+func (c *Client) UpsertSecret(ctx context.Context, name string, value model.Plaintext) error {
+	args := []string{"secret", "create", "--replace", name, "-"}
 
 	cmd := exec.CommandContext(ctx, "podman", args...)
 	cmd.Stdin = strings.NewReader(string(value))

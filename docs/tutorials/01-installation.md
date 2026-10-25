@@ -4,7 +4,7 @@ In this tutorial, you'll install syslet on a server so the following tutorials c
 
 ## Prerequisites
 
-- A Linux server with [Podman](https://podman.io/) 6 or newer installed (e.g. `dnf install podman`) and systemd.
+- A Linux server with [Podman](https://podman.io/) 5 or newer installed (e.g. `dnf install podman`) and systemd.
   syslet hasn't been tested with earlier Podman versions.
 - Root access on that server (syslet needs it for systemd D-Bus operations).
 - SSH access to the server.

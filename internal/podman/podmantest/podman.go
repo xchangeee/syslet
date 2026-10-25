@@ -29,9 +29,8 @@ const podmanChannel = "podman"
 
 // UpsertedSecret is one recorded call to UpsertSecret.
 type UpsertedSecret struct {
-	Name   string
-	Value  model.Plaintext
-	Labels map[string]string
+	Name  string
+	Value model.Plaintext
 }
 
 // SecretOp is which kind of secret mutation a SecretCall records.
@@ -66,10 +65,10 @@ type SecretCall struct {
 // The second role is what makes idempotency testable. A pure recorder always
 // reports the host as it was seeded, so a second apply would re-derive the same
 // work and the harness could never tell a converging apply from a thrashing
-// one. It also closes the loop on the syslet/hash label: the plan's no-op
-// decision compares against the label a previous apply wrote, and only a
-// stateful store lets a test exercise that comparison against a real write
-// rather than a hand-seeded one.
+// one. It also closes the loop on change detection: the plan's no-op decision
+// compares the decrypted values against the values a previous apply wrote, and
+// only a stateful store lets a test exercise that comparison against a real
+// write rather than a hand-seeded one.
 //
 // Volumes and networks are recorded but not modeled, because the plan never
 // reads them back — it derives their fate from unit files alone. The image store
@@ -91,6 +90,7 @@ type FakePodman struct {
 	deletedSecrets  []string
 	secretCalls     []SecretCall
 	existingSecrets []podman.SecretMeta
+	secretValues    map[string]model.Plaintext
 
 	// Log, when set, receives every mutation in arrival order alongside the
 	// effects recorded by the other fakes sharing it.
@@ -121,6 +121,15 @@ func NewFakePodman() *FakePodman {
 // already present on the host before the plan runs.
 func (p *FakePodman) SeedSecrets(secrets ...podman.SecretMeta) {
 	p.existingSecrets = secrets
+}
+
+// SeedSecretValues stages the stored plaintext SecretValues will report for
+// seeded secrets. A seeded secret without a value reads back as "", which
+// never matches a real fixture value, so tests that only care about orphan
+// handling need not seed values at all.
+func (p *FakePodman) SeedSecretValues(values map[string]model.Plaintext) {
+	p.secretValues = make(map[string]model.Plaintext, len(values))
+	maps.Copy(p.secretValues, values)
 }
 
 // SeedMissingImages marks images as absent from the local image store, so
@@ -230,16 +239,22 @@ func (p *FakePodman) PullImage(_ context.Context, ref string) error {
 }
 
 // UpsertSecret records the upsert and applies it to the modeled store, so a
-// later ListSecrets reports the name and labels this call wrote.
-func (p *FakePodman) UpsertSecret(_ context.Context, name string, value model.Plaintext, labels map[string]string) error {
+// later ListSecrets and SecretValues report the name and value this call wrote.
+// Like 'podman secret create --replace', it leaves the secret without labels.
+func (p *FakePodman) UpsertSecret(_ context.Context, name string, value model.Plaintext) error {
 	if err := p.fail("upsert-secret", name); err != nil {
 		return err
 	}
 	p.Log.Record(podmanChannel, "upsert-secret", name)
-	p.upsertedSecrets = append(p.upsertedSecrets, UpsertedSecret{Name: name, Value: value, Labels: labels})
+	p.upsertedSecrets = append(p.upsertedSecrets, UpsertedSecret{Name: name, Value: value})
 	p.secretCalls = append(p.secretCalls, SecretCall{Op: SecretUpsert, Name: name})
 
-	stored := podman.SecretMeta{Name: name, Labels: copyLabels(labels)}
+	if p.secretValues == nil {
+		p.secretValues = make(map[string]model.Plaintext)
+	}
+	p.secretValues[name] = value
+
+	stored := podman.SecretMeta{Name: name}
 	for i, existing := range p.existingSecrets {
 		if existing.Name == name {
 			p.existingSecrets[i] = stored
@@ -260,6 +275,7 @@ func (p *FakePodman) DeleteSecret(_ context.Context, name string) error {
 	p.deletedSecrets = append(p.deletedSecrets, name)
 	p.secretCalls = append(p.secretCalls, SecretCall{Op: SecretDelete, Name: name})
 
+	delete(p.secretValues, name)
 	p.existingSecrets = slices.DeleteFunc(p.existingSecrets, func(m podman.SecretMeta) bool {
 		return m.Name == name
 	})
@@ -271,13 +287,17 @@ func (p *FakePodman) ListSecrets(_ context.Context) ([]podman.SecretMeta, error)
 	return p.existingSecrets, nil
 }
 
-// copyLabels copies a label map, so that a caller mutating the map it passed to
-// UpsertSecret cannot retroactively change what the store reports.
-func copyLabels(in map[string]string) map[string]string {
-	if in == nil {
-		return nil
+// SecretValues returns the modeled stored value of each named secret that
+// exists, mirroring how podman only reports secrets it knows about.
+func (p *FakePodman) SecretValues(_ context.Context, names []string) (map[string]model.Plaintext, error) {
+	values := make(map[string]model.Plaintext, len(names))
+	for _, name := range names {
+		if err := p.fail("secret-values", name); err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(p.existingSecrets, func(m podman.SecretMeta) bool { return m.Name == name }) {
+			values[name] = p.secretValues[name]
+		}
 	}
-	out := make(map[string]string, len(in))
-	maps.Copy(out, in)
-	return out
+	return values, nil
 }

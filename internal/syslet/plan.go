@@ -183,13 +183,17 @@ type WriteFsContainerConfigDirOp struct {
 // UpsertPodmanSecretOp creates or replaces a single podman secret entry.
 // Name is the full podman secret name (<specname>-<key>); SpecName is used for
 // grouping in the diff display. Value is the decrypted plaintext, populated during
-// the plan phase and must never be logged or serialized. Labels are passed through
-// to podman secret create verbatim (e.g. {"syslet/hash": "<sha>"}).
+// the plan phase and must never be logged or serialized.
+//
+// DropsLegacyLabel marks an upsert whose value is unchanged and that only
+// rewrites the secret to remove the syslet/hash label earlier versions wrote.
+// It is not a secret change: buildPlanSecrets does not report it as changed, so
+// containers consuming the secret are not restarted.
 type UpsertPodmanSecretOp struct {
-	SpecName string
-	Name     string
-	Value    model.Plaintext
-	Labels   map[string]string
+	SpecName         string
+	Name             string
+	Value            model.Plaintext
+	DropsLegacyLabel bool
 }
 
 // ReloadSystemdServiceOp triggers systemctl reload on a running container's service.
@@ -299,8 +303,8 @@ func (p *ApplyPlan) DeletePodmanImage(tag model.ImageTag) {
 	p.DeletePodmanImages = append(p.DeletePodmanImages, DeletePodmanImageOp{tag: tag})
 }
 
-func (p *ApplyPlan) UpsertPodmanSecret(specName, name string, value model.Plaintext, labels map[string]string) {
-	p.UpsertPodmanSecrets = append(p.UpsertPodmanSecrets, UpsertPodmanSecretOp{SpecName: specName, Name: name, Value: value, Labels: labels})
+func (p *ApplyPlan) UpsertPodmanSecret(specName, name string, value model.Plaintext, dropsLegacyLabel bool) {
+	p.UpsertPodmanSecrets = append(p.UpsertPodmanSecrets, UpsertPodmanSecretOp{SpecName: specName, Name: name, Value: value, DropsLegacyLabel: dropsLegacyLabel})
 }
 
 func (p *ApplyPlan) DeletePodmanSecret(specName, name string) {

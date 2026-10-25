@@ -97,13 +97,11 @@ func TestSecondApply_NoAction(t *testing.T) {
 			},
 		},
 		{
-			// Secrets are the case this suite exists for. Every other store is
-			// read back as content, so a single apply can inspect what landed;
-			// the secret store is read back as the syslet/hash label, which no
-			// assertion on the upsert itself can validate. Tests that seed that
-			// label by hand check the comparison against a value they chose —
-			// only a second apply checks it against the value apply wrote. Get
-			// it wrong and every run re-upserts every key and restarts every
+			// Secrets are the case this suite exists for. The plan compares
+			// decrypted values against what podman reports back. Tests that seed the
+			// store by hand check the comparison against values they chose —
+			// only a second apply checks it against what apply wrote. Get it
+			// wrong and every run re-upserts every key and restarts every
 			// container consuming them, forever.
 			name: "SecretApplied",
 			opts: []systest.Option{systest.WithDecryptor(secretTestDecryptor(t))},

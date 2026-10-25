@@ -5,7 +5,6 @@ package systest
 import (
 	"bytes"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -298,34 +297,20 @@ func (e *Env) AssertNoSecretsDeleted() {
 	}
 }
 
-// AssertSecretLabels checks the labels a named secret was upserted with.
-func (e *Env) AssertSecretLabels(name string, want map[string]string) {
+// AssertSecretUnlabeled checks that a named secret sits in the modeled podman
+// store without any labels, as syslet writes every secret. A secret keeping the
+// legacy syslet/hash label would mean the migration never happened.
+func (e *Env) AssertSecretUnlabeled(name string) {
 	e.t.Helper()
-	for _, u := range e.Podman.UpsertedSecrets() {
-		if u.Name != name {
-			continue
+	for _, m := range e.Podman.ExistingSecrets() {
+		if m.Name == name {
+			if len(m.Labels) != 0 {
+				e.t.Errorf("secret %q has labels %v, want none", name, m.Labels)
+			}
+			return
 		}
-		if !maps.Equal(u.Labels, want) {
-			e.t.Errorf("secret %q upserted with labels %v, want %v", name, u.Labels, want)
-		}
-		return
 	}
-	e.t.Errorf("secret %q was never upserted", name)
-}
-
-// AssertSecretHashLabel checks the syslet/hash label a named secret was
-// upserted with.
-//
-// This label is the whole of syslet's change detection for secrets: the plan
-// compares it against the hash of the desired ciphertext, and a mismatch is what
-// makes a secret — and every container consuming it — get rewritten. Upserting
-// with a missing or wrong hash is therefore invisible on the run that does it
-// and pathological on every run after, which re-upserts and restarts
-// indefinitely. Nothing about the upsert itself reveals that; only the label
-// does.
-func (e *Env) AssertSecretHashLabel(name, wantHash string) {
-	e.t.Helper()
-	e.AssertSecretLabels(name, map[string]string{"syslet/hash": wantHash})
+	e.t.Errorf("secret %q is not in the podman store", name)
 }
 
 // AssertSecretValue checks the plaintext a named secret was upserted with,

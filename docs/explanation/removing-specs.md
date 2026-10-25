@@ -91,7 +91,10 @@ Rebuilding is not removal. When a build unit changes, the old image survives: sy
 
 ### secrets
 
-Secrets are not quadlet units and never appear in the quadlet directory, so they are reconciled by ownership label instead. syslet labels every secret it creates with `syslet/hash`. On each apply, any podman secret carrying that label but missing from the desired set is deleted, including keys left behind by a secret spec dropped from the input entirely.
+Secrets are not quadlet units and never appear in the quadlet directory, so they are reconciled against podman's secret store directly.
+syslet treats that whole store as its own.
+On each apply, any podman secret missing from the desired set is deleted, including keys left behind by a secret spec dropped from the input entirely and secrets that were created by hand or by another tool.
+Keep every secret a host needs in syslet's input.
 
 There is no `removalAllowed` here. The label is the guard: a podman secret without it is never touched, so secrets created by hand or by another tool survive reconciliation untouched.
 

@@ -26,8 +26,8 @@ func TestPlanWithSecretChanges_GroupsBySpec(t *testing.T) {
 		{
 			name: "UpsertAndDelete",
 			upserts: []syslet.UpsertPodmanSecretOp{
-				{SpecName: "myapp", Name: "myapp-db-password", Value: model.Plaintext("s3cr3t"), Labels: map[string]string{"syslet/hash": "abc123"}},
-				{SpecName: "myapp", Name: "myapp-api-key", Value: model.Plaintext("newkey"), Labels: map[string]string{"syslet/hash": "def456"}},
+				{SpecName: "myapp", Name: "myapp-db-password", Value: model.Plaintext("s3cr3t")},
+				{SpecName: "myapp", Name: "myapp-api-key", Value: model.Plaintext("newkey")},
 			},
 			deletes: []syslet.DeletePodmanSecretOp{
 				{SpecName: "myapp", Name: "myapp-old-token"},
@@ -43,7 +43,7 @@ Secret changes:
 		{
 			name: "UpsertOnly",
 			upserts: []syslet.UpsertPodmanSecretOp{
-				{SpecName: "infra", Name: "infra-cert", Value: model.Plaintext("pem-data"), Labels: map[string]string{"syslet/hash": "aaa"}},
+				{SpecName: "infra", Name: "infra-cert", Value: model.Plaintext("pem-data")},
 			},
 			wantOutput: `
 Secret changes:
@@ -63,10 +63,21 @@ Secret changes:
 `,
 		},
 		{
+			name: "LegacyLabelOnly",
+			upserts: []syslet.UpsertPodmanSecretOp{
+				{SpecName: "infra", Name: "infra-cert", Value: model.Plaintext("pem-data"), DropsLegacyLabel: true},
+			},
+			wantOutput: `
+Secret changes:
+  infra:
+    ~ cert (drops legacy syslet/hash label, value unchanged)
+`,
+		},
+		{
 			name: "MultipleSpecs",
 			upserts: []syslet.UpsertPodmanSecretOp{
-				{SpecName: "app1", Name: "app1-token", Value: model.Plaintext("tok1"), Labels: map[string]string{"syslet/hash": "h1"}},
-				{SpecName: "app2", Name: "app2-key", Value: model.Plaintext("key2"), Labels: map[string]string{"syslet/hash": "h2"}},
+				{SpecName: "app1", Name: "app1-token", Value: model.Plaintext("tok1")},
+				{SpecName: "app2", Name: "app2-key", Value: model.Plaintext("key2")},
 			},
 			wantOutput: `
 Secret changes:

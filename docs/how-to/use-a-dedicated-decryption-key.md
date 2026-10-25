@@ -47,7 +47,7 @@ sops updatekeys -y creds-*.enc.yaml
 cue cmd apply
 ```
 
-The new ciphertext updates the podman secrets and restarts every container that references them.
+The values stay the same, so the apply leaves the podman secrets alone and restarts no container.
 Afterwards, drop the host-derived key from the cache as in [Rotate the SSH host key](rotate-the-ssh-host-key.md#drop-the-old-key).
 
 ## Related tasks

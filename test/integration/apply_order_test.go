@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/xchangeee/syslet/internal/model"
-	"github.com/xchangeee/syslet/internal/podman"
 	"github.com/xchangeee/syslet/internal/sops"
 	"github.com/xchangeee/syslet/test/integration/systest"
 )
@@ -57,9 +56,9 @@ func TestApplyTouchingEveryPhase_RunsInPhaseOrder(t *testing.T) {
 	env.SeedUnit(systest.NewVolume("olddata", "tmpfs",
 		systest.Removable, systest.Reclaim(model.ReclaimPolicyDelete)))
 
-	// Secrets whose stored hash is stale, plus one key that has dropped out:
+	// Secrets whose stored values are stale, plus one key that has dropped out:
 	// a delete and an upsert in the same apply.
-	env.Podman.SeedSecrets(hashedSecrets("stale-hash",
+	env.Podman.SeedSecrets(secretNames(
 		"myapp-api-key", "myapp-db-password", "myapp-old-token")...)
 
 	env.SpecsJSON(
@@ -106,11 +105,21 @@ func TestApplyTouchingEveryPhase_RunsInPhaseOrder(t *testing.T) {
 
 // TestApplyWithNothingToDo_NoAction pins the floor of the phase check: an apply
 // over a converged host produces no effects at all, on any channel.
+//
+// The host holds the desired secrets with their current values, consumed by
+// the container, so the secret channel is exercised too: the value comparison
+// must find nothing to upsert and the container nothing to restart for.
 func TestApplyWithNothingToDo_NoAction(t *testing.T) {
-	env := systest.New(t)
-	env.Podman.SeedSecrets(podman.SecretMeta{Name: "unmanaged"})
-	env.SeedActive(systest.NewContainer("webapp", "nginx:latest"))
-	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
+	env := newSecretEnv(t)
+	webapp := systest.NewContainer("webapp", "nginx:latest",
+		systest.Unit(systest.Set("Container", "Secret", "myapp-db-password")))
+	env.Podman.SeedSecrets(secretNames("myapp-api-key", "myapp-db-password")...)
+	env.Podman.SeedSecretValues(fixtureValues())
+	env.SeedActive(webapp)
+	env.SpecsJSON(
+		systest.SecretJSON("myapp", encryptedCiphertext(t)),
+		env.UnitJSON(webapp),
+	)
 
 	env.Apply()
 

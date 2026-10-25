@@ -7,7 +7,6 @@ import (
 	v1 "github.com/xchangeee/syslet/internal/api/v1"
 	"github.com/xchangeee/syslet/internal/model"
 	"github.com/xchangeee/syslet/internal/sops"
-	"github.com/xchangeee/syslet/internal/util"
 )
 
 // This file converts apiVersion v1 specs into domain objects. Like the v1
@@ -24,10 +23,9 @@ func parseSecretsV1(raw []v1.Secret) ([]model.PodmanSecret, error) {
 			return nil, fmt.Errorf("secret %q: extracting keys: %w", r.Name, err)
 		}
 		secrets = append(secrets, model.PodmanSecret{
-			Name:        r.Name,
-			Ciphertext:  ct,
-			Keys:        keys,
-			ContentHash: util.SHA256Hex([]byte(r.Ciphertext)),
+			Name:       r.Name,
+			Ciphertext: ct,
+			Keys:       keys,
 		})
 	}
 	return secrets, nil

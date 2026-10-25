@@ -172,7 +172,7 @@ func Apply(ctx context.Context, logger *slog.Logger, sd *systemd.Client, jr syst
 	}
 	for _, op := range plan.UpsertPodmanSecrets {
 		r.exec("upserting podman secret",
-			func() error { return pc.UpsertSecret(ctx, op.Name, op.Value, op.Labels) },
+			func() error { return pc.UpsertSecret(ctx, op.Name, op.Value) },
 			"name", op.Name)
 	}
 

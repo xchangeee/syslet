@@ -8,9 +8,12 @@ package integration
 // The fixture contains two keys: "db-password"="hunter2" and "api-key"="s3cr3t"
 // (hyphen-separated to satisfy the [a-z0-9-] key name validation rule).
 //
-// env.Podman.SeedSecrets simulates the on-host state returned by ListSecrets.
-// Secrets created by syslet always carry the "syslet/hash" label so orphan
-// detection can identify them.
+// env.Podman.SeedSecrets simulates the on-host state returned by ListSecrets,
+// and env.Podman.SeedSecretValues the stored plaintext returned by
+// SecretValues. syslet owns podman's whole secret store: whether a key changed
+// is decided by comparing its stored plaintext with the decrypted value, and
+// every secret absent from the desired set is deleted. Secrets carry no labels;
+// the legacy "syslet/hash" label written by earlier versions is dropped.
 //
 // The fixture readers below stay in this package deliberately: they resolve
 // testdata/ by a path relative to the test binary's working directory
@@ -25,7 +28,6 @@ import (
 	"github.com/xchangeee/syslet/internal/model"
 	"github.com/xchangeee/syslet/internal/podman"
 	"github.com/xchangeee/syslet/internal/sops"
-	"github.com/xchangeee/syslet/internal/util"
 	"github.com/xchangeee/syslet/test/integration/systest"
 )
 
@@ -50,12 +52,6 @@ func encryptedCiphertext(t *testing.T) model.Ciphertext {
 	return model.Ciphertext(data)
 }
 
-// secretContentHash returns the SHA-256 hex of the standard test ciphertext.
-func secretContentHash(t *testing.T) string {
-	t.Helper()
-	return util.SHA256Hex([]byte(encryptedCiphertext(t)))
-}
-
 // newSecretEnv builds an Env wired with the real decryptor, which every test
 // declaring a secret spec needs.
 func newSecretEnv(t *testing.T) *systest.Env {
@@ -63,12 +59,31 @@ func newSecretEnv(t *testing.T) *systest.Env {
 	return systest.New(t, systest.WithDecryptor(secretTestDecryptor(t)))
 }
 
-// hashedSecrets builds on-host secret metadata for the given names, all
-// carrying the same syslet/hash label.
-func hashedSecrets(hash string, names ...string) []podman.SecretMeta {
+// fixtureValues is the plaintext stored on a host that is already current with
+// the encrypted.yaml fixture.
+func fixtureValues() map[string]model.Plaintext {
+	return map[string]model.Plaintext{
+		"myapp-api-key":     "s3cr3t",
+		"myapp-db-password": "hunter2",
+	}
+}
+
+// secretNames builds on-host secret metadata for the given names, unlabeled as
+// syslet writes them.
+func secretNames(names ...string) []podman.SecretMeta {
 	metas := make([]podman.SecretMeta, len(names))
 	for i, name := range names {
-		metas[i] = podman.SecretMeta{Name: name, Labels: map[string]string{"syslet/hash": hash}}
+		metas[i] = podman.SecretMeta{Name: name}
+	}
+	return metas
+}
+
+// legacySecrets builds on-host secret metadata for the given names, carrying
+// the syslet/hash label that earlier syslet versions wrote.
+func legacySecrets(names ...string) []podman.SecretMeta {
+	metas := make([]podman.SecretMeta, len(names))
+	for i, name := range names {
+		metas[i] = podman.SecretMeta{Name: name, Labels: map[string]string{"syslet/hash": "hash-of-previous-ciphertext"}}
 	}
 	return metas
 }
@@ -82,24 +97,21 @@ func TestNewSecret_UpsertsAllKeys(t *testing.T) {
 	env.AssertSecretsUpserted("myapp-api-key", "myapp-db-password")
 	env.AssertSecretValue("myapp-api-key", "s3cr3t")
 	env.AssertSecretValue("myapp-db-password", "hunter2")
-	// Every key carries the content hash, which is the only thing that will
-	// tell the next run these secrets are already current.
-	env.AssertSecretHashLabel("myapp-api-key", secretContentHash(t))
-	env.AssertSecretHashLabel("myapp-db-password", secretContentHash(t))
 	env.AssertNoSecretsDeleted()
 }
 
 // TestSecretUnchanged pins the two halves of the no-op case for a secret whose
-// stored hash still matches the desired content. The plan must neither touch the
-// podman secret store nor disturb containers that reference the secret: because
-// the ciphertext is re-encrypted on every SOPS write, a hash comparison is the
-// only thing standing between an untouched spec and a restart of everything that
-// consumes it.
+// stored values still match the desired content. The plan must neither touch the
+// podman secret store nor disturb containers that reference the secret.
+//
+// The same holds after a SOPS re-encryption — a new recipient or a rotated key
+// produces fresh ciphertext for identical values — because only values are
+// compared.
 func TestSecretUnchanged(t *testing.T) {
 	t.Run("NoAction", func(t *testing.T) {
 		env := newSecretEnv(t)
-		env.Podman.SeedSecrets(hashedSecrets(secretContentHash(t),
-			"myapp-api-key", "myapp-db-password")...)
+		env.Podman.SeedSecrets(secretNames("myapp-api-key", "myapp-db-password")...)
+		env.Podman.SeedSecretValues(fixtureValues())
 		env.SpecsJSON(systest.SecretJSON("myapp", encryptedCiphertext(t)))
 
 		env.Apply()
@@ -113,8 +125,8 @@ func TestSecretUnchanged(t *testing.T) {
 		webappSpec := systest.NewContainer("webapp", "nginx:latest",
 			systest.Unit(systest.Set("Container", "Secret", "myapp-db-password")))
 
-		env.Podman.SeedSecrets(hashedSecrets(secretContentHash(t),
-			"myapp-api-key", "myapp-db-password")...)
+		env.Podman.SeedSecrets(secretNames("myapp-api-key", "myapp-db-password")...)
+		env.Podman.SeedSecretValues(fixtureValues())
 		// Seed the unit file so the plan sees no unit change.
 		env.SeedActive(webappSpec)
 		env.SpecsJSON(
@@ -128,9 +140,94 @@ func TestSecretUnchanged(t *testing.T) {
 	})
 }
 
+// TestSecretWithLegacyLabel pins the migration away from the syslet/hash label
+// earlier versions wrote. A secret still carrying it, with an unchanged value,
+// is rewritten once without the label — and because its value is unchanged,
+// containers consuming it keep running.
+func TestSecretWithLegacyLabel(t *testing.T) {
+	setup := func(t *testing.T) *systest.Env {
+		t.Helper()
+		env := newSecretEnv(t)
+		webappSpec := systest.NewContainer("webapp", "nginx:latest",
+			systest.Unit(systest.Set("Container", "Secret", "myapp-db-password")))
+
+		env.Podman.SeedSecrets(legacySecrets("myapp-api-key", "myapp-db-password")...)
+		env.Podman.SeedSecretValues(fixtureValues())
+		env.SeedActive(webappSpec)
+		env.SpecsJSON(
+			systest.SecretJSON("myapp", encryptedCiphertext(t)),
+			env.UnitJSON(webappSpec),
+		)
+		return env
+	}
+
+	t.Run("UpsertsAllKeys", func(t *testing.T) {
+		env := setup(t)
+		env.Apply()
+		env.AssertSecretsUpserted("myapp-api-key", "myapp-db-password")
+		env.AssertSecretValue("myapp-api-key", "s3cr3t")
+		env.AssertSecretUnlabeled("myapp-api-key")
+		env.AssertSecretUnlabeled("myapp-db-password")
+	})
+
+	t.Run("DoesNotRestartContainers", func(t *testing.T) {
+		env := setup(t)
+		env.Apply()
+		env.AssertNoStartStop()
+	})
+
+	t.Run("Idempotent", func(t *testing.T) {
+		setup(t).AssertIdempotent()
+	})
+}
+
+// TestSecretOneKeyChanged pins per-key change detection: a SOPS file groups
+// several keys, but only a key whose value actually changed is rewritten, and
+// only containers consuming that key are restarted. A container consuming a
+// sibling key of the same file stays up.
+func TestSecretOneKeyChanged(t *testing.T) {
+	setup := func(t *testing.T) *systest.Env {
+		t.Helper()
+		env := newSecretEnv(t)
+		dbConsumer := systest.NewContainer("webapp", "nginx:latest",
+			systest.Unit(systest.Set("Container", "Secret", "myapp-db-password")))
+		apiConsumer := systest.NewContainer("worker", "nginx:latest",
+			systest.Unit(systest.Set("Container", "Secret", "myapp-api-key")))
+
+		env.Podman.SeedSecrets(secretNames("myapp-api-key", "myapp-db-password")...)
+		env.Podman.SeedSecretValues(map[string]model.Plaintext{
+			"myapp-api-key":     "s3cr3t",       // unchanged
+			"myapp-db-password": "old-password", // changed to hunter2
+		})
+		env.SeedActive(dbConsumer)
+		env.SeedActive(apiConsumer)
+		env.SpecsJSON(
+			systest.SecretJSON("myapp", encryptedCiphertext(t)),
+			env.UnitJSON(dbConsumer),
+			env.UnitJSON(apiConsumer),
+		)
+
+		env.Apply()
+		return env
+	}
+
+	t.Run("UpsertsChangedKeyOnly", func(t *testing.T) {
+		env := setup(t)
+		env.AssertSecretsUpserted("myapp-db-password")
+		env.AssertSecretValue("myapp-db-password", "hunter2")
+	})
+
+	t.Run("RestartsConsumingServiceOnly", func(t *testing.T) {
+		env := setup(t)
+		// AssertRestarted demands webapp be the only unit stopped and started,
+		// so it also proves worker stayed up.
+		env.AssertRestarted("webapp.service")
+	})
+}
+
 func TestSecretContentChanged_UpsertsAllKeys(t *testing.T) {
 	env := newSecretEnv(t)
-	env.Podman.SeedSecrets(hashedSecrets("oldhash", "myapp-api-key", "myapp-db-password")...)
+	env.Podman.SeedSecrets(secretNames("myapp-api-key", "myapp-db-password")...)
 	env.SpecsJSON(systest.SecretJSON("myapp", encryptedCiphertext(t)))
 
 	env.Apply()
@@ -141,18 +238,16 @@ func TestSecretContentChanged_UpsertsAllKeys(t *testing.T) {
 	// otherwise look identical here.
 	env.AssertSecretValue("myapp-api-key", "s3cr3t")
 	env.AssertSecretValue("myapp-db-password", "hunter2")
-	// The stored hash must advance to the new content, or the next run would
-	// see a mismatch again and re-upsert indefinitely.
-	env.AssertSecretHashLabel("myapp-api-key", secretContentHash(t))
 	env.AssertNoSecretsDeleted()
 }
 
 func TestOrphanSecretKey_DeletesKey(t *testing.T) {
 	env := newSecretEnv(t)
-	env.Podman.SeedSecrets(hashedSecrets(secretContentHash(t),
+	env.Podman.SeedSecrets(secretNames(
 		"myapp-api-key", "myapp-db-password",
 		"myapp-old-token", // orphan
 	)...)
+	env.Podman.SeedSecretValues(fixtureValues())
 	env.SpecsJSON(systest.SecretJSON("myapp", encryptedCiphertext(t)))
 
 	env.Apply()
@@ -162,9 +257,9 @@ func TestOrphanSecretKey_DeletesKey(t *testing.T) {
 }
 
 func TestSecretSpecRemoved_DeletesAllKeys(t *testing.T) {
-	// No secret specs in the input, but syslet-managed secrets exist on host.
+	// No secret specs in the input, but secrets exist on host.
 	env := systest.New(t)
-	env.Podman.SeedSecrets(hashedSecrets("abc", "oldapp-key1", "oldapp-key2")...)
+	env.Podman.SeedSecrets(secretNames("oldapp-key1", "oldapp-key2")...)
 	// Input with only a container spec — no secret spec.
 	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
 
@@ -179,13 +274,13 @@ func TestSecretSpecRemoved_DeletesAllKeys(t *testing.T) {
 //
 // That ordering is what makes a key rename safe — deleting first means the old
 // and new names are never both present on the host. Producing both mutations
-// needs a scenario carrying both: two keys whose stored hash no longer matches,
+// needs a scenario carrying both: two keys whose stored value no longer matches,
 // plus a key that has dropped out of the ciphertext. What each mutation does in
 // isolation is covered by TestSecretContentChanged_UpsertsAllKeys and
 // TestOrphanSecretKey_DeletesKey.
 func TestSecretContentChangedWithOrphanKey_DeletesBeforeUpserting(t *testing.T) {
 	env := newSecretEnv(t)
-	env.Podman.SeedSecrets(hashedSecrets("oldhash",
+	env.Podman.SeedSecrets(secretNames(
 		"myapp-api-key", "myapp-db-password",
 		"myapp-old-token", // no longer in the ciphertext
 	)...)
@@ -199,35 +294,30 @@ func TestSecretContentChangedWithOrphanKey_DeletesBeforeUpserting(t *testing.T) 
 	env.AssertSecretDeletesPrecedeUpserts()
 }
 
-// TestSecretSpecRemovedWithUnmanagedSecret_DeletesOnlyManagedKeys pins the
-// ownership rule that bounds orphan detection.
-//
-// syslet claims a podman secret only if it carries the syslet/hash label it
-// writes itself. Anything else on the host was put there by the operator or
-// another tool, and reclaiming it would destroy data syslet was never asked to
-// manage — the most expensive failure in this area, and one the positive
-// orphan-deletion tests cannot detect.
-func TestSecretSpecRemovedWithUnmanagedSecret_DeletesOnlyManagedKeys(t *testing.T) {
+// TestStaleSecret_DeletesRegardlessOfLabels pins that syslet owns podman's
+// whole secret store: a secret absent from the desired set is deleted whether
+// it was created by hand, by another tool, or by an earlier syslet version.
+func TestStaleSecret_DeletesRegardlessOfLabels(t *testing.T) {
 	env := systest.New(t)
 	env.Podman.SeedSecrets(
-		podman.SecretMeta{Name: "hand-made"},                                         // created by hand: no labels
-		podman.SecretMeta{Name: "other-tool", Labels: map[string]string{"app": "x"}}, // labeled, but not by syslet
-		hashedSecrets("abc", "oldapp-key1")[0],                                       // syslet's own, now orphaned
+		podman.SecretMeta{Name: "hand-made"},                                         // no labels
+		podman.SecretMeta{Name: "other-tool", Labels: map[string]string{"app": "x"}}, // foreign label
+		legacySecrets("oldapp-key1")[0],                                              // legacy syslet label
 	)
 	env.Specs(systest.NewContainer("webapp", "nginx:latest"))
 
 	env.Apply()
 
-	env.AssertSecretsDeleted("oldapp-key1")
+	env.AssertSecretsDeleted("hand-made", "other-tool", "oldapp-key1")
 }
 
 func TestSecretChanged_RestartsReferencingContainers(t *testing.T) {
 	env := newSecretEnv(t)
-	// Container references myapp-db-password; hash mismatch → upsert → restart.
+	// Container references myapp-db-password; stored value differs → upsert → restart.
 	webappSpec := systest.NewContainer("webapp", "nginx:latest",
 		systest.Unit(systest.Set("Container", "Secret", "myapp-db-password")))
 
-	env.Podman.SeedSecrets(hashedSecrets("oldhash", "myapp-api-key", "myapp-db-password")...)
+	env.Podman.SeedSecrets(secretNames("myapp-api-key", "myapp-db-password")...)
 	// Seed the unit file so the plan sees the container as existing, not new.
 	env.SeedActive(webappSpec)
 	env.SpecsJSON(

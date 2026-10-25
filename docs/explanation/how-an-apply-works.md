@@ -8,7 +8,7 @@ Every syslet invocation runs the same pipeline, whether it's a local dry-run, an
    syslet adds what it manages itself: the resource name, its `X-Syslet` markers for `removalAllowed` and `reclaimPolicy`, `Restart=always` and `WantedBy=` for `desiredState: "running"` or `Type=oneshot` for `"oneshot"`, and a read-only `Volume=` mount for every config file and directory.
 4. **Post-render validation** checks the rendered units, such as references between containers and the volumes, networks and builds they use.
 5. **Diff** the rendered units and config files against the installed state on disk, and find stale units.
-   Three parts come from the live system instead: systemd reports whether each container is running, which decides between start, stop and restart; podman's secret store is listed and compared by each secret's `syslet/hash` label; and podman reports which container images are missing from its local image store.
+   Three parts come from the live system instead: systemd reports whether each container is running, which decides between start, stop and restart; podman's secret store is listed, and the stored value of each desired secret is compared with the decrypted one; and podman reports which container images are missing from its local image store.
 6. **Stage** the rendered units through podman's quadlet generator and `systemd-analyze verify`, when the plan writes unit files.
 7. **Execute** the resulting plan, in strict order (see below).
 8. **Exit** with a status summary, non-zero if anything failed.
