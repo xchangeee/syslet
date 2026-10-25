@@ -14,7 +14,7 @@ func TestContainerSpec_Render_BasicContainer(t *testing.T) {
 		model.DesiredStateRunning,
 		nil, false,
 	)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 
 	assertHasOption(t, rendered.UnitOptions, SectionContainer, KeyContainerName, "webapp")
@@ -28,9 +28,43 @@ func TestContainerSpec_Render_DesiredStateRunning_OverridesUserRestart(t *testin
 		SectionService:   {model.SectionKey("Restart"): model.UV("on-failure")},
 	}
 	spec := model.NewContainerUnit(model.ContainerUnitRef("webapp"), opts, model.DesiredStateRunning, nil, false)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestart, "always")
+}
+
+func TestContainerSpec_Render_DesiredStateRunning_SetsRestartBackoff(t *testing.T) {
+	spec := model.NewContainerUnit(
+		model.ContainerUnitRef("webapp"),
+		makeUnitOptions(SectionContainer, "Image", "nginx:latest"),
+		model.DesiredStateRunning,
+		nil, false,
+	)
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
+	rendered := mustRender(t, ru, err)
+	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartSec, ServiceRestartSecDefault)
+	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartSteps, ServiceRestartStepsDefault)
+	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartMaxDelaySec, ServiceRestartMaxDelaySecDefault)
+	assertUniqueOption(t, rendered.UnitOptions, SectionUnit, KeyUnitStartLimitIntervalSec, UnitStartLimitIntervalSecDefault)
+}
+
+func TestContainerSpec_Render_DesiredStateRunning_KeepsUserRestartBackoff(t *testing.T) {
+	opts := model.UnitOptions{
+		SectionUnit: {model.SectionKey("StartLimitIntervalSec"): model.UV("30s")},
+		SectionService: {
+			model.SectionKey("RestartSec"):         model.UV("5s"),
+			model.SectionKey("RestartSteps"):       model.UV("3"),
+			model.SectionKey("RestartMaxDelaySec"): model.UV("1min"),
+		},
+		SectionContainer: {model.SectionKey("Image"): model.UV("nginx:latest")},
+	}
+	spec := model.NewContainerUnit(model.ContainerUnitRef("webapp"), opts, model.DesiredStateRunning, nil, false)
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
+	rendered := mustRender(t, ru, err)
+	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartSec, "5s")
+	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartSteps, "3")
+	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartMaxDelaySec, "1min")
+	assertUniqueOption(t, rendered.UnitOptions, SectionUnit, KeyUnitStartLimitIntervalSec, "30s")
 }
 
 func TestContainerSpec_Render_DesiredStateStopped(t *testing.T) {
@@ -40,10 +74,12 @@ func TestContainerSpec_Render_DesiredStateStopped(t *testing.T) {
 		model.DesiredStateStopped,
 		nil, false,
 	)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 	assertNoOption(t, rendered.UnitOptions, SectionInstall, KeyInstallWantedBy)
 	assertNoOption(t, rendered.UnitOptions, SectionService, KeyServiceRestart)
+	assertNoOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartSteps)
+	assertNoOption(t, rendered.UnitOptions, SectionUnit, KeyUnitStartLimitIntervalSec)
 }
 
 func TestContainerSpec_Render_DesiredStateOneshot(t *testing.T) {
@@ -53,7 +89,7 @@ func TestContainerSpec_Render_DesiredStateOneshot(t *testing.T) {
 		model.DesiredStateOneshot,
 		nil, false,
 	)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 	assertNoOption(t, rendered.UnitOptions, SectionInstall, KeyInstallWantedBy)
 	assertNoOption(t, rendered.UnitOptions, SectionService, KeyServiceRestart)
@@ -66,7 +102,7 @@ func TestContainerSpec_Render_DesiredStateOneshot_OverridesUserType(t *testing.T
 		SectionService:   {model.SectionKey("Type"): model.UV("notify")},
 	}
 	spec := model.NewContainerUnit(model.ContainerUnitRef("job"), opts, model.DesiredStateOneshot, nil, false)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceType, "oneshot")
 }
@@ -82,7 +118,7 @@ func TestContainerSpec_Render_WithConfig_Mode(t *testing.T) {
 		},
 		false,
 	)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	mustRender(t, ru, err)
 
 	if spec.FileMounts[0].File.Mode != 0755 {
@@ -104,7 +140,7 @@ func TestContainerSpec_Render_WithConfigs(t *testing.T) {
 		},
 		false,
 	)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 
 	volumes := filterOptions(rendered.UnitOptions, SectionContainer, KeyContainerVolume)
@@ -126,7 +162,7 @@ func TestContainerSpec_Render_ContainerNameIsEnforced(t *testing.T) {
 		},
 	}
 	spec := model.NewContainerUnit(model.ContainerUnitRef("webapp"), opts, model.DesiredStateStopped, nil, false)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 	assertUniqueOption(t, rendered.UnitOptions, SectionContainer, KeyContainerName, "webapp")
 }
@@ -137,7 +173,7 @@ func TestContainerSpec_Render_AutoGeneratedDescription(t *testing.T) {
 		makeUnitOptions(SectionContainer, "Image", "nginx:latest"),
 		model.DesiredStateStopped, nil, false,
 	)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 	assertHasOption(t, rendered.UnitOptions, SectionUnit, KeyUnitDescription, "webapp container")
 }
@@ -148,7 +184,7 @@ func TestContainerSpec_Render_DescriptionNotOverridden(t *testing.T) {
 		SectionContainer: {model.SectionKey("Image"): model.UV("nginx:latest")},
 	}
 	spec := model.NewContainerUnit(model.ContainerUnitRef("webapp"), opts, model.DesiredStateStopped, nil, false)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 	assertUniqueOption(t, rendered.UnitOptions, SectionUnit, KeyUnitDescription, "Custom webapp description")
 }
@@ -159,7 +195,7 @@ func TestContainerSpec_Render_RestartForcedForRunning(t *testing.T) {
 		SectionContainer: {model.SectionKey("Image"): model.UV("nginx:latest")},
 	}
 	spec := model.NewContainerUnit(model.ContainerUnitRef("webapp"), opts, model.DesiredStateRunning, nil, false)
-	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"))
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), testHost)
 	rendered := mustRender(t, ru, err)
 	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestart, "always")
 }
@@ -188,11 +224,11 @@ func TestRenderContainer_RenderedContent_IsCanonicallyOrdered(t *testing.T) {
 	spec1 := model.NewContainerUnit(model.ContainerUnitRef("webapp"), optsWithAll, model.DesiredStateRunning, nil, false)
 	spec2 := model.NewContainerUnit(model.ContainerUnitRef("webapp"), optsContainerOnly, model.DesiredStateRunning, nil, false)
 
-	ru1, err := NewRenderedUnitFromContainer(spec1, resolve)
+	ru1, err := NewRenderedUnitFromContainer(spec1, resolve, testHost)
 	if err != nil {
 		t.Fatalf("RenderContainer spec1: %v", err)
 	}
-	ru2, err := NewRenderedUnitFromContainer(spec2, resolve)
+	ru2, err := NewRenderedUnitFromContainer(spec2, resolve, testHost)
 	if err != nil {
 		t.Fatalf("RenderContainer spec2: %v", err)
 	}
@@ -210,7 +246,7 @@ func TestContainerSpec_PrunableMixin(t *testing.T) {
 				model.ContainerUnitRef("webapp"),
 				makeUnitOptions(SectionContainer, "Image", "nginx:latest"),
 				model.DesiredStateStopped, nil, true,
-			), resolve)
+			), resolve, testHost)
 		},
 		func() (RenderedUnit, error) {
 			opts := model.UnitOptions{
@@ -219,14 +255,49 @@ func TestContainerSpec_PrunableMixin(t *testing.T) {
 			}
 			return NewRenderedUnitFromContainer(model.NewContainerUnit(
 				model.ContainerUnitRef("webapp"), opts, "", nil, true,
-			), resolve)
+			), resolve, testHost)
 		},
 		func() (RenderedUnit, error) {
 			return NewRenderedUnitFromContainer(model.NewContainerUnit(
 				model.ContainerUnitRef("webapp"),
 				makeUnitOptions(SectionContainer, "Image", "nginx:latest"),
 				model.DesiredStateStopped, nil, false,
-			), resolve)
+			), resolve, testHost)
 		},
 	)
+}
+
+func TestContainerSpec_Render_DesiredStateRunning_WithoutExponentialBackoff(t *testing.T) {
+	spec := model.NewContainerUnit(
+		model.ContainerUnitRef("webapp"),
+		makeUnitOptions(SectionContainer, "Image", "nginx:latest"),
+		model.DesiredStateRunning,
+		nil, false,
+	)
+	ru, err := NewRenderedUnitFromContainer(spec, testContainerResolve("/etc/containers/config"), HostCapabilities{})
+	rendered := mustRender(t, ru, err)
+	assertUniqueOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartSec, ServiceRestartSecFixed)
+	assertNoOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartSteps)
+	assertNoOption(t, rendered.UnitOptions, SectionService, KeyServiceRestartMaxDelaySec)
+	assertUniqueOption(t, rendered.UnitOptions, SectionUnit, KeyUnitStartLimitIntervalSec, UnitStartLimitIntervalSecDefault)
+}
+
+func TestCapabilitiesForSystemd_Versions(t *testing.T) {
+	cases := map[string]struct {
+		version int
+		want    bool
+	}{
+		"Unknown": {0, false},
+		"252":     {252, false},
+		"253":     {253, false},
+		"254":     {254, true},
+		"256":     {256, true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := CapabilitiesForSystemd(tc.version).ExponentialRestartBackoff; got != tc.want {
+				t.Errorf("ExponentialRestartBackoff = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }

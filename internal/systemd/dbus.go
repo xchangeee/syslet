@@ -9,6 +9,9 @@ import (
 // DBusConn abstracts the systemd D-Bus connection for dependency injection.
 type DBusConn interface {
 	Close()
+	// GetManagerProperty returns a org.freedesktop.systemd1.Manager property
+	// formatted by godbus's Variant.String, i.e. a string comes back quoted.
+	GetManagerProperty(prop string) (string, error)
 	ReloadContext(ctx context.Context) error
 	GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]any, error)
 	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)

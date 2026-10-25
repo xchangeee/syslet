@@ -411,6 +411,20 @@ func (p *planner) build() (*ApplyPlan, error) {
 	return p.ApplyPlan, nil
 }
 
+// HostCapabilities probes the host's systemd version and returns the options
+// render may use for it. When the version can't be read or parsed it falls
+// back to the most conservative set: a unit missing a newer option still
+// works, while one using an option the host doesn't know fails staging
+// validation and blocks every apply.
+func HostCapabilities(ctx context.Context, sd *systemd.Client) render.HostCapabilities {
+	major, err := sd.Version(ctx)
+	if err != nil {
+		slog.Default().Warn("unknown systemd version, rendering conservative unit options", "error", err)
+		return render.CapabilitiesForSystemd(0)
+	}
+	return render.CapabilitiesForSystemd(major)
+}
+
 // BuildPlan validates already-loaded specs, builds an execution plan by diffing
 // against the installed state, and runs pre-flight staging validation on any unit
 // files that would be written. Callers load raw themselves (from a path via
@@ -438,7 +452,7 @@ func BuildPlan(ctx context.Context, fs afero.Fs, mgrs filestore.FileManagers, sd
 		return planner.build()
 	}
 
-	result, err := render.NewResult(units, mgrs.Config.Resolve, mgrs.Build.Resolve)
+	result, err := render.NewResult(units, mgrs.Config.Resolve, mgrs.Build.Resolve, HostCapabilities(ctx, sd))
 	if err != nil {
 		return nil, err
 	}
@@ -619,12 +633,12 @@ func computeUnitChanges(sd *systemd.Client, planner *planner, r render.RenderedU
 	contentChanged := util.SHA256Hex([]byte(newContent)) != util.SHA256Hex(existing)
 	meaningfullyChanged := false
 	if contentChanged {
-		oldStripped, err := render.StripMetadataSections(oldContent)
+		oldStripped, err := render.StripRestartNeutralOptions(oldContent)
 		if err != nil {
 			planner.recordUnitError(fn, fmt.Sprintf("processing installed unit: %v", err))
 			return unitChanges{}, false
 		}
-		newStripped, err := render.StripMetadataSections(newContent)
+		newStripped, err := render.StripRestartNeutralOptions(newContent)
 		if err != nil {
 			planner.recordUnitError(fn, fmt.Sprintf("processing new unit: %v", err))
 			return unitChanges{}, false

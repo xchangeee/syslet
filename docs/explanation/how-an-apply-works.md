@@ -5,7 +5,7 @@ Every syslet invocation runs the same pipeline, whether it's a local dry-run, an
 1. **Read** all JSON specs from the input (stdin stream, directory, or file).
 2. **Pre-render validation** checks the specs on their own, before anything is derived from them.
 3. **Render** turns each spec into a quadlet unit file.
-   syslet adds what it manages itself: the resource name, its `X-Syslet` markers for `removalAllowed` and `reclaimPolicy`, `Restart=always` and `WantedBy=` for `desiredState: "running"` or `Type=oneshot` for `"oneshot"`, and a read-only `Volume=` mount for every config file and directory.
+   syslet adds what it manages itself: the resource name, its `X-Syslet` markers for `removalAllowed` and `reclaimPolicy`, `Restart=always`, a restart backoff and `WantedBy=` for `desiredState: "running"` or `Type=oneshot` for `"oneshot"`, and a read-only `Volume=` mount for every config file and directory.
 4. **Post-render validation** checks the rendered units, such as references between containers and the volumes, networks and builds they use.
 5. **Diff** the rendered units and config files against the installed state on disk, and find stale units.
    Three parts come from the live system instead: systemd reports whether each container is running, which decides between start, stop and restart; podman's secret store is listed, and the stored value of each desired secret is compared with the decrypted one; and podman reports which container images are missing from its local image store.

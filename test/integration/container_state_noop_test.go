@@ -166,3 +166,30 @@ func TestStoppedContainerConfigDirChanged_NoAction(t *testing.T) {
 	env.AssertConfigDirFiles("webapp", mountPath, newFiles...)
 	env.AssertConfigDirVersion("webapp", mountPath, 2)
 }
+
+// TestContainerRestartPolicyChanged_WritesUnitOnly covers a running container
+// whose installed unit predates the restart backoff defaults. systemd picks up
+// restart policy options on daemon-reload, so the new unit is written without
+// stopping the container; otherwise upgrading syslet would restart every
+// running container at once.
+func TestContainerRestartPolicyChanged_WritesUnitOnly(t *testing.T) {
+	env := systest.New(t)
+	spec := systest.NewContainer("webapp", "nginx:latest")
+	var old []string
+	for _, line := range strings.SplitAfter(env.Render(spec), "\n") {
+		if strings.HasPrefix(line, "RestartSec=") || strings.HasPrefix(line, "RestartSteps=") ||
+			strings.HasPrefix(line, "RestartMaxDelaySec=") || strings.HasPrefix(line, "StartLimitIntervalSec=") {
+			continue
+		}
+		old = append(old, line)
+	}
+	env.SeedUnitFile("webapp.container", strings.Join(old, ""))
+	env.SetUnitState("webapp.service", "active")
+	env.Specs(spec)
+
+	env.Apply()
+
+	env.AssertNoStartStop()
+	env.AssertReloaded()
+	env.AssertUnitMatches(spec)
+}

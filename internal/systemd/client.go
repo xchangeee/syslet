@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/afero"
 
@@ -69,6 +71,31 @@ func (c *Client) Close() {
 // DaemonReload calls systemctl daemon-reload.
 func (c *Client) DaemonReload(ctx context.Context) error {
 	return c.conn.ReloadContext(ctx)
+}
+
+// Version returns the major version of the host's systemd, read from the
+// Manager's Version property. The planner uses it to decide which
+// version-dependent unit options to render (see render.CapabilitiesForSystemd).
+// Only the leading number is parsed: distributions append their own release
+// suffix, e.g. Rocky Linux 9 reports "252-67.el9_8.6.rocky.0.1".
+func (c *Client) Version(_ context.Context) (int, error) {
+	raw, err := c.conn.GetManagerProperty("Version")
+	if err != nil {
+		return 0, fmt.Errorf("reading systemd version: %w", err)
+	}
+	version, err := strconv.Unquote(raw)
+	if err != nil {
+		return 0, fmt.Errorf("reading systemd version %s: %w", raw, err)
+	}
+	end := strings.IndexFunc(version, func(r rune) bool { return r < '0' || r > '9' })
+	if end == -1 {
+		end = len(version)
+	}
+	major, err := strconv.Atoi(version[:end])
+	if err != nil {
+		return 0, fmt.Errorf("parsing systemd version %q: %w", version, err)
+	}
+	return major, nil
 }
 
 // RuntimeState queries the current state of a unit via D-Bus.

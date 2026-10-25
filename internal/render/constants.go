@@ -16,22 +16,27 @@ const (
 
 // Unit section keys.
 const (
-	KeyUnitDescription       model.SectionKey = "Description"
-	KeyXSysletRemovalAllowed model.SectionKey = "RemovalAllowed"
-	KeyXSysletReclaimPolicy  model.SectionKey = "ReclaimPolicy"
-	KeyInstallWantedBy       model.SectionKey = "WantedBy"
-	KeyServiceType           model.SectionKey = "Type"
-	KeyServiceRestart        model.SectionKey = "Restart"
-	KeyContainerName         model.SectionKey = "ContainerName"
-	KeyContainerImage        model.SectionKey = "Image"
-	KeyContainerNetwork      model.SectionKey = "Network"
-	KeyContainerVolume       model.SectionKey = "Volume"
-	KeyContainerSecret       model.SectionKey = "Secret"
-	KeyEnvironment           model.SectionKey = "Environment"
-	KeyVolumeName            model.SectionKey = "VolumeName"
-	KeyNetworkName           model.SectionKey = "NetworkName"
-	KeyBuildFile             model.SectionKey = "File"
-	KeyBuildImageTag         model.SectionKey = "ImageTag"
+	KeyUnitDescription           model.SectionKey = "Description"
+	KeyXSysletRemovalAllowed     model.SectionKey = "RemovalAllowed"
+	KeyXSysletReclaimPolicy      model.SectionKey = "ReclaimPolicy"
+	KeyInstallWantedBy           model.SectionKey = "WantedBy"
+	KeyServiceType               model.SectionKey = "Type"
+	KeyServiceRestart            model.SectionKey = "Restart"
+	KeyServiceRestartSec         model.SectionKey = "RestartSec"
+	KeyServiceRestartSteps       model.SectionKey = "RestartSteps"
+	KeyServiceRestartMaxDelaySec model.SectionKey = "RestartMaxDelaySec"
+	KeyUnitStartLimitIntervalSec model.SectionKey = "StartLimitIntervalSec"
+	KeyUnitStartLimitBurst       model.SectionKey = "StartLimitBurst"
+	KeyContainerName             model.SectionKey = "ContainerName"
+	KeyContainerImage            model.SectionKey = "Image"
+	KeyContainerNetwork          model.SectionKey = "Network"
+	KeyContainerVolume           model.SectionKey = "Volume"
+	KeyContainerSecret           model.SectionKey = "Secret"
+	KeyEnvironment               model.SectionKey = "Environment"
+	KeyVolumeName                model.SectionKey = "VolumeName"
+	KeyNetworkName               model.SectionKey = "NetworkName"
+	KeyBuildFile                 model.SectionKey = "File"
+	KeyBuildImageTag             model.SectionKey = "ImageTag"
 )
 
 // Systemd option values.
@@ -42,4 +47,19 @@ const (
 	InstallMultiUserTarget = "multi-user.target default.target"
 	ServiceTypeOneshot     = "oneshot"
 	ServiceRestartAlways   = "always"
+
+	// Restart backoff defaults for running containers: the first restart waits
+	// 1s, the delay grows exponentially over 10 restarts up to 5min and stays
+	// there. StartLimitIntervalSec=0 disables systemd's start rate limit, which
+	// would otherwise give up after 5 starts in 10s and leave the unit failed
+	// until someone starts it by hand; the backoff already throttles restarts.
+	ServiceRestartSecDefault         = "1s"
+	ServiceRestartStepsDefault       = "10"
+	ServiceRestartMaxDelaySecDefault = "5min"
+	UnitStartLimitIntervalSecDefault = "0"
+
+	// ServiceRestartSecFixed is the restart delay on hosts whose systemd lacks
+	// RestartSteps= (see HostCapabilities): without a growing delay, a fixed
+	// one keeps a crash-looping container from restarting every second.
+	ServiceRestartSecFixed = "10s"
 )

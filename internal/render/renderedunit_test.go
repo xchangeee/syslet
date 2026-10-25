@@ -165,8 +165,8 @@ func unitContent(triples ...string) string {
 	return sb.String()
 }
 
-func TestStripMetadataSections_EmptyInput_ReturnsEmpty(t *testing.T) {
-	got, err := StripMetadataSections("")
+func TestStripRestartNeutralOptions_EmptyInput_ReturnsEmpty(t *testing.T) {
+	got, err := StripRestartNeutralOptions("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,13 +176,13 @@ func TestStripMetadataSections_EmptyInput_ReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestStripMetadataSections_XSysletSection_Removed(t *testing.T) {
+func TestStripRestartNeutralOptions_XSysletSection_Removed(t *testing.T) {
 	input := unitContent(
 		"Container", "Image", "nginx:latest",
 		"X-Syslet", "RemovalAllowed", "true",
 	)
 
-	got, err := StripMetadataSections(input)
+	got, err := StripRestartNeutralOptions(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -197,13 +197,13 @@ func TestStripMetadataSections_XSysletSection_Removed(t *testing.T) {
 	}
 }
 
-func TestStripMetadataSections_UnitDescription_Removed(t *testing.T) {
+func TestStripRestartNeutralOptions_UnitDescription_Removed(t *testing.T) {
 	input := unitContent(
 		"Unit", "Description", "My webapp container",
 		"Container", "Image", "nginx:latest",
 	)
 
-	got, err := StripMetadataSections(input)
+	got, err := StripRestartNeutralOptions(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,14 +218,14 @@ func TestStripMetadataSections_UnitDescription_Removed(t *testing.T) {
 	}
 }
 
-func TestStripMetadataSections_OtherUnitFields_Preserved(t *testing.T) {
+func TestStripRestartNeutralOptions_OtherUnitFields_Preserved(t *testing.T) {
 	input := unitContent(
 		"Unit", "Description", "My container",
 		"Unit", "After", "network.target",
 		"Container", "Image", "nginx:latest",
 	)
 
-	got, err := StripMetadataSections(input)
+	got, err := StripRestartNeutralOptions(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -240,10 +240,10 @@ func TestStripMetadataSections_OtherUnitFields_Preserved(t *testing.T) {
 	}
 }
 
-// TestStripMetadataSections_SortingMakesOrderIrrelevant verifies that two unit files
+// TestStripRestartNeutralOptions_SortingMakesOrderIrrelevant verifies that two unit files
 // with the same options in different order produce identical stripped output, so
 // reordering multi-value keys (e.g. Volume=) never triggers a spurious restart.
-func TestStripMetadataSections_SortingMakesOrderIrrelevant(t *testing.T) {
+func TestStripRestartNeutralOptions_SortingMakesOrderIrrelevant(t *testing.T) {
 	inputA := unitContent(
 		"Container", "Volume", "data.volume:/data",
 		"Container", "Volume", "logs.volume:/logs",
@@ -255,11 +255,11 @@ func TestStripMetadataSections_SortingMakesOrderIrrelevant(t *testing.T) {
 		"Container", "Image", "nginx:latest",
 	)
 
-	strippedA, err := StripMetadataSections(inputA)
+	strippedA, err := StripRestartNeutralOptions(inputA)
 	if err != nil {
 		t.Fatalf("stripping inputA: %v", err)
 	}
-	strippedB, err := StripMetadataSections(inputB)
+	strippedB, err := StripRestartNeutralOptions(inputB)
 	if err != nil {
 		t.Fatalf("stripping inputB: %v", err)
 	}
@@ -269,16 +269,16 @@ func TestStripMetadataSections_SortingMakesOrderIrrelevant(t *testing.T) {
 	}
 }
 
-// TestStripMetadataSections_OnlyMetadata_ProducesEmptyContent verifies that a unit
+// TestStripRestartNeutralOptions_OnlyMetadata_ProducesEmptyContent verifies that a unit
 // containing only X-Syslet and Description entries produces no meaningful output.
-func TestStripMetadataSections_OnlyMetadata_ProducesEmptyContent(t *testing.T) {
+func TestStripRestartNeutralOptions_OnlyMetadata_ProducesEmptyContent(t *testing.T) {
 	input := unitContent(
 		"X-Syslet", "RemovalAllowed", "true",
 		"X-Syslet", "ReclaimPolicy", "Delete",
 		"Unit", "Description", "stale unit",
 	)
 
-	got, err := StripMetadataSections(input)
+	got, err := StripRestartNeutralOptions(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -287,10 +287,10 @@ func TestStripMetadataSections_OnlyMetadata_ProducesEmptyContent(t *testing.T) {
 	}
 }
 
-// TestStripMetadataSections_DescriptionChangeDoesNotAffectOutput verifies that
+// TestStripRestartNeutralOptions_DescriptionChangeDoesNotAffectOutput verifies that
 // changing only the Description produces the same stripped output — meaning syslet
 // would not schedule a container restart for a description-only change.
-func TestStripMetadataSections_DescriptionChangeDoesNotAffectOutput(t *testing.T) {
+func TestStripRestartNeutralOptions_DescriptionChangeDoesNotAffectOutput(t *testing.T) {
 	old := unitContent(
 		"Unit", "Description", "Old description",
 		"Container", "Image", "nginx:latest",
@@ -300,11 +300,11 @@ func TestStripMetadataSections_DescriptionChangeDoesNotAffectOutput(t *testing.T
 		"Container", "Image", "nginx:latest",
 	)
 
-	strippedOld, err := StripMetadataSections(old)
+	strippedOld, err := StripRestartNeutralOptions(old)
 	if err != nil {
 		t.Fatalf("stripping old: %v", err)
 	}
-	strippedNew, err := StripMetadataSections(newContent)
+	strippedNew, err := StripRestartNeutralOptions(newContent)
 	if err != nil {
 		t.Fatalf("stripping new: %v", err)
 	}
@@ -314,18 +314,18 @@ func TestStripMetadataSections_DescriptionChangeDoesNotAffectOutput(t *testing.T
 	}
 }
 
-// TestStripMetadataSections_ImageChange_AffectsOutput verifies that a change to a
+// TestStripRestartNeutralOptions_ImageChange_AffectsOutput verifies that a change to a
 // runtime-relevant field (Image) does produce different stripped output — meaning
 // syslet would schedule a container restart.
-func TestStripMetadataSections_ImageChange_AffectsOutput(t *testing.T) {
+func TestStripRestartNeutralOptions_ImageChange_AffectsOutput(t *testing.T) {
 	old := unitContent("Container", "Image", "nginx:1.24")
 	newContent := unitContent("Container", "Image", "nginx:1.25")
 
-	strippedOld, err := StripMetadataSections(old)
+	strippedOld, err := StripRestartNeutralOptions(old)
 	if err != nil {
 		t.Fatalf("stripping old: %v", err)
 	}
-	strippedNew, err := StripMetadataSections(newContent)
+	strippedNew, err := StripRestartNeutralOptions(newContent)
 	if err != nil {
 		t.Fatalf("stripping new: %v", err)
 	}
@@ -335,15 +335,49 @@ func TestStripMetadataSections_ImageChange_AffectsOutput(t *testing.T) {
 	}
 }
 
-func TestStripMetadataSections_InvalidInput_ReturnsError(t *testing.T) {
+func TestStripRestartNeutralOptions_InvalidInput_ReturnsError(t *testing.T) {
 	// gounit.Deserialize is lenient; test a truly malformed edge — empty is valid,
 	// so just verify the function returns an error for pathological binary content.
 	// In practice the function is robust, so we test valid paths exhaustively above.
 	// This test guards against future changes to the error path.
-	_, err := StripMetadataSections("\x00\x01\x02")
+	_, err := StripRestartNeutralOptions("\x00\x01\x02")
 	// If no error, that is also acceptable since the parser is lenient — but if it does
 	// error, it should wrap the message correctly.
 	if err != nil && !strings.Contains(err.Error(), "deserializing") {
 		t.Errorf("error should mention 'deserializing', got: %v", err)
+	}
+}
+
+// TestStripRestartNeutralOptions_RestartPolicyChange_DoesNotAffectOutput verifies
+// that adding or changing restart policy options produces the same stripped output.
+// systemd applies them to a running service on daemon-reload, so syslet must not
+// schedule a container restart for them; otherwise introducing new restart
+// defaults would restart every running container on the first apply.
+func TestStripRestartNeutralOptions_RestartPolicyChange_DoesNotAffectOutput(t *testing.T) {
+	old := unitContent(
+		"Container", "Image", "nginx:latest",
+		"Service", "Restart", "always",
+	)
+	newContent := unitContent(
+		"Container", "Image", "nginx:latest",
+		"Service", "Restart", "always",
+		"Service", "RestartSec", "1s",
+		"Service", "RestartSteps", "10",
+		"Service", "RestartMaxDelaySec", "5min",
+		"Unit", "StartLimitIntervalSec", "0",
+		"Unit", "StartLimitBurst", "5",
+	)
+
+	strippedOld, err := StripRestartNeutralOptions(old)
+	if err != nil {
+		t.Fatalf("stripping old: %v", err)
+	}
+	strippedNew, err := StripRestartNeutralOptions(newContent)
+	if err != nil {
+		t.Fatalf("stripping new: %v", err)
+	}
+
+	if strippedOld != strippedNew {
+		t.Errorf("restart-policy-only change should not affect stripped output:\nold: %q\nnew: %q", strippedOld, strippedNew)
 	}
 }

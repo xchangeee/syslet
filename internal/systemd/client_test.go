@@ -344,3 +344,30 @@ func TestContainerName_ServiceUnitName(t *testing.T) {
 		})
 	}
 }
+
+// TestClient_Version_RockyLinux9_ReturnsMajor uses the Manager.Version value
+// read from a Rocky Linux 9 host via busctl, quoted the way godbus's
+// Variant.String formats a string, which is what GetManagerProperty returns.
+func TestClient_Version_RockyLinux9_ReturnsMajor(t *testing.T) {
+	mockConn := systemdtest.NewMockDBusConn()
+	mockConn.SystemdVersion = `"252-67.el9_8.6.rocky.0.1"`
+	client := systemd.NewClient(mockConn, afero.NewMemMapFs())
+
+	got, err := client.Version(context.Background())
+	if err != nil {
+		t.Fatalf("Version: %v", err)
+	}
+	if got != 252 {
+		t.Errorf("Version = %d, want 252", got)
+	}
+}
+
+func TestClient_Version_Unparsable_ReturnsError(t *testing.T) {
+	mockConn := systemdtest.NewMockDBusConn()
+	mockConn.SystemdVersion = `"unknown"`
+	client := systemd.NewClient(mockConn, afero.NewMemMapFs())
+
+	if _, err := client.Version(context.Background()); err == nil {
+		t.Error("expected an error for an unparsable version")
+	}
+}

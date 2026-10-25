@@ -40,7 +40,12 @@ Other options are written as given.
 | Section | Option | Behavior |
 | --- | --- | --- |
 | `Unit` | `Description` | Defaults to `<name> container` on containers. A change only rewrites the unit file. |
+| `Unit` | `StartLimitIntervalSec=0` | Defaults to `0` on a container with `desiredState: "running"`, which turns off systemd's start limit. A change only rewrites the unit file. |
+| `Unit` | `StartLimitBurst` | Not set by syslet. A change only rewrites the unit file. |
 | `Service` | `Restart=always` | Added to a container with `desiredState: "running"`, overwriting any value in `unit`. |
+| `Service` | `RestartSec=1s` | Defaults to `1s` on a container with `desiredState: "running"`, or to `10s` when the host's systemd is older than 254 or its version can't be read. A change only rewrites the unit file. |
+| `Service` | `RestartSteps=10` | Defaults to `10` on a container with `desiredState: "running"`, on systemd 254 or newer. A change only rewrites the unit file. |
+| `Service` | `RestartMaxDelaySec=5min` | Defaults to `5min` on a container with `desiredState: "running"`, on systemd 254 or newer. A change only rewrites the unit file. |
 | `Service` | `Type=oneshot` | Added to a container with `desiredState: "oneshot"`; with `"running"`, setting it in `unit` is rejected. |
 | `Service` | `ExecReload` | Not set by syslet; required when the container declares `configDirs`. See [Mount config files and dirs](../../how-to/mount-config-files-and-dirs.md#reload-config-without-a-restart). |
 | `Install` | `WantedBy=multi-user.target default.target` | Added to a container with `desiredState: "running"`, overwriting any value in `unit`. |

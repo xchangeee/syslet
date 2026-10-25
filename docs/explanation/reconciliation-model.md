@@ -7,7 +7,7 @@ This contrasts with **level-triggered** systems like Kubernetes, which run a con
 syslet keeps the useful part of that model, a declarative desired state the host converges to, without running a loop of its own.
 The parts that need continuous supervision are left to systemd:
 
-- **Ongoing health/liveness**: systemd's `Restart=Always` (which syslet sets automatically for `desiredState: "running"` containers) restarts a crashed container without syslet needing to be involved.
+- **Ongoing health/liveness**: systemd's `Restart=always` (which syslet sets automatically for `desiredState: "running"` containers) restarts a crashed container without syslet needing to be involved, waiting longer after each crash up to five minutes (a fixed 10 seconds before systemd 254) and never giving up.
 - **Boot-time startup**: `WantedBy=multi-user.target default.target` (also set automatically) makes containers come up on boot without syslet running at boot time.
 - **Applying a specific change**: happens when you invoke syslet (over SSH, from a webhookd-triggered git pull, or manually) and not on any other schedule.
 

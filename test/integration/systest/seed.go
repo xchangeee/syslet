@@ -3,10 +3,12 @@
 package systest
 
 import (
+	"context"
 	"os"
 
 	"github.com/xchangeee/syslet/internal/model"
 	"github.com/xchangeee/syslet/internal/render"
+	"github.com/xchangeee/syslet/internal/syslet"
 	"github.com/xchangeee/syslet/internal/systemd"
 )
 
@@ -31,7 +33,7 @@ func (e *Env) Render(spec model.Unit) string {
 	)
 	switch s := spec.(type) {
 	case *model.ContainerUnit:
-		rendered, err = render.NewRenderedUnitFromContainer(s, e.Mgrs.Config.Resolve)
+		rendered, err = render.NewRenderedUnitFromContainer(s, e.Mgrs.Config.Resolve, syslet.HostCapabilities(context.Background(), e.Systemd))
 	case *model.VolumeUnit:
 		rendered, err = render.NewRenderedUnitFromVolume(s)
 	case *model.NetworkUnit:

@@ -36,11 +36,44 @@ For these containers, raise the limit:
 ## Tune restarts
 
 With `desiredState: "running"`, syslet sets `[Service] Restart=always` and `[Install] WantedBy=multi-user.target default.target`, overwriting your own values for those two keys.
-Other restart settings, such as `[Service] RestartSec=` or `[Unit] StartLimitBurst=`, pass through.
+It also sets a restart backoff, which your own values replace key by key:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `[Service] RestartSec=` | `1s` | Delay before the first restart. |
+| `[Service] RestartSteps=` | `10` | Number of restarts over which the delay grows to `RestartMaxDelaySec`. |
+| `[Service] RestartMaxDelaySec=` | `5min` | Longest delay between two restarts. |
+| `[Unit] StartLimitIntervalSec=` | `0` | Turns off the start limit, so systemd keeps retrying instead of leaving the unit `failed`. |
+
+`RestartSteps=` and `RestartMaxDelaySec=` need systemd 254 or newer.
+On an older systemd, or when syslet can't read the host's systemd version, it sets `RestartSec=10s` instead and leaves both out, so systemd retries every 10 seconds.
+
+To give up after a number of failed starts instead, set `[Unit] StartLimitIntervalSec=` and `StartLimitBurst=` yourself:
+
+=== "CUE"
+
+    ```cue
+    sysdef: containers: app: spec: {
+    	unit: Unit: {
+    		StartLimitIntervalSec: "1h"
+    		StartLimitBurst:       "10"
+    	}
+    }
+    ```
+
+=== "JSON"
+
+    ```json
+    "Unit": {
+      "StartLimitIntervalSec": "1h",
+      "StartLimitBurst": "10"
+    }
+    ```
 
 ## Apply a change
 
-A change to any of these sections restarts the container, except `[Unit] Description`, which only rewrites the unit file.
+A change to any of these sections restarts the container, except `[Unit] Description` and the restart settings `RestartSec=`, `RestartSteps=`, `RestartMaxDelaySec=`, `StartLimitIntervalSec=` and `StartLimitBurst=`.
+systemd picks those up on daemon-reload, so syslet only rewrites the unit file.
 
 syslet doesn't check option names; podman's generator and `systemd-analyze verify` reject invalid ones when you preview (see [Troubleshoot a failed apply](troubleshoot-a-failed-apply.md)).
 For every section and option you can set, see [Unit options](../reference/spec-schema/unit-options.md).

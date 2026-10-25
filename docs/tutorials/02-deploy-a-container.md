@@ -42,7 +42,11 @@ added:
   [Container] PublishPort=8080:80
   [Install] WantedBy=multi-user.target default.target
   [Service] Restart=always
+  [Service] RestartMaxDelaySec=5min
+  [Service] RestartSec=1s
+  [Service] RestartSteps=10
   [Unit] Description=webapp container
+  [Unit] StartLimitIntervalSec=0
   [X-Syslet] RemovalAllowed=true
 
 Systemd daemon-reload: required
@@ -87,6 +91,8 @@ ssh web01 sudo podman ps
 
 You should see `webapp.service` active and a running `nginx` container.
 Because `desiredState: "running"` was set, syslet also added `Restart=always` and `WantedBy=multi-user.target default.target`, so the container restarts on crash and starts on boot.
+The `RestartSec`, `RestartSteps`, `RestartMaxDelaySec` and `StartLimitIntervalSec` defaults make systemd wait longer after each crash, up to five minutes, instead of giving up after five quick failures.
+On a systemd older than 254 you see `RestartSec=10s` instead, without `RestartSteps` and `RestartMaxDelaySec` (see [Set systemd service options](../how-to/set-systemd-service-options.md#tune-restarts)).
 
 ## 5. Preview a change
 

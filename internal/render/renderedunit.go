@@ -220,8 +220,30 @@ func compareUnitOptions(a, b gounit.UnitOption) int {
 	return cmp.Compare(a.Value, b.Value)
 }
 
-// StripMetadataSections removes X-Syslet section and Unit.Description before comparing content.
-func StripMetadataSections(content string) (string, error) {
+// restartNeutralOptions are unit options systemd applies to a running service
+// on daemon-reload, so a change to them needs no restart. They cover the
+// restart policy: how and how often systemd restarts the service, not how the
+// container runs.
+type sectionKey struct {
+	section model.SectionName
+	key     model.SectionKey
+}
+
+var restartNeutralOptions = []sectionKey{
+	{SectionUnit, KeyUnitDescription},
+	{SectionUnit, KeyUnitStartLimitIntervalSec},
+	{SectionUnit, KeyUnitStartLimitBurst},
+	{SectionService, KeyServiceRestartSec},
+	{SectionService, KeyServiceRestartSteps},
+	{SectionService, KeyServiceRestartMaxDelaySec},
+}
+
+// StripRestartNeutralOptions removes the X-Syslet section and the options in
+// restartNeutralOptions before comparing content. The planner compares the
+// stripped old and new unit to decide whether a change is meaningful, i.e.
+// needs a container restart or a network/volume/build recreation; anything
+// stripped here only costs a unit write and a daemon-reload.
+func StripRestartNeutralOptions(content string) (string, error) {
 	opts, err := gounit.DeserializeOptions(bytes.NewReader([]byte(content)))
 	if err != nil {
 		return "", fmt.Errorf("deserializing unit content: %w", err)
@@ -232,7 +254,9 @@ func StripMetadataSections(content string) (string, error) {
 		if MatchSection(*opt, SectionXSyslet) {
 			continue
 		}
-		if MatchSectionKey(*opt, SectionUnit, KeyUnitDescription) {
+		if slices.ContainsFunc(restartNeutralOptions, func(n sectionKey) bool {
+			return MatchSectionKey(*opt, n.section, n.key)
+		}) {
 			continue
 		}
 		filtered = append(filtered, opt)

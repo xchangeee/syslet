@@ -118,3 +118,7 @@ func makeUnitOptions(section model.SectionName, kvs ...string) model.UnitOptions
 	}
 	return model.UnitOptions{section: m}
 }
+
+// testHost is a host whose systemd supports every option syslet renders, so
+// tests see the full set of defaults unless they pass HostCapabilities{}.
+var testHost = HostCapabilities{ExponentialRestartBackoff: true}

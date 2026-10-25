@@ -49,7 +49,7 @@ WantedBy=multi-user.target
     }
     ```
 
-Leave out `[Install] WantedBy=` and `[Service] Restart=`; `desiredState: "running"` sets both.
+Leave out `[Install] WantedBy=` and `[Service] Restart=`; `desiredState: "running"` sets both, plus a restart backoff (see [Set systemd service options](set-systemd-service-options.md#tune-restarts)).
 syslet only manages `.container`, `.volume`, `.network` and `.build` files; leave other types, such as `.pod` or `.kube`, as they are.
 
 ## Keep the names that matter

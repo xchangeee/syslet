@@ -42,7 +42,11 @@ added:
   [Container] Volume=/etc/containers/config/site/default.conf-22f656b2:/etc/nginx/conf.d/default.conf:ro,Z
   [Install] WantedBy=multi-user.target default.target
   [Service] Restart=always
+  [Service] RestartMaxDelaySec=5min
+  [Service] RestartSec=1s
+  [Service] RestartSteps=10
   [Unit] Description=site container
+  [Unit] StartLimitIntervalSec=0
   [X-Syslet] RemovalAllowed=true
 
 Config file changes:

@@ -15,6 +15,7 @@ package systemdtest
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/xchangeee/syslet/internal/systemd"
 	"github.com/xchangeee/syslet/test/oplog"
@@ -48,6 +49,11 @@ type MockDBusConn struct {
 	StopJobResult   string
 	ReloadJobResult string
 
+	// SystemdVersion is the raw Manager.Version property, quoted as
+	// GetManagerProperty returns it. GetManagerErr, when set, fails the read.
+	SystemdVersion string
+	GetManagerErr  error
+
 	// Log, when set, receives every operation in arrival order alongside the
 	// effects recorded by the other fakes sharing it.
 	Log *oplog.Log
@@ -60,11 +66,26 @@ func NewMockDBusConn() *MockDBusConn {
 		StartJobResult:  "done",
 		StopJobResult:   "done",
 		ReloadJobResult: "done",
+		// Synthetic, not taken from a real host: any version new enough for
+		// every option syslet renders, so tests see the full defaults.
+		SystemdVersion: `"256"`,
 	}
 }
 
 // Close satisfies systemd.DBusConn; the mock holds no resources.
 func (m *MockDBusConn) Close() {}
+
+// GetManagerProperty serves the Version property from SystemdVersion; other
+// properties are not modeled.
+func (m *MockDBusConn) GetManagerProperty(prop string) (string, error) {
+	if m.GetManagerErr != nil {
+		return "", m.GetManagerErr
+	}
+	if prop != "Version" {
+		return "", fmt.Errorf("MockDBusConn: manager property %q not modeled", prop)
+	}
+	return m.SystemdVersion, nil
+}
 
 // ReloadContext records that a daemon-reload was requested.
 func (m *MockDBusConn) ReloadContext(_ context.Context) error {

@@ -3,7 +3,9 @@
 package integration
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/xchangeee/syslet/internal/model"
@@ -101,4 +103,37 @@ func TestContainerQuadletError(t *testing.T) {
 			t.Errorf("expected the quadlet generator error to be logged, got:\n%s", env.Logs.String())
 		}
 	})
+}
+
+// TestNewContainer_SystemdWithoutRestartSteps covers hosts where syslet can't
+// use RestartSteps= (added in systemd 254): an older systemd, and a version it
+// can't read. syslet must fall back to a fixed restart delay there, since
+// systemd-analyze verify fails on unknown options.
+func TestNewContainer_SystemdWithoutRestartSteps(t *testing.T) {
+	cases := map[string]func(*systest.Env){
+		// Manager.Version as read from a Rocky Linux 9 host.
+		"Systemd252":        func(env *systest.Env) { env.Conn.SystemdVersion = `"252-67.el9_8.6.rocky.0.1"` },
+		"VersionUnreadable": func(env *systest.Env) { env.Conn.GetManagerErr = errors.New("dbus: no reply") },
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			env := systest.New(t)
+			setup(env)
+			env.Specs(systest.NewContainer("webapp", "nginx:latest"))
+
+			env.Apply()
+
+			content, err := env.Systemd.ReadUnitFile("webapp.container")
+			if err != nil {
+				t.Fatalf("reading unit file: %v", err)
+			}
+			if !strings.Contains(string(content), "RestartSec=10s\n") {
+				t.Errorf("expected RestartSec=10s, got:\n%s", content)
+			}
+			if strings.Contains(string(content), "RestartSteps=") || strings.Contains(string(content), "RestartMaxDelaySec=") {
+				t.Errorf("expected no RestartSteps/RestartMaxDelaySec, got:\n%s", content)
+			}
+			env.AssertStarted("webapp.service")
+		})
+	}
 }

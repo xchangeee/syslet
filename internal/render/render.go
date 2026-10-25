@@ -31,7 +31,24 @@ type Result struct {
 	UnitNames map[model.FullUnitName]bool
 }
 
-func NewResult(units []model.Unit, configResolve ContainerResolverFactory, buildResolve BuildResolverFactory) (Result, error) {
+// HostCapabilities lists the version-dependent systemd features the target
+// host supports. The planner derives it from the host's systemd version via
+// CapabilitiesForSystemd before rendering; render picks options accordingly,
+// since staging validation fails on any option the host's systemd doesn't know.
+type HostCapabilities struct {
+	// ExponentialRestartBackoff reports support for RestartSteps= and
+	// RestartMaxDelaySec=, added in systemd 254.
+	ExponentialRestartBackoff bool
+}
+
+// CapabilitiesForSystemd maps a systemd major version to the features syslet
+// can render for it. A version of 0 stands for "unknown" and yields the most
+// conservative set.
+func CapabilitiesForSystemd(major int) HostCapabilities {
+	return HostCapabilities{ExponentialRestartBackoff: major >= 254}
+}
+
+func NewResult(units []model.Unit, configResolve ContainerResolverFactory, buildResolve BuildResolverFactory, host HostCapabilities) (Result, error) {
 	var result Result
 	result.UnitNames = make(map[model.FullUnitName]bool)
 	for _, unit := range units {
@@ -39,7 +56,7 @@ func NewResult(units []model.Unit, configResolve ContainerResolverFactory, build
 		var err error
 		switch unit.Ref().UnitType() {
 		case model.UnitTypeContainer:
-			r, err = NewRenderedUnitFromContainer(unit.(*model.ContainerUnit), configResolve)
+			r, err = NewRenderedUnitFromContainer(unit.(*model.ContainerUnit), configResolve, host)
 			if err != nil {
 				return Result{}, fmt.Errorf("rendering %s: %w", unit.Ref(), err)
 			}
@@ -71,7 +88,8 @@ func NewResult(units []model.Unit, configResolve ContainerResolverFactory, build
 // NewRenderedUnitFromContainer converts a ContainerUnit into a RenderedUnit.
 // Volume= entries for file and directory mounts are emitted here using resolveFor to obtain
 // the host-side path; the mount data itself remains on the unit for plan builders to access.
-func NewRenderedUnitFromContainer(unit *model.ContainerUnit, resolveFor ContainerResolverFactory) (RenderedUnit, error) {
+// host decides which restart backoff options the unit gets.
+func NewRenderedUnitFromContainer(unit *model.ContainerUnit, resolveFor ContainerResolverFactory, host HostCapabilities) (RenderedUnit, error) {
 	r := NewUnitRenderer(unit)
 	r.Default(SectionUnit, KeyUnitDescription, unit.Ref().Name()+" container")
 	r.Override(SectionContainer, KeyContainerName, unit.Ref().Name())
@@ -79,6 +97,20 @@ func NewRenderedUnitFromContainer(unit *model.ContainerUnit, resolveFor Containe
 	switch unit.DesiredState {
 	case model.DesiredStateRunning:
 		r.Override(SectionService, KeyServiceRestart, ServiceRestartAlways)
+		// Restart=always alone retries every 100ms and hits systemd's start limit
+		// after five crashes, leaving the unit failed. These defaults back off
+		// instead and keep retrying; a spec can still set its own values. They
+		// are restart-neutral (see StripRestartNeutralOptions), so changing them,
+		// e.g. when the host's systemd is upgraded, never restarts a running
+		// container. Without RestartSteps= support a fixed delay is used instead.
+		if host.ExponentialRestartBackoff {
+			r.Default(SectionService, KeyServiceRestartSec, ServiceRestartSecDefault)
+			r.Default(SectionService, KeyServiceRestartSteps, ServiceRestartStepsDefault)
+			r.Default(SectionService, KeyServiceRestartMaxDelaySec, ServiceRestartMaxDelaySecDefault)
+		} else {
+			r.Default(SectionService, KeyServiceRestartSec, ServiceRestartSecFixed)
+		}
+		r.Default(SectionUnit, KeyUnitStartLimitIntervalSec, UnitStartLimitIntervalSecDefault)
 		r.Override(SectionInstall, KeyInstallWantedBy, InstallMultiUserTarget)
 	case model.DesiredStateOneshot:
 		r.Override(SectionService, KeyServiceType, ServiceTypeOneshot)
