@@ -14,7 +14,11 @@ See [Secret encryption](../explanation/secret-encryption.md) for how the keys fi
 
 ## 1. Create your admin key
 
-Generate an age key where sops looks for it by default:
+For this tutorial, generate an age key in a file where sops looks for it by default:
+
+!!! warning "Don't keep a real admin key in a plain-text file"
+    The key file is unencrypted, and anyone who can read it can decrypt every secret in the repository.
+    It keeps the tutorial short; for real secrets, store the key in a password manager and let sops fetch it with `SOPS_AGE_KEY_CMD`, as in [Get your admin key](../how-to/set-up-sops-in-a-cue-repository.md#get-your-admin-key).
 
 ```sh
 mkdir -p ~/.config/sops/age

@@ -18,6 +18,9 @@ A host's key isn't a separate secret to distribute: syslet derives it from the h
 A host can only decrypt what was encrypted for it, and a host key that is already backed up and managed covers secrets too.
 The tradeoff is that rotating the host key means re-encrypting; a [dedicated decryption key](../how-to/use-a-dedicated-decryption-key.md) decouples the two.
 
+An admin key, by contrast, decrypts the secrets of every host, so it's the most valuable key in the setup.
+Keep it in a password manager rather than in an age key file: sops fetches it through `SOPS_AGE_KEY_CMD` when it needs it, and the plaintext key never lands on disk (see [Get your admin key](../how-to/set-up-sops-in-a-cue-repository.md#get-your-admin-key)).
+
 ## Where decryption happens
 
 The spec carries the ciphertext, not the plaintext.

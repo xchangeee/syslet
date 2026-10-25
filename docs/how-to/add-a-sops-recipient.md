@@ -11,11 +11,13 @@ For a host, convert its public SSH host key:
 ssh web02.example.com cat /etc/ssh/ssh_host_ed25519_key.pub | ssh-to-age
 ```
 
-For an admin, they print it from their own key file:
+For an admin, they pipe their private key from their password manager into `age-keygen -y`, for example with the 1Password CLI:
 
 ```sh
-age-keygen -y ~/.config/sops/age/keys.txt
+op read op://Private/sops-age-key/password | age-keygen -y
 ```
+
+See [Get your admin key](set-up-sops-in-a-cue-repository.md#get-your-admin-key) for how to create the key and make sops read it from the password manager.
 
 ## Add it to `.sops.yaml`
 

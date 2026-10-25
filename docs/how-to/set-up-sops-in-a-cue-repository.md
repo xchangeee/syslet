@@ -17,22 +17,34 @@ For how the keys fit together, see [Secret encryption](../explanation/secret-enc
 
 ## Get your admin key
 
-If you already have an age key, print its public key:
+Keep your admin key in a password manager, not in a plain-text file on disk: anyone who can read that file can decrypt every secret in the repository.
+
+If you don't have an age key yet, generate one and print it to the terminal instead of a file:
 
 ```sh
-age-keygen -y ~/.config/sops/age/keys.txt
+age-keygen
 ```
 
-Otherwise, create one where sops looks for it by default:
+Store the line starting with `AGE-SECRET-KEY-1` in your password manager.
+The `# public key:` line above it is the public half you list in `.sops.yaml`.
+
+Then tell sops (3.10 or later) how to fetch the key, by setting `SOPS_AGE_KEY_CMD` in your shell profile to a command that prints it.
+For example, with the 1Password CLI:
 
 ```sh
-mkdir -p ~/.config/sops/age
-age-keygen -o ~/.config/sops/age/keys.txt
+export SOPS_AGE_KEY_CMD="op read op://Private/sops-age-key/password"
 ```
 
-On macOS, sops looks in `~/Library/Application Support/sops/age/keys.txt` instead; use that path, or point `SOPS_AGE_KEY_FILE` at the file.
+sops runs the command without a shell, so wrap pipes or redirects in `sh -c '...'`.
+Any password manager CLI that prints the key on standard output works the same way.
 
-Back up the private key and keep it out of the repository: without it, you can't edit the secrets anymore.
+To print the public key again, pipe the private key into `age-keygen -y`:
+
+```sh
+op read op://Private/sops-age-key/password | age-keygen -y
+```
+
+Your password manager is also the backup: without the key, you can't edit the secrets anymore.
 If several people edit the secrets, each uses their own key and sends you the public half.
 
 ## Get each host's public key
