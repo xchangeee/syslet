@@ -47,7 +47,7 @@ Other options are written as given.
 | `Service` | `RestartSteps=10` | Defaults to `10` on a container with `desiredState: "running"`, on systemd 254 or newer. A change only rewrites the unit file. |
 | `Service` | `RestartMaxDelaySec=5min` | Defaults to `5min` on a container with `desiredState: "running"`, on systemd 254 or newer. A change only rewrites the unit file. |
 | `Service` | `Type=oneshot` | Added to a container with `desiredState: "oneshot"`; with `"running"`, setting it in `unit` is rejected. |
-| `Service` | `ExecReload` | Not set by syslet; required when the container declares `configDirs`. See [Mount config files and dirs](../../how-to/mount-config-files-and-dirs.md#reload-config-without-a-restart). |
+| `Service` | `ExecReload` | Not set by syslet; lets a `configDirs` change reload the container in place instead of restarting it. See [Mount config files and dirs](../../how-to/mount-config-files-and-dirs.md#reload-config-without-a-restart). |
 | `Install` | `WantedBy=multi-user.target default.target` | Added to a container with `desiredState: "running"`, overwriting any value in `unit`. |
 | `Container` | `ContainerName` | Always set to the spec's `name`, overwriting any value in `unit`. |
 | `Container` | `Volume` | A read-only mount is added for every `configFiles` and `configDirs` entry, next to any in `unit`. |

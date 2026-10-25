@@ -25,7 +25,11 @@ func buildPlanUnitContainer(ctx context.Context, sd *systemd.Client, store *file
 		return
 	}
 
-	changes := containerChanges{unitChanges: uc, desiredState: container.DesiredState}
+	changes := containerChanges{
+		unitChanges:  uc,
+		desiredState: container.DesiredState,
+		reloadable:   render.HasReloadCommand(r.UnitOptions),
+	}
 	changes.applyToPlan(planner)
 
 	if containerReferencesChangedNetwork(r.UnitOptions, changedNetworks) {
@@ -197,6 +201,7 @@ func buildPlanUnitContainerConfigDirs(store *filestore.ContainerConfigFileStore,
 type containerChanges struct {
 	unitChanges
 	desiredState      model.DesiredState
+	reloadable        bool // the service has a reload command, so a configDir change can be applied in place
 	configFileChanged bool
 	configDirChanged  bool
 	networkChanged    bool // a referenced network is being recreated this plan pass
@@ -213,7 +218,7 @@ const (
 	actionStart                   // not running, desired: running (includes new containers)
 	actionStop                    // running, desired: stopped
 	actionRestart                 // unit or config changed while running, desired: running
-	actionReload                  // only configDir changed while running; no stop/start needed
+	actionReload                  // only configDir changed while running and the service can reload; no stop/start needed
 )
 
 func (c *containerChanges) markConfigFileChanged() { c.configFileChanged = true }
@@ -231,8 +236,11 @@ func (c *containerChanges) markImagePulled()       { c.imagePulled = true }
 // Exactly one action is returned; reload and stop/start are mutually exclusive by construction.
 // A new unit whose service is already running counts as a restart trigger: the running
 // container came from another unit file, and only a stop/start moves it onto this one.
+// A configDir change on a service without a reload command is a restart trigger too:
+// systemd refuses "systemctl reload" there, so a restart is the only way to make the
+// application pick up the new contents.
 func (c containerChanges) planLifecycle(isRunning bool) containerAction {
-	needsRestart := (c.isNew || c.meaningfullyChanged || c.configFileChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged) && isRunning
+	needsRestart := (c.isNew || c.meaningfullyChanged || c.configFileChanged || c.networkChanged || c.buildChanged || c.volumeChanged || c.secretChanged || (c.configDirChanged && !c.reloadable)) && isRunning
 	switch {
 	case needsRestart && c.desiredState == model.DesiredStateRunning:
 		return actionRestart

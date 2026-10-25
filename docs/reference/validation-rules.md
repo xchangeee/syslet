@@ -34,7 +34,6 @@ Checks on the specs, printed as `pre-render validation: ...`.
 | container | `configDirs[].mountPath` is absolute, not empty and has no `..`. |
 | container | No `configFiles` or `configDirs` mount path equals or lies under another. |
 | container | `configDirs[].files[].name` is a plain file name without `/`. |
-| container | A container with `configDirs` sets `[Service] ExecReload=`. |
 | container | `[Service] Type=oneshot` isn't combined with `desiredState: "running"`. |
 | container | Every `Secret=` names a key of a `secret` spec, as `<secret>-<key>`. |
 | build | `containerfile` is set. |

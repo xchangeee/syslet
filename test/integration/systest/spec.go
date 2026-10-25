@@ -110,15 +110,21 @@ func Files(mounts ...model.ContainerFileMount) ContainerOpt {
 
 // Dirs attaches config-directory mounts to a container.
 //
-// It also sets [Service] ExecReload=, which the validator requires of any
-// container declaring a configDir: a configDir's contents can be re-synced
+// It also sets [Service] ExecReload=: a configDir's contents can be re-synced
 // under a live container, and that cheap path only exists if the unit can be
-// told to reload itself.
+// told to reload itself. Without a reload command the planner restarts the
+// container instead; WithoutExecReload opts out to exercise that fallback.
 func Dirs(dirs ...model.ContainerDirMount) ContainerOpt {
 	return func(b *specBuild) {
 		b.dirMounts = append(b.dirMounts, dirs...)
 		b.set("Service", "ExecReload", model.UV("/bin/kill -HUP $MAINPID"))
 	}
+}
+
+// WithoutExecReload removes the [Service] ExecReload= that Dirs sets. It must
+// come after Dirs in the option list, since options apply in order.
+func WithoutExecReload() ContainerOpt {
+	return func(b *specBuild) { delete(b.options[model.SectionName("Service")], model.SectionKey("ExecReload")) }
 }
 
 // WithNetwork adds a Network= reference to the named network unit.

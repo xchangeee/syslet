@@ -108,10 +108,11 @@ A `configDir`'s files are written into a new versioned subdirectory, and a stabl
 The container bind-mounts the symlink path, so it sees the new files at once and never a partially-written directory.
 The mount path must end in a real, bind-mountable directory.
 
-`[Service] ExecReload=` is required: it tells the running container to reload its config, here by sending nginx a `SIGHUP`.
-syslet's validation rejects a spec with `configDirs` and no `ExecReload=`, since without it there is no way to trigger a reload.
+`[Service] ExecReload=` tells the running container to reload its config, here by sending nginx a `SIGHUP`.
+Quadlet's `[Container] ReloadCmd=` or `ReloadSignal=` work too, since quadlet turns them into an `ExecReload=`.
+Without any of them, a change to the `configDir` restarts the container instead.
 
 What each change does:
 
-- Only a `configDir`'s file content changed: syslet swaps the symlink and runs `ExecReload=` through `systemctl reload webapp.service`. The container keeps running.
+- Only a `configDir`'s file content changed: syslet swaps the symlink and runs `ExecReload=` through `systemctl reload webapp.service`. The container keeps running. Without a reload command, syslet swaps the symlink and restarts the container.
 - A `configDirs` entry added or removed, or any change to the container's own unit options: the usual stop and start, as for any other container change (see [Service actions](../reference/spec-schema/container.md#service-actions)).

@@ -98,3 +98,63 @@ func TestContainerConfigDirFileChanges(t *testing.T) {
 		})
 	}
 }
+
+// TestContainerConfigDirChanged_QuadletReloadKeys covers units whose reload
+// command comes from quadlet rather than a hand-written [Service] ExecReload=
+// (which TestContainerConfigDirFileChanges uses). Quadlet turns [Container]
+// ReloadCmd= and ReloadSignal= into an ExecReload= of the generated service, so
+// each earns the in-place reload as well.
+func TestContainerConfigDirChanged_QuadletReloadKeys(t *testing.T) {
+	mountPath := model.ContainerMountPath("/etc/app/")
+	oldFile := model.NewContainerConfigFile("app.conf", "old", 0)
+	newFile := model.NewContainerConfigFile("app.conf", "new", 0)
+
+	tests := []struct {
+		name string
+		opts []systest.ContainerOpt
+	}{
+		{name: "ReloadCmd", opts: []systest.ContainerOpt{systest.WithoutExecReload(), systest.Unit(systest.Set("Container", "ReloadCmd", "/usr/sbin/nginx -s reload"))}},
+		{name: "ReloadSignal", opts: []systest.ContainerOpt{systest.WithoutExecReload(), systest.Unit(systest.Set("Container", "ReloadSignal", "SIGHUP"))}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := append([]systest.ContainerOpt{systest.Dirs(model.NewContainerDirMount(string(mountPath), newFile))}, tt.opts...)
+			spec := systest.NewContainer("webapp", "nginx:latest", opts...)
+
+			env := systest.New(t, systest.WithOSConfigStore())
+			env.SeedActive(spec)
+			env.SeedConfigDir("webapp", mountPath, 1, oldFile)
+			env.Specs(spec)
+
+			env.Apply()
+
+			env.AssertNoStartStop()
+			env.AssertContainerReloaded("webapp.service")
+		})
+	}
+}
+
+// TestContainerConfigDirChanged_WithoutReloadCommand_RestartsWithoutReload
+// covers a configDir on a unit that has no way to reload itself. systemd
+// refuses "systemctl reload" for such a service, so the only way to get the
+// new contents in front of the application is a full restart.
+func TestContainerConfigDirChanged_WithoutReloadCommand_RestartsWithoutReload(t *testing.T) {
+	mountPath := model.ContainerMountPath("/etc/app/")
+	newFile := model.NewContainerConfigFile("app.conf", "new", 0)
+	spec := systest.NewContainer("webapp", "nginx:latest",
+		systest.Dirs(model.NewContainerDirMount(string(mountPath), newFile)),
+		systest.WithoutExecReload())
+
+	env := systest.New(t, systest.WithOSConfigStore())
+	env.SeedActive(spec)
+	env.SeedConfigDir("webapp", mountPath, 1, model.NewContainerConfigFile("app.conf", "old", 0))
+	env.Specs(spec)
+
+	env.Apply()
+
+	env.AssertRestarted("webapp.service")
+	env.AssertContainerNotReloaded()
+	env.AssertConfigDirFiles("webapp", mountPath, newFile)
+	env.AssertConfigDirVersion("webapp", mountPath, 2)
+}

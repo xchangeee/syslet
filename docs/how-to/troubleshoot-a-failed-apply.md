@@ -16,7 +16,7 @@ error: plan has errors
 
 The prefix names the stage that failed (see [Safety mechanisms](../explanation/safety-mechanisms.md#multi-stage-validation)):
 
-- `pre-render validation` and `post-render validation`: syslet's own checks on the specs, such as references to missing specs or secret keys, overlapping mount paths, or `configDirs` without `ExecReload=`. The message names the spec; fix it and preview again.
+- `pre-render validation` and `post-render validation`: syslet's own checks on the specs, such as references to missing specs or secret keys, or overlapping mount paths. The message names the spec; fix it and preview again.
 - `error [<unit>]`: a check on one unit against the host, such as a volume change that the installed markers don't allow (see [Manage volumes](manage-volumes.md#change-a-volume)), or `checking image`, when podman can't tell whether the container's image is on the host.
 - `secret "<name>": decryption failed`: the host can't decrypt the file. Check that it's encrypted to the host's key (see [Add a SOPS recipient](add-a-sops-recipient.md)).
 - `quadlet generator failed` and `unit verification failed`: podman's generator or `systemd-analyze verify` rejected the rendered units, usually because of a misspelled option or a value podman doesn't accept.

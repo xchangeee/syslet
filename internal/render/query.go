@@ -42,6 +42,28 @@ func ImageTagFromUnitOpts(opts []gounit.UnitOption) model.ImageTag {
 	return model.ImageTag(FindOptValue(opts, SectionBuild, KeyBuildImageTag))
 }
 
+// HasReloadCommand reports whether the parsed unit options give the service a
+// reload command, so that "systemctl reload" works on it. Besides a direct
+// [Service] ExecReload=, quadlet generates one from [Container] ReloadCmd= or
+// ReloadSignal=. The planner uses this to decide whether a configDir-only change
+// can be applied in place or needs a restart. An empty value resets the key in
+// systemd, so only the last value of each key counts.
+func HasReloadCommand(opts []gounit.UnitOption) bool {
+	for _, sk := range []struct {
+		section model.SectionName
+		key     model.SectionKey
+	}{
+		{SectionService, KeyServiceExecReload},
+		{SectionContainer, KeyContainerReloadCmd},
+		{SectionContainer, KeyContainerReloadSignal},
+	} {
+		if vals := FindOptValues(opts, sk.section, sk.key); len(vals) > 0 && vals[len(vals)-1] != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // IsOneshotUnit reports whether the parsed unit options describe a oneshot service.
 func IsOneshotUnit(opts []gounit.UnitOption) bool {
 	for _, opt := range opts {

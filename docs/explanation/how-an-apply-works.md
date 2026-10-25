@@ -46,7 +46,7 @@ Not every change to a container causes a restart. syslet distinguishes:
 
 - **No-op** — nothing about the unit or its files changed; no daemon-reload, no service transition.
 - **Metadata-only rewrite** — the unit file is rewritten and daemon-reloaded, but the backing podman resource and running container are left alone (no stop/start).
-- **Reload** — only a `configDir`'s content changed; the version symlink is swapped and the unit is reloaded (`ExecReload=`) in place, without stopping the container. See [Mount config files and dirs](../how-to/mount-config-files-and-dirs.md#reload-config-without-a-restart).
+- **Reload** — only a `configDir`'s content changed; the version symlink is swapped and the unit is reloaded (`ExecReload=`) in place, without stopping the container. A unit without a reload command is restarted instead. See [Mount config files and dirs](../how-to/mount-config-files-and-dirs.md#reload-config-without-a-restart).
 - **Restart** — the container's own unit options changed (image, ports, a plain `configFiles` file, etc.); the container is stopped, its unit/config files rewritten, and it's started again.
 
 This matters when reasoning about a deploy's blast radius: changing a `configDir`'s file content is safe to do frequently (no downtime, if the service supports reload), while changing image tags, volumes, or `configFiles` files always costs a restart.

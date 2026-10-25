@@ -39,7 +39,6 @@ func PreRender(units []model.Unit, secrets []model.PodmanSecret) error {
 			SpecNameNotEmpty,
 			NoXSysletSection,
 			ContainerConfigMountPaths,
-			ContainerConfigDirsRequireExecReload,
 			ContainerOneshotRequiresOneshotState,
 			ContainerConfigDirMountPaths,
 			ContainerNoOverlappingMountPaths,
@@ -231,26 +230,6 @@ func ContainerConfigDirFilenames(unit model.Unit) error {
 		}
 	}
 	return nil
-}
-
-// ContainerConfigDirsRequireExecReload ensures that any container using configDirs
-// has [Service] ExecReload= set, since configDirs imply in-place reload semantics.
-func ContainerConfigDirsRequireExecReload(unit model.Unit) error {
-	container, ok := unit.(*model.ContainerUnit)
-	if !ok || len(container.DirMounts) == 0 {
-		return nil
-	}
-	svc := container.Options()[render.SectionService]
-	reloadVal, ok := svc[model.SectionKey("ExecReload")]
-	if !ok {
-		return fmt.Errorf("unit %s: configDirs require [Service] ExecReload= to be set", container.Ref())
-	}
-	for _, v := range reloadVal.Values() {
-		if v != "" {
-			return nil
-		}
-	}
-	return fmt.Errorf("unit %s: configDirs require [Service] ExecReload= to be set", container.Ref())
 }
 
 // ContainerOneshotRequiresOneshotState rejects a user-set [Service] Type=oneshot

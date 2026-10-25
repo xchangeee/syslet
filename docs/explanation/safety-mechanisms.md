@@ -7,7 +7,7 @@ syslet has your back: validation rejects a bad spec before anything on the host 
 
 Specs are checked at several points before anything is executed, each catching what the earlier ones can't see:
 
-1. **Pre-render**: the specs on their own, such as duplicate names, invalid mount paths, or `configDirs` without `ExecReload=`.
+1. **Pre-render**: the specs on their own, such as duplicate names or invalid mount paths.
    Since SOPS leaves key names readable, secret references can already be checked here, before anything is decrypted.
 2. **Post-render**: the rendered unit files, such as a container referencing a volume, network or build that has no spec.
 3. **Host**: the specs against what's installed, such as a secret the host can't decrypt, or a volume change that would need a recreation its markers don't allow.
